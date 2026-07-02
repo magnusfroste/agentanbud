@@ -48,7 +48,7 @@ TED_PIN_FIELDS = [
     "estimated-value-cur-lot",
     "procedure-type",
     "cvd-contract-type-lot",
-    "place-of-performance-nut",
+    "place-of-performance-country-proc",
     "title-proc",
     "future-notice",
     "notice-preferred-publication-date",

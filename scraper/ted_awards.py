@@ -57,7 +57,7 @@ TED_AWARD_FIELDS = [
     "winner-decision-date",
     "procedure-type",
     "cvd-contract-type-lot",
-    "place-of-performance-nut",
+    "place-of-performance-country-proc",
     "title-proc",
 ]
 
