@@ -1313,6 +1313,26 @@ pre code {
 .chip { font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 4px; background: var(--surface-2); color: var(--muted); }
 .chip-cpv { font-family: monospace; }
 .chip-doctype { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.chip-winner {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #92400e;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: transform var(--transition), box-shadow var(--transition);
+  border: 1px solid #fcd34d;
+}
+.chip-winner:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(252, 211, 77, 0.4);
+}
+[data-theme="dark"] .chip-winner {
+  background: linear-gradient(135deg, rgba(252, 211, 77, 0.2) 0%, rgba(252, 211, 77, 0.1) 100%);
+  color: #fcd34d;
+  border-color: rgba(252, 211, 77, 0.3);
+}
 
 /* PAGINATION */
 .pagination {

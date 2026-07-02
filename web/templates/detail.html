@@ -119,16 +119,20 @@
     <div class="detail-actions">
       {% if t.tender_url %}
       <a href="{{ t.tender_url }}" target="_blank" rel="noopener" class="btn primary large">
+        {% if t.source_system == 'ted_awards' %}
+        🏆 Se vinnare på TED →
+        {% else %}
         Gå till originalannons →
+        {% endif %}
       </a>
       {% endif %}
-      
+
       <button class="btn ghost" onclick="navigator.clipboard.writeText(window.location.href); this.textContent='Kopierad!';">
         Kopiera länk
       </button>
     </div>
     <p class="muted detail-paywall-note">
-      {% if t.source_system == 'ted' %}
+      {% if t.source_system == 'ted' or t.source_system == 'ted_awards' or t.source_system == 'ted_pin' %}
       ✅ TED EU är helt publikt — inget konto krävs för att se dokument.
       {% else %}
       ⚠️ Att ansöka kan kräva konto hos plattformen (Mercell, Tendsign, etc.). Klicka "Gå till originalannons" för att komma åt anbudsformulär och dokument.

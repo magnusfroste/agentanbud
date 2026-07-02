@@ -121,6 +121,12 @@
             {% if t.document_type and t.document_type not in ['', 'Contract Notice', 'Standard Notice'] %}
             <span class="chip chip-doctype">{{ t.document_type }}</span>
             {% endif %}
+            {% if t.source_system == 'ted_awards' and t.tender_url %}
+            <a href="{{ t.tender_url }}" target="_blank" rel="noopener"
+               class="chip chip-winner"
+               title="Vinnare visas på TED-sidan"
+               onclick="event.stopPropagation(); event.preventDefault(); window.open(this.href, '_blank');">🏆 Se vinnare →</a>
+            {% endif %}
             {% if t.procedure %}<span class="chip">{{ t.procedure }}</span>{% endif %}
             {% for cpv in (t.cpv_codes_list or [])[:3] %}
             <span class="chip chip-cpv">{{ cpv }}</span>
