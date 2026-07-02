@@ -93,7 +93,6 @@
         <a href="/" class="{% set p=request.url.path if request else '' %}{% if p == '/' %}active{% endif %}">Hem</a>
         <a href="/browse" class="{% set p=request.url.path if request else '' %}{% if p.startswith('/browse') or p.startswith('/tenders') %}active{% endif %}">Browse</a>
         <a href="/dashboard" class="{% set p=request.url.path if request else '' %}{% if p.startswith('/dashboard') %}active{% endif %}">Insikter</a>
-        <a href="/system" class="{% set p=request.url.path if request else '' %}{% if p.startswith('/system') %}active{% endif %}">System</a>
         <a href="/providers" class="{% set p=request.url.path if request else '' %}{% if p.startswith('/providers') %}active{% endif %}">Providers</a>
         <a href="/agenter" class="{% set p=request.url.path if request else '' %}{% if p.startswith('/agenter') %}active{% endif %}">Agenter</a>
         <a href="/kunskap" class="{% set p=request.url.path if request else '' %}{% if p.startswith('/kunskap') %}active{% endif %}">Kunskap</a>
@@ -103,6 +102,17 @@
  </header>
   <main id="main">
     {% block content %}{% endblock %}
- </main>
+  </main>
+  <footer class="site-footer">
+    <div class="inner">
+      <span class="muted">Agentanbud — öppen data för svensk upphandling.</span>
+      <span class="footer-links">
+        <a href="https://github.com/magnusfroste/agentanbud" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/magnusfroste/agentanbud/blob/main/MCP.md" target="_blank" rel="noopener">MCP</a>
+        <a href="/api/health">API</a>
+        <a href="/system" class="muted">Driftstatus</a>
+      </span>
+    </div>
+  </footer>
 </body>
 </html>

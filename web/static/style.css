@@ -124,6 +124,40 @@ header.site {
   backdrop-filter: blur(8px);
 }
 
+.site-footer {
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  padding: 1.25rem var(--pad);
+  margin-top: 4rem;
+  font-size: 0.85rem;
+}
+
+.site-footer .inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.footer-links {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.footer-links a {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+
+.footer-links a:hover {
+  color: var(--accent);
+}
+
 header.site .inner {
   max-width: var(--max-w);
   margin: 0 auto;
