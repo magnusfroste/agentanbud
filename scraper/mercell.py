@@ -136,4 +136,4 @@ def run(db_path: str) -> int:
 
 if __name__ == "__main__":
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
-    run(os.environ.get("DB_PATH", "/data/agentanbud.db"))
+    run(os.environ.get("DB_PATH", "/data/application.db"))

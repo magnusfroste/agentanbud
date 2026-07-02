@@ -133,7 +133,7 @@ Lägg till i `~/Library/Application Support/Claude/claude_desktop_config.json` (
       "command": "python",
       "args": ["-m", "mcp_server"],
       "cwd": "/path/to/agentanbud",
-      "env": {"DB_PATH": "/data/agentanbud.db"}
+      "env": {"DB_PATH": "/data/application.db"}
     }
   }
 }

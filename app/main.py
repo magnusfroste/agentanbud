@@ -21,7 +21,7 @@ from .db import connect, init_db
 
 LOG = logging.getLogger(__name__)
 
-DB_PATH = os.environ.get("DB_PATH", "/data/agentanbud.db")
+DB_PATH = os.environ.get("DB_PATH", "/data/application.db")
 TEMPLATE_DIR = Path(__file__).parent.parent / "web" / "templates"
 STATIC_DIR = Path(__file__).parent.parent / "web" / "static"
 

@@ -36,7 +36,7 @@ from mcp.server import Server
 sys.path.insert(0, str(Path(__file__).parent))
 from app.db import connect  # noqa: E402
 
-DB_PATH = os.environ.get("DB_PATH", "/data/agentanbud.db")
+DB_PATH = os.environ.get("DB_PATH", "/data/application.db")
 
 server = Server("agentanbud")
 

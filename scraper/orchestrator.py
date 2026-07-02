@@ -67,7 +67,7 @@ def main() -> int:
         level=os.environ.get("LOG_LEVEL", "INFO"),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    db_path = os.environ.get("DB_PATH", "/data/agentanbud.db")
+    db_path = os.environ.get("DB_PATH", "/data/application.db")
     run_all(db_path)
     return 0
 

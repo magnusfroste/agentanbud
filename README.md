@@ -53,7 +53,7 @@ Agentanbud finns för att **minska informationsasymmetrin**. Vi speglar publik u
 │  │   • ted      │  │  /   (dashboard)     │ │
 │  │  ↓           │──│  reads ────→ SQLite  │ │
 │  └──────────────┘  └──────────────────────┘ │
-│                  ↳ /data/agentanbud.db       │
+│                  ↳ /data/application.db       │
 └─────────────────────────────────────────────┘
           ↕ HTTPS
        Traefik (Easypanel)
@@ -174,7 +174,7 @@ CREATE TABLE tenders (
 **Inspektera direkt med `sqlite3`-CLI:**
 
 ```bash
-sqlite3 data/agentanbud.db
+sqlite3 data/application.db
 sqlite> .schema
 sqlite> SELECT source_system, COUNT(*) FROM tenders GROUP BY source_system;
 sqlite> SELECT title, authority FROM tenders WHERE cpv_codes LIKE '%72%' LIMIT 5;

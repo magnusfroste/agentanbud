@@ -17,18 +17,22 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 def resolve_db_path(requested: str | Path) -> Path:
     """Return the actual DB path to use.
 
-    Migration-friendly: if the configured file does not exist but a
-    legacy file (opentender.db) is present in the same directory, use
-    that instead. This preserves existing data across renames.
+    The app's DB lives in a Docker volume and the filename should never
+    change across project renames — it's just ``application.db``.
+
+    If somehow the configured file doesn't exist but a legacy name is
+    present in the same directory, use that instead. This is a one-way
+    safety net for users migrating from older installs.
     """
     p = Path(requested)
     if p.exists():
         return p
-    # Fallback: look for a legacy file in the same directory
-    legacy = p.parent / "opentender.db"
-    if legacy.exists():
-        LOG.info("DB %s missing, using legacy %s", p, legacy)
-        return legacy
+    # Legacy fallback chain (only consulted if the configured file is missing)
+    for legacy_name in ("opentender.db", "agentanbud.db", "upphandling.db"):
+        legacy = p.parent / legacy_name
+        if legacy.exists():
+            LOG.info("DB %s missing, using legacy %s", p, legacy)
+            return legacy
     return p
 
 

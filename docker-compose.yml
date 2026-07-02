@@ -18,7 +18,7 @@ services:
     volumes:
       - ./data:/data
     environment:
-      - DB_PATH=/data/agentanbud.db
+      - DB_PATH=/data/application.db
       - USER_AGENT=${USER_AGENT:-agentanbud/0.1}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       # Schedule for the in-container cron (any valid crontab expression)
