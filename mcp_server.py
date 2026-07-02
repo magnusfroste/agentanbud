@@ -56,6 +56,20 @@ PROVIDERS = {
         "auth": "open",  # fully public, no account needed
         "data_status": "live",
     },
+    "ted_pin": {
+        "name": "TED EU PIN",
+        "url": "https://api.ted.europa.eu/v3/notices/search",
+        "auth": "open",
+        "data_status": "live",
+        "note": "Prior Information Notices — upphandlingar som planeras, innan formell annons.",
+    },
+    "lov": {
+        "name": "Upphandlingsmyndigheten LOV",
+        "url": "https://www.upphandlingsmyndigheten.se/hitta-lov-uppdrag/",
+        "auth": "open",  # att ansöka kräver konto hos kommunen, men data är publikt
+        "data_status": "live",
+        "note": "Valfrihetssystem — hemtjänst, äldreboende, personlig assistans etc. Inga deadlines, löpande ansökan.",
+    },
     "tendsign": {
         "name": "Tendsign (Visma)",
         "url": "https://tendsign.com/",
