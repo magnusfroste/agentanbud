@@ -5,12 +5,23 @@
 <!-- HERO -->
 <div class="agents-hero">
   <h1>Agenter</h1>
-  <p class="lead">Fyra sätt att använda Agentanbud. Välj det som passar dig — eller använd alla.</p>
+  <p class="lead">Utöver webben finns tre sätt att koppla in en AI-assistent eller bygga ett eget system.</p>
 </div>
 
 <!-- THREE PATHS CARDS -->
 <div class="paths-grid">
-  <a href="#mcp" class="path-card path-primary">
+  <a href="#prompt" class="path-card path-primary">
+    <div class="path-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+    </div>
+    <div class="path-badge">Snabbast</div>
+    <h3>1. Klistra in prompt</h3>
+    <p>OpenClaw, Hermes Agent, ChatGPT, Claude.ai — klistra in en färdig prompt så vet assistenten allt.</p>
+  </a>
+
+  <a href="#mcp" class="path-card">
     <div class="path-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <rect x="3" y="11" width="18" height="10" rx="2"/>
@@ -18,9 +29,9 @@
         <path d="M12 7v4M8 16h.01M16 16h.01"/>
       </svg>
     </div>
-    <div class="path-badge">Rekommenderas</div>
-    <h3>MCP — för AI-agenter</h3>
-    <p>Låt Claude Code, Kilo Code eller Cline söka åt dig.</p>
+    <div class="path-badge">Mest kraft</div>
+    <h3>2. MCP — Claude Code, Kilo Code, Cline</h3>
+    <p>För utvecklare — koppla in agenten direkt via Model Context Protocol.</p>
   </a>
 
   <a href="#rest" class="path-card">
@@ -30,31 +41,14 @@
         <polyline points="8 6 2 12 8 18"/>
       </svg>
     </div>
-    <h3>REST API — för system</h3>
-    <p>Bygg eget system eller script.</p>
-  </a>
-
-  <a href="#prompt" class="path-card">
-    <div class="path-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-      </svg>
-    </div>
-    <h3>Prompt — för Hermes &amp; ChatGPT</h3>
-    <p>Klistra in en prompt så vet agenten allt.</p>
-  </a>
-
-  <a href="/browse" class="path-card">
-    <div class="path-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="11" cy="11" r="8"/>
-        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-    </div>
-    <h3>Webbläsare</h3>
-    <p>Sök direkt här på webben.</p>
+    <h3>3. REST API — för egna system</h3>
+    <p>Bygg eget system eller script mot öppna endpoints.</p>
   </a>
 </div>
+
+<p class="muted" style="text-align: center; margin-top: 1rem;">
+  Vill du bara söka manuellt? <a href="/browse">Öppna webbläsaren</a>.
+</p>
 
 <!-- MCP SECTION -->
 <section class="agent-section" id="mcp">
