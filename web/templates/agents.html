@@ -30,8 +30,8 @@
       </svg>
     </div>
     <div class="path-badge">Mest kraft</div>
-    <h3>2. MCP — Claude Code, Kilo Code, Cline</h3>
-    <p>För utvecklare — koppla in agenten direkt via Model Context Protocol.</p>
+    <h3>2. MCP — Claude Code, Cursor, Kilo, Cline</h3>
+    <p>Anslut med en URL — verktygen listas automatiskt. Inga API-nycklar.</p>
   </a>
 
   <a href="#rest" class="path-card">
@@ -71,14 +71,27 @@
     <p>Lägg till detta i din AI-klients konfiguration:</p>
 
     <div class="code-tabs">
-      <button class="code-tab active" data-tab="claude">Claude Code</button>
+      <button class="code-tab active" data-tab="remote">Remote (URL)</button>
+      <button class="code-tab" data-tab="claude">Claude Code (lokal)</button>
       <button class="code-tab" data-tab="kilo">Kilo Code</button>
       <button class="code-tab" data-tab="cline">Cline</button>
       <button class="code-tab" data-tab="docker">Docker</button>
     </div>
 
     <div class="code-panel">
-      <div class="code-content" id="tab-claude">
+      <div class="code-content" id="tab-remote">
+        <p class="muted" style="margin-top: 0;">Peka din MCP-klient på URL:en — verktygen listas automatiskt. Inga API-nycklar, ingen installation.</p>
+        <pre><code>{
+  "mcpServers": {
+    "agentanbud": {
+      "url": "https://opentender.liteit.se/mcp",
+      "transport": "streamable-http"
+    }
+  }
+}</code></pre>
+        <p class="muted">Klienter med stöd: Claude Code, Cursor, Windsurf, framtida MCP-klienter.</p>
+      </div>
+      <div class="code-content hidden" id="tab-claude">
         <pre><code>{
   "mcpServers": {
     "agentanbud": {

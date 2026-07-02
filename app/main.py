@@ -19,6 +19,15 @@ from jinja2 import Environment, FileSystemLoader
 from .cron import get_schedule, next_run
 from .db import connect, init_db
 
+# MCP-over-HTTP is optional — only loaded if mcp_http module is present
+# (it's a separate file so the stdio MCP server stays independent).
+try:
+    from mcp_http import mcp_router
+    MCP_HTTP_AVAILABLE = True
+except ImportError:
+    MCP_HTTP_AVAILABLE = False
+    LOG.info("mcp_http not importable, /mcp endpoint disabled")
+
 LOG = logging.getLogger(__name__)
 
 DB_PATH = os.environ.get("DB_PATH", "/data/application.db")
@@ -79,6 +88,15 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
 
     # ---- Static ----
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    # ---- MCP over HTTP (Streamable HTTP transport) ----
+    # Lets remote clients (Claude Code, Cursor, Windsurf, future MCP-aware
+    # web assistants) connect with just a URL — no local install.
+    if MCP_HTTP_AVAILABLE:
+        app.include_router(mcp_router)
+        LOG.info("MCP HTTP endpoint mounted at /mcp")
+    else:
+        LOG.warning("MCP HTTP endpoint NOT mounted (mcp_http module missing)")
 
     # ---- Pages ----
     @app.get("/", include_in_schema=False)

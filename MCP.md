@@ -122,7 +122,29 @@ När vi behöver fjärråtkomst (t.ex. för hostad version) kan vi lägga till S
 
 ---
 
-## Installation (Claude Desktop)
+## Installation
+
+### Alt 1: Remote (Streamable HTTP) — inget att installera
+
+Den publika servern `opentender.liteit.se` exponerar MCP via HTTP. Bara
+att peka klienten på URL:en, ingen lokal kod behövs.
+
+```json
+{
+  "mcpServers": {
+    "agentanbud": {
+      "url": "https://opentender.liteit.se/mcp",
+      "transport": "streamable-http"
+    }
+  }
+}
+```
+
+Klienter som stödjer: **Claude Code**, **Cursor**, **Windsurf**, alla
+framtida MCP-klienter med HTTP-stöd. Klienten listar tools automatiskt
+vid connect.
+
+### Alt 2: Lokal (stdio) — för utvecklare
 
 Lägg till i `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac) eller motsvarande:
 
@@ -141,7 +163,7 @@ Lägg till i `~/Library/Application Support/Claude/claude_desktop_config.json` (
 
 Starta om Claude Desktop — Agentanbud-verktygen dyker upp i verktygslistan.
 
-## Installation (Kilo Code / Cline / Continue)
+### Installation (Kilo Code / Cline / Continue)
 
 Samma princip — ange `command` och `args` i din klient-konfiguration.
 
