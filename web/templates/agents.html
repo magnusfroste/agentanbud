@@ -5,7 +5,7 @@
 <!-- HERO -->
 <div class="agents-hero">
   <h1>Agenter</h1>
-  <p class="lead">Tre sätt att använda OpenTender. Välj det som passar dig — eller använd alla tre.</p>
+  <p class="lead">Fyra sätt att använda OpenTender. Välj det som passar dig — eller använd alla.</p>
 </div>
 
 <!-- THREE PATHS CARDS -->
@@ -32,6 +32,16 @@
     </div>
     <h3>REST API — för system</h3>
     <p>Bygg eget system eller script.</p>
+  </a>
+
+  <a href="#prompt" class="path-card">
+    <div class="path-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+    </div>
+    <h3>Prompt — för Hermes &amp; ChatGPT</h3>
+    <p>Klistra in en prompt så vet agenten allt.</p>
   </a>
 
   <a href="/browse" class="path-card">
@@ -228,6 +238,69 @@ Environment: DB_PATH=/data/opentender.db</code></pre>
   </p>
 </section>
 
+<!-- PROMPT SECTION -->
+<section class="agent-section secondary" id="prompt">
+  <div class="agent-section-header">
+    <div class="agent-section-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+    </div>
+    <div>
+      <h2>Prompt — för Hermes, ChatGPT, Claude</h2>
+      <p class="muted" style="margin: 0.25rem 0 0 0;">Klistra in detta i din AI-assistent så kan den söka upphandlingar direkt via REST API.</p>
+    </div>
+  </div>
+
+  <p>Kopiera hela texten nedan och klistra in som första meddelande — agenten får då full kontext om OpenTender, API-endpoints och hur den söker.</p>
+
+  <div class="prompt-copy-wrapper">
+    <button class="btn accent small prompt-copy-btn" onclick="copyPrompt()">📋 Kopiera prompt</button>
+    <pre id="prompt-text" class="prompt-block"><code>Du har tillgång till OpenTender — en öppen databas för svenska offentliga upphandlingar.
+
+API: Base URL är https://opentender.liteit.se
+Inga API-nycklar behövs. Alla endpoints är öppna.
+
+## Endpoints
+
+GET /api/tenders?q={nyckelord}&amp;source={ted|mercell|ted_awards|ted_pin}&amp;authority={namn}&amp;cpv={kod}&amp;page={n}
+  Sök upphandlingar. Paginerat med 25 per sida.
+  Parametrar är valfria — bara q ger fulltextsökning.
+  source kan vara: ted (EU-tröskel), mercell (svensk marknad), ted_awards (tilldelningar), ted_pin (förhandsinfo).
+
+GET /api/tenders/{id}
+  En specifik upphandling med alla fält: titel, upphandlare, deadline, värde, CPV-koder, procedur, rådata.
+
+GET /api/stats
+  Översikt: antal per källa, topp-upphandlare, senaste synk.
+
+POST /api/sync
+  Trigga en ny sync (hämta senaste datan). Returnerar 202, körs i bakgrunden.
+
+## Tips
+
+- CPV-kod "72" = IT, "45" = bygg, "50" = reparation, "79" = juridik, "85" = hälsovård.
+- Söker du deadline snart? Sortera med sort=deadline i q-parametern.
+- PIN (ted_pin) = upphandlingar som planeras, innan formell annons.
+- Awards (ted_awards) = avslutade upphandlingar med vinnare och pris.
+- Alla datum är ISO 8601 (t.ex. 2026-09-18+02:00).
+
+## Exempel
+
+"Hitta IT-upphandlingar i Stockholm med deadline inom 30 dagar"
+→ GET /api/tenders?q=IT&amp;source=mercell
+  Filtrera svaret på deadline &gt; idag och &lt; idag+30d.
+
+"Vad har Trafikverket öppet just nu?"
+→ GET /api/tenders?authority=Trafikverket
+
+"Visa de 5 senaste tilldelningarna"
+→ GET /api/tenders?source=ted_awards&amp;page=1
+
+Börja alltid med att hämta /api/stats för aktuell översikt.</code></pre>
+  </div>
+</section>
+
 <script>
   document.querySelectorAll('.code-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -237,5 +310,31 @@ Environment: DB_PATH=/data/opentender.db</code></pre>
       document.getElementById('tab-' + tab.dataset.tab).classList.remove('hidden');
     });
   });
+</script>
+
+<script>
+  function copyPrompt() {
+    const text = document.getElementById('prompt-text').innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.querySelector('.prompt-copy-btn');
+      const original = btn.innerText;
+      btn.innerText = '✓ Kopierad!';
+      btn.style.background = 'var(--ok)';
+      btn.style.color = '#fff';
+      setTimeout(() => {
+        btn.innerText = original;
+        btn.style.background = '';
+        btn.style.color = '';
+      }, 2000);
+    }).catch(() => {
+      // Fallback for older browsers
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    });
+  }
 </script>
 {% endblock %}

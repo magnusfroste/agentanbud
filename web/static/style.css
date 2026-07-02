@@ -1642,6 +1642,51 @@ pre code {
 
 /* === AGENTS PAGE === */
 
+/* Prompt copy block */
+.prompt-copy-wrapper {
+  position: relative;
+  margin: 1rem 0 0 0;
+}
+
+.prompt-copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  opacity: 0.85;
+  transition: opacity var(--transition);
+}
+
+.prompt-copy-btn:hover {
+  opacity: 1;
+}
+
+.prompt-block {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.25rem 1.25rem 1.25rem;
+  margin: 0;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.prompt-block code {
+  font-family: "SF Mono", "Fira Code", "JetBrains Mono", monospace;
+  color: var(--fg);
+  background: none;
+  padding: 0;
+}
+
+[data-theme="dark"] .prompt-block {
+  background: rgba(0, 0, 0, 0.25);
+}
+
 .agent-section {
   background: var(--surface);
   border: 1px solid var(--border);
