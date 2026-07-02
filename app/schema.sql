@@ -1,4 +1,4 @@
--- OpenTender schema — mirrors the public fields of offentlig.ai's `tenders`
+-- Agentanbud schema — mirrors the public fields of offentlig.ai's `tenders`
 -- table so we can ingest Mercell / TED records directly.
 
 CREATE TABLE IF NOT EXISTS tenders (

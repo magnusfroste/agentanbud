@@ -1,6 +1,6 @@
-# OpenTender — MCP server (för Claude Code, Kilo Code, Cline m.fl.)
+# Agentanbud — MCP server (för Claude Code, Kilo Code, Cline m.fl.)
 
-OpenTender exponerar sina data via [Model Context Protocol](https://modelcontextprotocol.io/) så att AI-agenter (Claude Code, Kilo Code, Cline, OpenAI Assistants m.fl.) kan söka och läsa svenska offentliga upphandlingar direkt i sina arbetsflöden.
+Agentanbud exponerar sina data via [Model Context Protocol](https://modelcontextprotocol.io/) så att AI-agenter (Claude Code, Kilo Code, Cline, OpenAI Assistants m.fl.) kan söka och läsa svenska offentliga upphandlingar direkt i sina arbetsflöden.
 
 ## Verktyg
 
@@ -80,7 +80,7 @@ get_stats()                           # visar per-källa
 
 ## Viktigt: data vs ansökan
 
-OpenTender speglar **publik data** (titlar, beskrivningar, deadlines, CPV-koder). **Att ansöka** kräver ofta ett konto hos plattformen:
+Agentanbud speglar **publik data** (titlar, beskrivningar, deadlines, CPV-koder). **Att ansöka** kräver ofta ett konto hos plattformen:
 
 | Källa | Data (läs) | Att ansöka |
 |---|---|---|
@@ -129,17 +129,17 @@ Lägg till i `~/Library/Application Support/Claude/claude_desktop_config.json` (
 ```json
 {
   "mcpServers": {
-    "opentender": {
+    "agentanbud": {
       "command": "python",
       "args": ["-m", "mcp_server"],
-      "cwd": "/path/to/opentender",
-      "env": {"DB_PATH": "/data/opentender.db"}
+      "cwd": "/path/to/agentanbud",
+      "env": {"DB_PATH": "/data/agentanbud.db"}
     }
   }
 }
 ```
 
-Starta om Claude Desktop — OpenTender-verktygen dyker upp i verktygslistan.
+Starta om Claude Desktop — Agentanbud-verktygen dyker upp i verktygslistan.
 
 ## Installation (Kilo Code / Cline / Continue)
 

@@ -5,7 +5,7 @@
 <!-- HERO -->
 <div class="agents-hero">
   <h1>Agenter</h1>
-  <p class="lead">Fyra sätt att använda OpenTender. Välj det som passar dig — eller använd alla.</p>
+  <p class="lead">Fyra sätt att använda Agentanbud. Välj det som passar dig — eller använd alla.</p>
 </div>
 
 <!-- THREE PATHS CARDS -->
@@ -87,12 +87,12 @@
       <div class="code-content" id="tab-claude">
         <pre><code>{
   "mcpServers": {
-    "opentender": {
+    "agentanbud": {
       "command": "python",
       "args": ["-m", "mcp_server"],
-      "cwd": "/path/to/opentender",
+      "cwd": "/path/to/agentanbud",
       "env": {
-        "DB_PATH": "/data/opentender.db"
+        "DB_PATH": "/data/agentanbud.db"
       }
     }
   }
@@ -102,28 +102,28 @@
         <pre><code>// Kilo Code → Inställningar → MCP Servers → Add
 Type: stdio
 Command: python -m mcp_server
-Working directory: /path/to/opentender
-Environment: DB_PATH=/data/opentender.db</code></pre>
+Working directory: /path/to/agentanbud
+Environment: DB_PATH=/data/agentanbud.db</code></pre>
       </div>
       <div class="code-content hidden" id="tab-cline">
         <pre><code>// Cline → Settings → MCP Servers
 {
-  "opentender": {
+  "agentanbud": {
     "command": "python",
     "args": ["-m", "mcp_server"],
-    "cwd": "/path/to/opentender"
+    "cwd": "/path/to/agentanbud"
   }
 }</code></pre>
       </div>
       <div class="code-content hidden" id="tab-docker">
         <pre><code>{
   "mcpServers": {
-    "opentender": {
+    "agentanbud": {
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
         "-v", "/path/to/data:/data",
-        "ghcr.io/magnusfroste/opentender:latest",
+        "ghcr.io/magnusfroste/agentanbud:latest",
         "python", "-m", "mcp_server"
       ]
     }
@@ -176,7 +176,7 @@ Environment: DB_PATH=/data/opentender.db</code></pre>
   </div>
 
   <p class="muted" style="margin-top: 1.5rem;">
-    Full dokumentation: <a href="https://github.com/magnusfroste/opentender/blob/main/MCP.md" target="_blank" rel="noopener">MCP.md på GitHub ↗</a>
+    Full dokumentation: <a href="https://github.com/magnusfroste/agentanbud/blob/main/MCP.md" target="_blank" rel="noopener">MCP.md på GitHub ↗</a>
   </p>
 </section>
 
@@ -230,8 +230,8 @@ Environment: DB_PATH=/data/opentender.db</code></pre>
   </div>
 
   <h3>Exempel</h3>
-  <pre><code>curl "https://opentender.liteit.se/api/tenders?q=it-konsult&source=mercell"</code></pre>
-  <pre><code>curl "https://opentender.liteit.se/api/tenders/42"</code></pre>
+  <pre><code>curl "https://agantanbud.se/api/tenders?q=it-konsult&source=mercell"</code></pre>
+  <pre><code>curl "https://agantanbud.se/api/tenders/42"</code></pre>
 
   <p class="muted" style="margin-top: 1rem;">
     Full OpenAPI-spec: <a href="/openapi.json">/openapi.json</a>
@@ -252,13 +252,13 @@ Environment: DB_PATH=/data/opentender.db</code></pre>
     </div>
   </div>
 
-  <p>Kopiera hela texten nedan och klistra in som första meddelande — agenten får då full kontext om OpenTender, API-endpoints och hur den söker.</p>
+  <p>Kopiera hela texten nedan och klistra in som första meddelande — agenten får då full kontext om Agentanbud, API-endpoints och hur den söker.</p>
 
   <div class="prompt-copy-wrapper">
     <button class="btn accent small prompt-copy-btn" onclick="copyPrompt()">📋 Kopiera prompt</button>
-    <pre id="prompt-text" class="prompt-block"><code>Du har tillgång till OpenTender — en öppen databas för svenska offentliga upphandlingar.
+    <pre id="prompt-text" class="prompt-block"><code>Du har tillgång till Agentanbud — en öppen databas för svenska offentliga upphandlingar.
 
-API: Base URL är https://opentender.liteit.se
+API: Base URL är https://agantanbud.se
 Inga API-nycklar behövs. Alla endpoints är öppna.
 
 ## Endpoints

@@ -3,26 +3,26 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{% block title %}OpenTender{% endblock %} — Svenska upphandlingar</title>
+  <title>{% block title %}Agentanbud{% endblock %} — Svenska upphandlingar</title>
 
   <!-- SEO -->
-  <meta name="description" content="OpenTender — fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och utforska upphandlingar från Mercell, TED EU och fler källor. Öppet API, MCP för AI-agenter. Infrastruktur för demokrati." />
+  <meta name="description" content="Agentanbud — fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och utforska upphandlingar från Mercell, TED EU och fler källor. Öppet API, MCP för AI-agenter. Infrastruktur för demokrati." />
   <meta name="keywords" content="upphandling, offentlig upphandling, Sverige, anbud, offentlig, Mercell, TED, LOU, direktupphandling, ramavtal, CPV, upphandlingsmyndigheten, fri data, öppen data" />
-  <meta name="author" content="OpenTender" />
+  <meta name="author" content="Agentanbud" />
   <meta name="robots" content="index, follow" />
-  <link rel="canonical" href="https://opentender.liteit.se/" />
+  <link rel="canonical" href="https://agantanbud.se/" />
 
   <!-- OpenGraph -->
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="OpenTender — Svenska upphandlingar, öppna för alla" />
+  <meta property="og:title" content="Agentanbud — Svenska upphandlingar, öppna för alla" />
   <meta property="og:description" content="Fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och bygg ovanpå med öppet API och MCP. Infrastruktur för demokrati." />
-  <meta property="og:url" content="https://opentender.liteit.se/" />
-  <meta property="og:site_name" content="OpenTender" />
+  <meta property="og:url" content="https://agantanbud.se/" />
+  <meta property="og:site_name" content="Agentanbud" />
   <meta property="og:locale" content="sv_SE" />
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="OpenTender — Svenska upphandlingar, öppna för alla" />
+  <meta name="twitter:title" content="Agentanbud — Svenska upphandlingar, öppna för alla" />
   <meta name="twitter:description" content="Fri tillgång till svenska offentliga upphandlingar. Öppet API + MCP för AI-agenter." />
 
   <!-- AEO (Answer Engine Optimization) — för AI-crawlers -->
@@ -30,9 +30,9 @@
   {
     "@context": "https://schema.org",
     "@type": "WebApplication",
-    "name": "OpenTender",
+    "name": "Agentanbud",
     "description": "Fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och bygg ovanpå med öppet API och MCP.",
-    "url": "https://opentender.liteit.se/",
+    "url": "https://agantanbud.se/",
     "applicationCategory": "GovernmentApplication",
     "operatingSystem": "Web",
     "offers": {"@type": "Offer", "price": "0", "priceCurrency": "SEK"},
@@ -48,23 +48,23 @@
     "mainEntity": [
       {
         "@type": "Question",
-        "name": "Vad är OpenTender?",
-        "acceptedAnswer": {"@type": "Answer", "text": "OpenTender är en öppen spegel av svenska offentliga upphandlingar. Vi samlar data från Mercell, TED EU och andra källor i en SQLite-databas och serverar den via webb, REST API och MCP för AI-agenter."}
+        "name": "Vad är Agentanbud?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Agentanbud är en öppen spegel av svenska offentliga upphandlingar. Vi samlar data från Mercell, TED EU och andra källor i en SQLite-databas och serverar den via webb, REST API och MCP för AI-agenter."}
       },
       {
         "@type": "Question",
-        "name": "Är OpenTender gratis?",
+        "name": "Är Agentanbud gratis?",
         "acceptedAnswer": {"@type": "Answer", "text": "Ja. Hela API:t är öppet — inga konton, inga API-nycklar, inga betalväggar. Att söka är alltid gratis. För vissa upphandlingar behöver du skapa konto hos plattformen (Mercell, Tendsign, etc.) för att komma åt anbudsformulär och dokument."}
       },
       {
         "@type": "Question",
-        "name": "Vilka datakällor använder OpenTender?",
+        "name": "Vilka datakällor använder Agentanbud?",
         "acceptedAnswer": {"@type": "Answer", "text": "Mercell (publikt sök-API, ~65-70% av svensk volym) och TED EU (EU-tröskelvärden). Vi respekterar robots.txt — e-Avrop är inte speglad eftersom de blockerar crawling."}
       },
       {
         "@type": "Question",
-        "name": "Kan AI-agenter använda OpenTender?",
-        "acceptedAnswer": {"@type": "Answer", "text": "Ja. OpenTender har en MCP-server med 9 verktyg (search_tenders, get_tender, get_stats, list_providers, list_regions, sync_now, list_cpv_top, get_authority, match_profile) som låter Claude Code, Kilo Code och Cline söka och läsa upphandlingar direkt."}
+        "name": "Kan AI-agenter använda Agentanbud?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Ja. Agentanbud har en MCP-server med 9 verktyg (search_tenders, get_tender, get_stats, list_providers, list_regions, sync_now, list_cpv_top, get_authority, match_profile) som låter Claude Code, Kilo Code och Cline söka och läsa upphandlingar direkt."}
       },
       {
         "@type": "Question",
@@ -87,7 +87,7 @@
     <div class="inner">
       <a href="/" class="brand">
         <span class="dot"></span>
-        <span>OpenTender</span>
+        <span>Agentanbud</span>
      </a>
       <nav>
         <a href="/" class="{% set p=request.url.path if request else '' %}{% if p == '/' %}active{% endif %}">Hem</a>

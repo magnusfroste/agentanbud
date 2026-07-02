@@ -1,7 +1,7 @@
 """
-MCP-server för OpenTender — stdio-transport.
+MCP-server för Agentanbud — stdio-transport.
 
-Wraps OpenTender's REST API as MCP tools so Claude Code / Kilo Code / Cline /
+Wraps Agentanbud's REST API as MCP tools so Claude Code / Kilo Code / Cline /
 any MCP-kompatibel klient kan söka och läsa svenska upphandlingar.
 
 Följer best practices för LLM-tool-design:
@@ -15,7 +15,7 @@ Användning:
   python -m mcp_server
 
 Claude Desktop config:
-  {"mcpServers": {"opentender": {"command": "python", "args": ["-m", "mcp_server"]}}}
+  {"mcpServers": {"agentanbud": {"command": "python", "args": ["-m", "mcp_server"]}}}
 """
 from __future__ import annotations
 
@@ -32,13 +32,13 @@ import mcp.server.stdio
 import mcp.types as types
 from mcp.server import Server
 
-# Reuse OpenTender's DB layer
+# Reuse Agentanbud's DB layer
 sys.path.insert(0, str(Path(__file__).parent))
 from app.db import connect  # noqa: E402
 
-DB_PATH = os.environ.get("DB_PATH", "/data/opentender.db")
+DB_PATH = os.environ.get("DB_PATH", "/data/agentanbud.db")
 
-server = Server("opentender")
+server = Server("agentanbud")
 
 
 # ----- Provider metadata (paywall/auth info) -------------------------------
@@ -474,7 +474,7 @@ async def _list_providers(conn, args: dict) -> list[types.Content]:
     counts = dict(conn.execute(
         "SELECT source_system, COUNT(*) FROM tenders GROUP BY source_system"
     ).fetchall())
-    lines = ["**Aktiva providers (live i OpenTender):**", ""]
+    lines = ["**Aktiva providers (live i Agentanbud):**", ""]
     for pid, meta in PROVIDERS.items():
         if meta["data_status"] != "live":
             continue
@@ -515,7 +515,7 @@ async def _sync_now(args: dict) -> list[types.Content]:
         subprocess.Popen(
             ["python", "-m", "scraper.orchestrator"],
             cwd="/app",
-            stdout=open("/var/log/opentender.log", "a"),
+            stdout=open("/var/log/agentanbud.log", "a"),
             stderr=subprocess.STDOUT,
         )
         return [types.TextContent(

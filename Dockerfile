@@ -17,10 +17,10 @@ COPY web/ /app/web/
 # Cron entry — runs the orchestrator once daily.
 # Time is interpreted in the container's local timezone.
 ENV CRON_SCHEDULE="0 6 * * *"
-RUN printf 'PATH=/usr/local/bin:/usr/bin:/bin\n%s root cd /app && python -m scraper.orchestrator >> /var/log/opentender.log 2>&1\n' \
-        "$CRON_SCHEDULE" > /etc/cron.d/opentender && \
-    chmod 0644 /etc/cron.d/opentender && \
-    touch /var/log/opentender.log
+RUN printf 'PATH=/usr/local/bin:/usr/bin:/bin\n%s root cd /app && python -m scraper.orchestrator >> /var/log/agentanbud.log 2>&1\n' \
+        "$CRON_SCHEDULE" > /etc/cron.d/agentanbud && \
+    chmod 0644 /etc/cron.d/agentanbud && \
+    touch /var/log/agentanbud.log
 
 # /data is the persistent volume — SQLite + sync logs live here
 RUN mkdir -p /data

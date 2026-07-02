@@ -25,7 +25,7 @@ from app.db import connect, init_db, log_sync, upsert_tender
 LOG = logging.getLogger(__name__)
 
 API_URL = "https://api.ted.europa.eu/v3/notices/search"
-DEFAULT_USER_AGENT = "opentender/0.1"
+DEFAULT_USER_AGENT = "agentanbud/0.1"
 DEFAULT_LOOKBACK_DAYS = 90
 DEFAULT_LIMIT = 100
 MAX_PAGES = 50  # PINs are lower volume
@@ -211,4 +211,4 @@ def run(db_path: str, lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> int:
 
 if __name__ == "__main__":
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
-    run(os.environ.get("DB_PATH", "/data/opentender.db"))
+    run(os.environ.get("DB_PATH", "/data/agentanbud.db"))

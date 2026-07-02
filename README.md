@@ -3,7 +3,7 @@
 > **Svenska upphandlingar — fri tillgång, en SQLite, en container.**
 > Open by design. Data är dina medborgares rättighet.
 
-OpenTender samlar in offentlig upphandlingsdata från Mercell och TED EU,
+Agentanbud samlar in offentlig upphandlingsdata från Mercell och TED EU,
 lagrar allt i en lokal SQLite, och serverar en enkel dashboard + JSON API via
 FastAPI. Allt-i-ett-container, deployas till Easypanel via en
 `docker-compose.yml`. Inga molntjänster, inga API-nycklar, inga paywalls.
@@ -20,7 +20,7 @@ samma tillgång som de stora konsultbolagen.
 
 Svenska myndigheter måste enligt lag publicera upphandlingar enligt **offentlighetsprincipen** — men det finns ingen samlad öppen plats där datan är lätt att hitta, jämföra och bevaka. Stora konsultbolag har råd att betala plattformar, byta källa, skriva anbud. Småföretag gör det inte.
 
-OpenTender finns för att **minska informationsasymmetrin**. Vi speglar publik upphandlingsdata, gör den sökbar, och ger AI-agenter direktåtkomst via MCP. Målet är inte att konkurrera med Mercell, Tendsign, e-Avrop eller Clira — utan att ge svenska småföretag samma möjlighet att **hitta** anbud som de stora har.
+Agentanbud finns för att **minska informationsasymmetrin**. Vi speglar publik upphandlingsdata, gör den sökbar, och ger AI-agenter direktåtkomst via MCP. Målet är inte att konkurrera med Mercell, Tendsign, e-Avrop eller Clira — utan att ge svenska småföretag samma möjlighet att **hitta** anbud som de stora har.
 
 > "Sharing is caring" — men vi tar det längre: vi delar **hela ekosystemet** (kod, data, utbildning) så att fler kan bygga bättre verktyg ovanpå.
 
@@ -42,7 +42,7 @@ OpenTender finns för att **minska informationsasymmetrin**. Vi speglar publik u
 
 ```
 ┌─────────────────────────────────────────────┐
-│  Easypanel service: opentender              │
+│  Easypanel service: agentanbud              │
 │  (single container via docker-compose)      │
 │                                             │
 │  ┌──────────────┐  ┌──────────────────────┐ │
@@ -53,7 +53,7 @@ OpenTender finns för att **minska informationsasymmetrin**. Vi speglar publik u
 │  │   • ted      │  │  /   (dashboard)     │ │
 │  │  ↓           │──│  reads ────→ SQLite  │ │
 │  └──────────────┘  └──────────────────────┘ │
-│                  ↳ /data/opentender.db       │
+│                  ↳ /data/agentanbud.db       │
 └─────────────────────────────────────────────┘
           ↕ HTTPS
        Traefik (Easypanel)
@@ -67,7 +67,7 @@ hemligheter att hantera.** Allt-i-ett, läs SQLite direkt om du vill.
 ## 🚀 Deploy till Easypanel (3 minuter)
 
 1. Easypanel → **Create Service → Docker Compose**
-2. **Source:** `https://github.com/magnusfroste/opentender`
+2. **Source:** `https://github.com/magnusfroste/agentanbud`
 3. **Domain:** t.ex. `upphandling.dindomän.se` (HTTPS auto)
 4. **Deploy**
 
@@ -76,8 +76,8 @@ Klart. Första sync körs kl 06:00 (eller ställ in egen `CRON_SCHEDULE`).
 ## 🐳 Lokal test
 
 ```bash
-git clone https://github.com/magnusfroste/opentender.git
-cd opentender
+git clone https://github.com/magnusfroste/agentanbud.git
+cd agentanbud
 docker compose up --build
 # → http://localhost:8080
 ```
@@ -174,7 +174,7 @@ CREATE TABLE tenders (
 **Inspektera direkt med `sqlite3`-CLI:**
 
 ```bash
-sqlite3 data/opentender.db
+sqlite3 data/agentanbud.db
 sqlite> .schema
 sqlite> SELECT source_system, COUNT(*) FROM tenders GROUP BY source_system;
 sqlite> SELECT title, authority FROM tenders WHERE cpv_codes LIKE '%72%' LIMIT 5;

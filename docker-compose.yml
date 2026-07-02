@@ -1,5 +1,5 @@
 #
-# docker-compose.yml — OpenTender on Easypanel
+# docker-compose.yml — Agentanbud on Easypanel
 #
 # One container: FastAPI serves dashboard + API, cron triggers scrapers.
 # SQLite + sync logs persist in /data (mounted as a Docker volume).
@@ -18,8 +18,8 @@ services:
     volumes:
       - ./data:/data
     environment:
-      - DB_PATH=/data/opentender.db
-      - USER_AGENT=${USER_AGENT:-opentender/0.1}
+      - DB_PATH=/data/agentanbud.db
+      - USER_AGENT=${USER_AGENT:-agentanbud/0.1}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       # Schedule for the in-container cron (any valid crontab expression)
       - CRON_SCHEDULE=${CRON_SCHEDULE:-0 6 * * *}

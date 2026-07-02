@@ -21,7 +21,7 @@ from .db import connect, init_db
 
 LOG = logging.getLogger(__name__)
 
-DB_PATH = os.environ.get("DB_PATH", "/data/opentender.db")
+DB_PATH = os.environ.get("DB_PATH", "/data/agentanbud.db")
 TEMPLATE_DIR = Path(__file__).parent.parent / "web" / "templates"
 STATIC_DIR = Path(__file__).parent.parent / "web" / "static"
 
@@ -69,7 +69,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
     except Exception as exc:
         LOG.warning("init_db failed: %s", exc)
 
-    app = FastAPI(title="OpenTender", version="0.2.0")
+    app = FastAPI(title="Agentanbud", version="0.2.0")
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
     env.filters["format_num"] = _num
 
@@ -715,7 +715,7 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             proc = subprocess.Popen(
                 ["python", "-m", "scraper.orchestrator"],
                 cwd="/app",
-                stdout=open("/var/log/opentender.log", "a"),
+                stdout=open("/var/log/agentanbud.log", "a"),
                 stderr=subprocess.STDOUT,
                 env=env,
             )

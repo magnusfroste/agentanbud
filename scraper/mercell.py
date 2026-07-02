@@ -26,7 +26,7 @@ from app.db import connect, init_db, log_sync, upsert_tender
 LOG = logging.getLogger(__name__)
 
 API_BASE = "https://search-service-api.discover.app.mercell.com/public/api/v1/search"
-DEFAULT_USER_AGENT = "opentender/0.1 (+https://github.com/magnusfroste/opentender)"
+DEFAULT_USER_AGENT = "agentanbud/0.1 (+https://github.com/magnusfroste/agentanbud)"
 DEFAULT_MAX_PAGES = 100       # safety cap — gives ~10k records to walk
 DEFAULT_PAGE_SIZE = 100
 DEFAULT_REQUEST_DELAY_S = 0.4
@@ -136,4 +136,4 @@ def run(db_path: str) -> int:
 
 if __name__ == "__main__":
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
-    run(os.environ.get("DB_PATH", "/data/opentender.db"))
+    run(os.environ.get("DB_PATH", "/data/agentanbud.db"))

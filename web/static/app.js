@@ -1,4 +1,4 @@
-// OpenTender client-side enhancements
+// Agentanbud client-side enhancements
 // Loaded on every page via base.html
 
 (function () {
