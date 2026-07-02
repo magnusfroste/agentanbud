@@ -744,6 +744,147 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
         finally:
             conn.close()
 
+    # ---- Knowledge base (criteria + questions) ----
+    @app.get("/api/knowledge")
+    def list_knowledge(
+        request: Request,
+        source: Optional[str] = Query(default=None, description="criteria | questions"),
+        category: Optional[str] = Query(default=None),
+        q: Optional[str] = Query(default=None),
+        page: int = Query(default=1, ge=1),
+        page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    ) -> dict:
+        conn = connect(db)
+        try:
+            where = []
+            args: list = []
+            if source:
+                where.append("source_system = ?")
+                args.append(source)
+            if category:
+                where.append("(category = ? OR subcategory = ?)")
+                args.extend([category, category])
+            if q:
+                where.append("(title LIKE ? OR excerpt LIKE ? OR tags LIKE ?)")
+                args.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+            where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM knowledge {where_sql}", args
+            ).fetchone()[0]
+            rows = conn.execute(
+                f"""
+                SELECT id, source_system, source_id, url, title, category, subcategory,
+                       tags, excerpt, body, fetched_at
+                FROM knowledge {where_sql}
+                ORDER BY source_system, id
+                LIMIT ? OFFSET ?
+                """,
+                args + [page_size, (page - 1) * page_size],
+            ).fetchall()
+            items = []
+            for r in rows:
+                d = dict(r)
+                if d.get("tags"):
+                    try:
+                        d["tags"] = json.loads(d["tags"])
+                    except Exception:
+                        d["tags"] = []
+                items.append(d)
+            return {"items": items, "page": page, "page_size": page_size, "total": total}
+        finally:
+            conn.close()
+
+    @app.get("/api/knowledge/stats")
+    def knowledge_stats() -> dict:
+        """Counts per source_system, and per top category."""
+        conn = connect(db)
+        try:
+            by_source = conn.execute(
+                "SELECT source_system, COUNT(*) as n FROM knowledge GROUP BY source_system"
+            ).fetchall()
+            by_category = conn.execute(
+                "SELECT source_system, category, COUNT(*) as n FROM knowledge "
+                "WHERE category IS NOT NULL AND category != '' "
+                "GROUP BY source_system, category ORDER BY n DESC LIMIT 20"
+            ).fetchall()
+            return {
+                "by_source": [dict(r) for r in by_source],
+                "top_categories": [dict(r) for r in by_category],
+            }
+        finally:
+            conn.close()
+
+    @app.get("/kunskap", include_in_schema=False)
+    def kunskap(
+        request: Request,
+        source: str = "",
+        category: str = "",
+        q: str = "",
+        page: int = 1,
+    ):
+        """Browse the knowledge base — criteria and Q&A from UHM."""
+        page = max(1, page)
+        conn = connect(db)
+        try:
+            where = []
+            args: list = []
+            if source:
+                where.append("source_system = ?")
+                args.append(source)
+            if category:
+                where.append("(category = ? OR subcategory = ?)")
+                args.extend([category, category])
+            if q:
+                where.append("(title LIKE ? OR excerpt LIKE ? OR tags LIKE ?)")
+                args.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+            where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+            page_size = 20
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM knowledge {where_sql}", args
+            ).fetchone()[0]
+            pages = max(1, (total + page_size - 1) // page_size)
+            rows = conn.execute(
+                f"""
+                SELECT id, source_system, title, category, subcategory, tags, excerpt, url
+                FROM knowledge {where_sql}
+                ORDER BY source_system, category, id
+                LIMIT ? OFFSET ?
+                """,
+                args + [page_size, (page - 1) * page_size],
+            ).fetchall()
+            items = []
+            for r in rows:
+                d = dict(r)
+                if d.get("tags"):
+                    try:
+                        d["tags_list"] = json.loads(d["tags"])
+                    except Exception:
+                        d["tags_list"] = []
+                items.append(d)
+
+            # Top categories for filter sidebar
+            top_categories = conn.execute(
+                "SELECT source_system, category, COUNT(*) as n FROM knowledge "
+                "WHERE category IS NOT NULL AND category != '' "
+                "GROUP BY source_system, category ORDER BY n DESC LIMIT 15"
+            ).fetchall()
+
+            # Total counts per source
+            source_counts = conn.execute(
+                "SELECT source_system, COUNT(*) as n FROM knowledge GROUP BY source_system"
+            ).fetchall()
+            sc = {r["source_system"]: r["n"] for r in source_counts}
+
+            return HTMLResponse(render("kunskap.html",
+                q=q, source=source, category=category, page=page, pages=pages,
+                total=total, items=items,
+                top_categories=[dict(r) for r in top_categories],
+                source_counts=sc,
+            ))
+        finally:
+            conn.close()
+
     return app
 
 

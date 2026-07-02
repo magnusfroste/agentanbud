@@ -29,4 +29,6 @@ services:
       - SCRAPE_TED_AWARDS=${SCRAPE_TED_AWARDS:-true}
       - SCRAPE_TED_PIN=${SCRAPE_TED_PIN:-true}
       - SCRAPE_LOV=${SCRAPE_LOV:-true}
+      - SCRAPE_CRITERIA=${SCRAPE_CRITERIA:-true}
+      - SCRAPE_QUESTIONS=${SCRAPE_QUESTIONS:-true}
     restart: unless-stopped

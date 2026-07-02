@@ -9,6 +9,8 @@ Enable/disable individual sources via env vars (see docker-compose.yml):
   SCRAPE_MERCELL=true
   SCRAPE_TED=true
   SCRAPE_LOV=true
+  SCRAPE_CRITERIA=true
+  SCRAPE_QUESTIONS=true
 """
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ import os
 import time
 from typing import Callable
 
-from . import mercell, ted, ted_awards, ted_pin, lov
+from . import mercell, ted, ted_awards, ted_pin, lov, criteria, questions
 
 LOG = logging.getLogger(__name__)
 
@@ -34,6 +36,8 @@ def _registry() -> list[tuple[str, bool, Callable[[str], int]]]:
         ("ted_awards",  _truthy(os.environ.get("SCRAPE_TED_AWARDS", "true")),  ted_awards.run),
         ("ted_pin",     _truthy(os.environ.get("SCRAPE_TED_PIN", "true")),     ted_pin.run),
         ("lov",         _truthy(os.environ.get("SCRAPE_LOV", "true")),         lov.run),
+        ("criteria",    _truthy(os.environ.get("SCRAPE_CRITERIA", "true")),    criteria.run),
+        ("questions",   _truthy(os.environ.get("SCRAPE_QUESTIONS", "true")),   questions.run),
     ]
 
 

@@ -70,6 +70,22 @@ PROVIDERS = {
         "data_status": "live",
         "note": "Valfrihetssystem — hemtjänst, äldreboende, personlig assistans etc. Inga deadlines, löpande ansökan.",
     },
+    "criteria": {
+        "name": "Upphandlingsmyndigheten Hållbarhetskriterier",
+        "url": "https://www.upphandlingsmyndigheten.se/kriterier/",
+        "auth": "open",
+        "data_status": "live",
+        "note": "Hållbarhetskrav per bransch — IT, transport, livsmedel, bygg etc. Använd som referens vid anbudsskrivning.",
+        "type": "knowledge",
+    },
+    "questions": {
+        "name": "Upphandlingsmyndigheten Frågeportalen",
+        "url": "https://www.upphandlingsmyndigheten.se/fragor-och-svar/",
+        "auth": "open",
+        "data_status": "live",
+        "note": "Q&A om LOU, LOV, tröskelvärden, direktupphandling etc. från Upphandlingsmyndighetens jurister.",
+        "type": "knowledge",
+    },
     "tendsign": {
         "name": "Tendsign (Visma)",
         "url": "https://tendsign.com/",
@@ -285,6 +301,58 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="search_knowledge",
+            description=(
+                "Search the knowledge base — sustainability criteria (hållbarhetskriterier) "
+                "and Q&A (juridiska frågor) from Upphandlingsmyndigheten. "
+                "Use when the user asks about specific rules, environmental requirements, "
+                "or LOU/LOV interpretations. NOT for live tenders — use search_tenders for that. "
+                "Examples: q='IT-miljö', q='LOU tröskelvärde', source='criteria'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "q": {
+                        "type": "string",
+                        "description": "Search terms. Searches title, excerpt, and tags. Example: 'IT avfall'."
+                    },
+                    "source": {
+                        "type": "string",
+                        "enum": ["criteria", "questions"],
+                        "description": "Optional: filter to one type. 'criteria' = sustainability, 'questions' = Q&A."
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Optional: filter by primary category, e.g. 'IT och telekom'."
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 50,
+                        "description": "How many results to return (default 10, max 50)."
+                    }
+                },
+                "required": ["q"]
+            },
+        ),
+        types.Tool(
+            name="get_knowledge",
+            description=(
+                "Get full details of a single knowledge item by id, including all tags and the source URL."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "The knowledge item id (from search_knowledge results)."
+                    }
+                },
+                "required": ["id"]
+            },
+        ),
+        types.Tool(
             name="get_authority",
             description=(
                 "All tenders from one specific buyer/contracting authority. "
@@ -381,6 +449,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.Content]:
             return await _get_authority(conn, arguments)
         elif name == "match_profile":
             return await _match_profile(conn, arguments)
+        elif name == "search_knowledge":
+            return await _search_knowledge(conn, arguments)
+        elif name == "get_knowledge":
+            return await _get_knowledge(conn, arguments)
         else:
             return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
     finally:
@@ -673,6 +745,78 @@ async def _match_profile(conn, args: dict) -> list[types.Content]:
     header = f"**{len(items)} matchande upphandlingar** (profil: {args})"
     body = "\n\n---\n\n".join(_format_tender(t) for t in items)
     return [types.TextContent(type="text", text=f"{header}\n\n{body}")]
+
+
+def _format_knowledge(k: dict) -> str:
+    """Format one knowledge item for LLM consumption."""
+    type_label = "Kriterium" if k["source_system"] == "criteria" else "Fråga"
+    lines = [f"**[{k['id']}] {type_label}: {k.get('title', '(ingen titel)')}**"]
+    if k.get("category"):
+        lines.append(f"Kategori: {k['category']}")
+    if k.get("subcategory") and k.get("subcategory") != k.get("category"):
+        lines.append(f"Subkategori: {k['subcategory']}")
+    if k.get("tags"):
+        lines.append(f"Taggar: {', '.join(k['tags'][:5])}")
+    if k.get("excerpt"):
+        lines.append(f"\n{k['excerpt'][:500]}")
+    if k.get("url"):
+        lines.append(f"\nLäs mer: {k['url']}")
+    return "\n".join(lines)
+
+
+async def _search_knowledge(conn, args: dict) -> list[types.Content]:
+    """Search the knowledge base — criteria or Q&A."""
+    where = []
+    params: list = []
+    q = args.get("q", "")
+    if not q:
+        return [types.TextContent(type="text", text="Missing 'q' (search term).")]
+    where.append("(title LIKE ? OR excerpt LIKE ? OR tags LIKE ?)")
+    params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+    if args.get("source"):
+        where.append("source_system = ?")
+        params.append(args["source"])
+    if args.get("category"):
+        where.append("(category = ? OR subcategory = ?)")
+        params.extend([args["category"], args["category"]])
+    where_sql = "WHERE " + " AND ".join(where)
+    limit = min(args.get("limit", 10), 50)
+    rows = conn.execute(
+        f"""
+        SELECT id, source_system, source_id, url, title, category, subcategory,
+               tags, excerpt
+        FROM knowledge {where_sql}
+        ORDER BY source_system, id
+        LIMIT ?
+        """,
+        params + [limit],
+    ).fetchall()
+    items = [_row_dict(r) for r in rows]
+    if not items:
+        return [types.TextContent(
+            type="text",
+            text=f"Inga kunskapsresultat för '{q}'. Prova andra termer eller ta bort filter."
+        )]
+    src_label = args.get("source", "alla typer")
+    header = f"**{len(items)} kunskapsresultat för '{q}'** (typ: {src_label})"
+    body = "\n\n---\n\n".join(_format_knowledge(k) for k in items)
+    return [types.TextContent(type="text", text=f"{header}\n\n{body}")]
+
+
+async def _get_knowledge(conn, args: dict) -> list[types.Content]:
+    """Get full details of a single knowledge item."""
+    kid = args.get("id")
+    if not isinstance(kid, int):
+        return [types.TextContent(type="text", text="Missing or invalid 'id' (must be integer).")]
+    row = conn.execute(
+        "SELECT id, source_system, source_id, url, title, category, subcategory, "
+        "tags, excerpt, body, fetched_at FROM knowledge WHERE id = ?",
+        (kid,),
+    ).fetchone()
+    if not row:
+        return [types.TextContent(type="text", text=f"Knowledge item {kid} not found.")]
+    k = _row_dict(row)
+    return [types.TextContent(type="text", text=_format_knowledge(k))]
 
 
 

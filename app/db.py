@@ -103,5 +103,37 @@ def log_sync(conn: sqlite3.Connection, source: str, status: str, count: int, mes
     conn.commit()
 
 
+def upsert_knowledge(conn: sqlite3.Connection, k: dict) -> None:
+    """Insert or replace a knowledge item keyed on (source_system, source_id).
+
+    Same pattern as upsert_tender: stable unique key, replace on conflict.
+    Used for sustainability criteria and Q&A portal data.
+    """
+    if "tags" in k and not isinstance(k["tags"], str):
+        k["tags"] = json.dumps(k["tags"], ensure_ascii=False)
+    conn.execute(
+        """
+        INSERT INTO knowledge (
+            source_system, source_id, url, title, category, subcategory,
+            tags, excerpt, body, raw_json
+        ) VALUES (
+            :source_system, :source_id, :url, :title, :category, :subcategory,
+            :tags, :excerpt, :body, :raw_json
+        )
+        ON CONFLICT(source_system, source_id) DO UPDATE SET
+            url=excluded.url,
+            title=excluded.title,
+            category=excluded.category,
+            subcategory=excluded.subcategory,
+            tags=excluded.tags,
+            excerpt=excluded.excerpt,
+            body=excluded.body,
+            raw_json=excluded.raw_json,
+            fetched_at=CURRENT_TIMESTAMP
+        """,
+        k,
+    )
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

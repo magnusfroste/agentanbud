@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Kunskap — hållbarhetskriterier & upphandlingsfrågor{% endblock %}
+
+{% block content %}
+<div class="browse-header">
+  <h1 style="margin: 0;">Kunskap</h1>
+  <span class="muted">{{ total }} träffar{% if q %} för "{{ q }}"{% endif %} — hållbarhetskriterier & juridiska frågor från Upphandlingsmyndigheten</span>
+</div>
+
+<div class="browse-layout">
+  <!-- SIDEBAR FILTERS -->
+  <aside class="browse-sidebar">
+    <form method="get" action="/kunskap" id="knowledge-filters">
+      <div class="filter-group">
+        <label for="f-q">Sök</label>
+        <input type="text" id="f-q" name="q" class="filter-input" value="{{ q }}" placeholder="t.ex. IT, miljö, LOU..." autocomplete="off">
+      </div>
+
+      <div class="filter-group">
+        <label for="f-source">Typ</label>
+        <select id="f-source" name="source" class="filter-input">
+          <option value="">Alla typer</option>
+          <option value="criteria" {% if source == 'criteria' %}selected{% endif %}>🌱 Hållbarhetskriterier ({{ source_counts.get('criteria', 0) }})</option>
+          <option value="questions" {% if source == 'questions' %}selected{% endif %}>❓ Juridiska frågor ({{ source_counts.get('questions', 0) }})</option>
+        </select>
+      </div>
+
+      {% if category %}
+      <div class="filter-group">
+        <label>Vald kategori</label>
+        <div class="chip chip-doctype">{{ category }} <a href="/kunskap" style="color: inherit; text-decoration: none; margin-left: 0.3rem;">✕</a></div>
+      </div>
+      {% endif %}
+
+      <button class="btn primary small" type="submit" style="margin-top: 1rem; width: 100%;">Filtrera</button>
+    </form>
+
+    <div class="filter-group" style="margin-top: 1.5rem;">
+      <label>Populära kategorier</label>
+      <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+        {% for cat in top_categories[:10] %}
+        <a href="/kunskap?source={{ cat.source_system }}&category={{ cat.category|urlencode }}" class="sidebar-cat">
+          <span>{{ cat.category }}</span>
+          <span class="muted">{{ cat.n }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </aside>
+
+  <!-- RESULTS -->
+  <div class="browse-results">
+    {% if items %}
+    <div class="knowledge-list">
+      {% for k in items %}
+      <div class="knowledge-card">
+        <div class="knowledge-card-header">
+          {% if k.source_system == 'criteria' %}
+          <span class="badge badge-source knowledge-badge-criteria">🌱 Kriterium</span>
+          {% else %}
+          <span class="badge badge-source knowledge-badge-questions">❓ Fråga</span>
+          {% endif %}
+          {% if k.category %}
+          <span class="chip">{{ k.category }}</span>
+          {% endif %}
+          {% if k.subcategory and k.subcategory != k.category %}
+          <span class="chip">{{ k.subcategory }}</span>
+          {% endif %}
+        </div>
+        <h3 class="knowledge-title">
+          {% if k.url %}
+          <a href="{{ k.url }}" target="_blank" rel="noopener">{{ k.title }}</a>
+          {% else %}
+          {{ k.title }}
+          {% endif %}
+        </h3>
+        {% if k.excerpt %}
+        <p class="knowledge-excerpt">{{ k.excerpt[:280] }}{% if k.excerpt|length > 280 %}…{% endif %}</p>
+        {% endif %}
+        {% if k.tags_list %}
+        <div class="knowledge-tags">
+          {% for tag in k.tags_list[:5] %}
+          <span class="chip chip-tag">{{ tag }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if pages > 1 %}
+    <nav class="pagination">
+      {% if page > 1 %}
+      <a href="/kunskap?q={{ q|urlencode }}&source={{ source|urlencode }}&category={{ category|urlencode }}&page={{ page - 1 }}">‹ Föregående</a>
+      {% endif %}
+      <span class="muted">Sida {{ page }} av {{ pages }}</span>
+      {% if page < pages %}
+      <a href="/kunskap?q={{ q|urlencode }}&source={{ source|urlencode }}&category={{ category|urlencode }}&page={{ page + 1 }}">Nästa ›</a>
+      {% endif %}
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+      <p>Inga träffar{% if q %} för "{{ q }}"{% endif %}.</p>
+      <p class="muted">Tips: testa bredare sökord eller byt källa.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

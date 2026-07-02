@@ -123,14 +123,33 @@ använd det från en Jupyter notebook — your call.
 
 ## 🌍 Datakällor
 
+### Live upphandlingar (tenders)
+
 | Källa | Typ | Status |
 |---|---|---|
-| **Mercell** | Publik JSON-API | ✅ Verifierad (525 SE records / 80s) |
-| **TED EU** | Publik JSON-API (POST) | ✅ Verifierad |
+| **Mercell** | Publik JSON-API | ✅ Live (~500 SE records) |
+| **TED EU** (Contract Notices) | Publik JSON-API (POST) | ✅ Live (~6 500 / 90d) |
+| **TED EU Awards** | Samma API, notice-subtype 16-19 | ✅ Live (~3 500 / 90d) |
+| **TED EU PIN** | Samma API, notice-subtype 4,5,25,26 | ✅ Live (~180 / 90d) |
+| **Upphandlingsmyndigheten LOV** | Publik JSON-API | ✅ Live (~429 st) |
 | Tendsign / MeForm | Inget öppet API | 🔴 Kräver Selenium (PRs välkomna!) |
-| e-Avrop | Inget öppet API | 🔴 Vanilla HTTP-scrape möjligt |
+| e-Avrop | robots.txt Disallow: / | 🔴 Respekterat — ingen scraping |
 | Kommersannons | Inget öppet API | 🔴 Vanilla HTTP-scrape möjligt |
 | Clira / Esource | Sanctum-skyddat | 🔴 Kräver konto/headless browser |
+
+### Kunskapsbas (knowledge)
+
+Separata från upphandlingar — referensmaterial från Upphandlingsmyndigheten.
+
+| Källa | Vad | Status |
+|---|---|---|
+| **Hållbarhetskriterier** | Miljökrav per bransch — IT, transport, livsmedel etc. | ✅ Live (~743 st) |
+| **Frågeportalen** | Juridisk Q&A om LOU, LOV, tröskelvärden etc. | ✅ Live (~150 unika) |
+
+Kunskapsbasen exponeras via `/kunskap` (HTML) + `/api/knowledge` (JSON)
++ MCP-tools `search_knowledge` / `get_knowledge`. Sökbart via webben och
+direkt från AI-agenter. Användbart för att svara på frågor som "vilka
+miljökrav gäller typiskt vid IT-upphandling?" eller "vad är LOU?".
 
 **Mercell ensamt täcker 65–70% av svensk upphandlingsvolym** (vi verifierade
 det genom att jämföra deras `sourceId`-lista med kända aggregatorers

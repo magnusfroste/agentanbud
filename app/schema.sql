@@ -37,3 +37,26 @@ CREATE TABLE IF NOT EXISTS sync_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_synclog_source_time ON sync_log(source, run_at DESC);
+
+-- Knowledge base — sustainability criteria + Q&A from Upphandlingsmyndigheten.
+-- Separate from tenders: these are reference material, not active procurements.
+-- Same shape: (source_system, source_id) for upsert deduplication.
+CREATE TABLE IF NOT EXISTS knowledge (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_system TEXT NOT NULL,           -- 'criteria' | 'questions'
+    source_id TEXT NOT NULL,
+    url TEXT,
+    title TEXT,
+    category TEXT,                          -- primary category (from breadcrumb level 3 or first tag)
+    subcategory TEXT,                       -- secondary
+    tags TEXT,                              -- JSON list of all categories / tags
+    excerpt TEXT,                            -- short summary / question text
+    body TEXT,                              -- full text if available (currently same as excerpt)
+    raw_json TEXT,
+    fetched_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(source_system, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_source ON knowledge(source_system);
+CREATE INDEX IF NOT EXISTS idx_knowledge_category ON knowledge(category);
+CREATE INDEX IF NOT EXISTS idx_knowledge_subcategory ON knowledge(subcategory);
