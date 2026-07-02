@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,9 +14,27 @@ LOG = logging.getLogger(__name__)
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 
+def resolve_db_path(requested: str | Path) -> Path:
+    """Return the actual DB path to use.
+
+    Migration-friendly: if the configured file does not exist but a
+    legacy file (opentender.db) is present in the same directory, use
+    that instead. This preserves existing data across renames.
+    """
+    p = Path(requested)
+    if p.exists():
+        return p
+    # Fallback: look for a legacy file in the same directory
+    legacy = p.parent / "opentender.db"
+    if legacy.exists():
+        LOG.info("DB %s missing, using legacy %s", p, legacy)
+        return legacy
+    return p
+
+
 def connect(db_path: str | Path) -> sqlite3.Connection:
     """Open a connection with Row factory + WAL mode for safe concurrent reads."""
-    p = Path(db_path)
+    p = resolve_db_path(db_path)
     p.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(p))
     conn.row_factory = sqlite3.Row
