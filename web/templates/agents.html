@@ -18,7 +18,7 @@
     </div>
     <div class="path-badge">Snabbast</div>
     <h3>1. Agenter</h3>
-    <p>OpenClaw, Hermes Agent, ChatGPT, Claude.ai — klistra in en färdig prompt så vet assistenten allt.</p>
+    <p>OpenClaw, Hermes Agent, Odysseus — klistra in en färdig prompt så vet din agent allt.</p>
   </a>
 
   <a href="#mcp" class="path-card">
@@ -30,8 +30,8 @@
       </svg>
     </div>
     <div class="path-badge">Mest kraft</div>
-    <h3>2. MCP — för utvecklarverktyg</h3>
-    <p>Claude Code, Cursor, Kilo, Cline — anslut med URL, verktygen listas automatiskt. Inga API-nycklar.</p>
+    <h3>2. MCP — för agentverktyg</h3>
+    <p>Claude Cowork, Claude Code, Kilo Code, VS Code, Cursor — anslut med URL, verktygen listas automatiskt. Inga API-nycklar.</p>
   </a>
 
   <a href="#rest" class="path-card">
@@ -41,7 +41,7 @@
         <polyline points="8 6 2 12 8 18"/>
       </svg>
     </div>
-    <h3>3. API</h3>
+    <h3>3. API — för utvecklare</h3>
     <p>REST — bygg eget system eller script mot öppna endpoints.</p>
   </a>
 </div>
@@ -60,6 +60,67 @@
   Vill du bara söka manuellt? <a href="/browse">Öppna webbläsaren</a>.
 </p>
 
+<!-- PROMPT SECTION -->
+<section class="agent-section secondary" id="prompt">
+  <div class="agent-section-header">
+    <div class="agent-section-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+    </div>
+    <div>
+      <h2>Prompt — för OpenClaw, Hermes och Odysseus</h2>
+      <p class="muted" style="margin: 0.25rem 0 0 0;">Klistra in detta i din agent så kan den söka upphandlingar direkt via REST API.</p>
+    </div>
+  </div>
+
+  <p>Kopiera hela texten nedan och klistra in som första meddelande — agenten får då full kontext om Agentanbud, API-endpoints och hur den söker. Fungerar i alla agenter som kan surfa eller anropa API:er.</p>
+
+  <div class="prompt-copy-wrapper">
+    <button class="btn accent small prompt-copy-btn" onclick="copyPrompt()">📋 Kopiera prompt</button>
+    <pre id="prompt-text" class="prompt-block"><code>Du har tillgång till Agentanbud — en öppen databas för svenska offentliga upphandlingar.
+
+API: Base URL är https://www.agentanbud.se
+Inga API-nycklar behövs. Alla läs-endpoints är öppna.
+
+## Endpoints
+
+GET /api/tenders?q={nyckelord}&amp;source={ted|mercell|ted_awards|ted_pin}&amp;authority={namn}&amp;cpv={kod}&amp;page={n}
+  Sök upphandlingar. Paginerat med 25 per sida.
+  Parametrar är valfria — bara q ger fulltextsökning.
+  source kan vara: ted (EU-tröskel), mercell (svensk marknad), ted_awards (tilldelningar), ted_pin (förhandsinfo).
+
+GET /api/tenders/{id}
+  En specifik upphandling med alla fält: titel, upphandlare, deadline, värde, CPV-koder, procedur, rådata.
+
+GET /api/stats
+  Översikt: antal per källa, topp-upphandlare, senaste synk.
+  Datan synkas automatiskt varje dag — du behöver aldrig trigga något.
+
+## Tips
+
+- CPV-kod "72" = IT, "45" = bygg, "50" = reparation, "79" = juridik, "85" = hälsovård.
+- Söker du deadline snart? Sortera med sort=deadline i q-parametern.
+- PIN (ted_pin) = upphandlingar som planeras, innan formell annons.
+- Awards (ted_awards) = avslutade upphandlingar med vinnare och pris.
+- Alla datum är ISO 8601 (t.ex. 2026-09-18+02:00).
+
+## Exempel
+
+"Hitta IT-upphandlingar i Stockholm med deadline inom 30 dagar"
+→ GET /api/tenders?q=IT&amp;source=mercell
+  Filtrera svaret på deadline &gt; idag och &lt; idag+30d.
+
+"Vad har Trafikverket öppet just nu?"
+→ GET /api/tenders?authority=Trafikverket
+
+"Visa de 5 senaste tilldelningarna"
+→ GET /api/tenders?source=ted_awards&amp;page=1
+
+Börja alltid med att hämta /api/stats för aktuell översikt.</code></pre>
+  </div>
+</section>
+
 <!-- MCP SECTION -->
 <section class="agent-section" id="mcp">
   <div class="agent-section-header">
@@ -71,8 +132,8 @@
       </svg>
     </div>
     <div>
-      <h2>MCP — för AI-agenter</h2>
-      <p class="muted" style="margin: 0.25rem 0 0 0;">Låt din AI-assistent söka och läsa upphandlingar åt dig — utan att du öppnar webbläsaren.</p>
+      <h2>MCP — för agentverktyg</h2>
+      <p class="muted" style="margin: 0.25rem 0 0 0;">Claude Cowork, Claude Code, Kilo Code, VS Code, Cursor, Cline — verktygen listas automatiskt när du anslutit.</p>
     </div>
   </div>
 
@@ -82,10 +143,11 @@
 
     <div class="code-tabs">
       <button class="code-tab active" data-tab="remote">Remote (URL)</button>
-      <button class="code-tab" data-tab="claude">Claude Code (lokal)</button>
+      <button class="code-tab" data-tab="cowork">Claude Cowork</button>
+      <button class="code-tab" data-tab="claude">Claude Code</button>
       <button class="code-tab" data-tab="kilo">Kilo Code</button>
       <button class="code-tab" data-tab="cline">Cline</button>
-      <button class="code-tab" data-tab="docker">Docker</button>
+      <button class="code-tab" data-tab="docker">Docker (lokal)</button>
     </div>
 
     <div class="code-panel">
@@ -99,53 +161,43 @@
     }
   }
 }</code></pre>
-        <p class="muted">Klienter med stöd: Claude Code, Cursor, Windsurf, framtida MCP-klienter.</p>
+        <p class="muted">Klienter med stöd: Claude Cowork, Claude Code, Cursor, VS Code, Windsurf och andra MCP-klienter.</p>
+      </div>
+      <div class="code-content hidden" id="tab-cowork">
+        <pre><code>// Claude Cowork (skrivbordsappen)
+// Inställningar → Connectors → Add custom connector
+Namn: agentanbud
+URL:  https://www.agentanbud.se/mcp</code></pre>
+        <p class="muted">Verktygen dyker upp automatiskt — be sedan Claude att "hitta upphandlingar som matchar vår profil".</p>
       </div>
       <div class="code-content hidden" id="tab-claude">
-        <pre><code>{
-  "mcpServers": {
-    "agentanbud": {
-      "command": "python",
-      "args": ["-m", "mcp_server"],
-      "cwd": "/path/to/agentanbud",
-      "env": {
-        "DB_PATH": "/data/application.db"
-      }
-    }
-  }
-}</code></pre>
+        <pre><code># Ett kommando i terminalen:
+claude mcp add --transport http agentanbud https://www.agentanbud.se/mcp</code></pre>
+        <p class="muted">Verifiera med <code>/mcp</code> inne i Claude Code — verktygen listas automatiskt.</p>
       </div>
       <div class="code-content hidden" id="tab-kilo">
         <pre><code>// Kilo Code → Inställningar → MCP Servers → Add
-Type: stdio
-Command: python -m mcp_server
-Working directory: /path/to/agentanbud
-Environment: DB_PATH=/data/application.db</code></pre>
+Type: streamable-http
+URL:  https://www.agentanbud.se/mcp</code></pre>
       </div>
       <div class="code-content hidden" id="tab-cline">
-        <pre><code>// Cline → Settings → MCP Servers
+        <pre><code>// Cline → Settings → MCP Servers → Remote Servers
 {
-  "agentanbud": {
-    "command": "python",
-    "args": ["-m", "mcp_server"],
-    "cwd": "/path/to/agentanbud"
+  "mcpServers": {
+    "agentanbud": {
+      "url": "https://www.agentanbud.se/mcp",
+      "type": "streamableHttp"
+    }
   }
 }</code></pre>
       </div>
       <div class="code-content hidden" id="tab-docker">
-        <pre><code>{
-  "mcpServers": {
-    "agentanbud": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "-v", "/path/to/data:/data",
-        "ghcr.io/magnusfroste/agentanbud:latest",
-        "python", "-m", "mcp_server"
-      ]
-    }
-  }
-}</code></pre>
+        <pre><code># Kör hela plattformen lokalt med egen databas:
+git clone https://github.com/magnusfroste/agentanbud
+cd agentanbud
+docker compose up -d
+# MCP (stdio) mot din lokala databas:
+docker compose exec app python -m mcp_server</code></pre>
       </div>
     </div>
   </div>
@@ -251,67 +303,6 @@ Environment: DB_PATH=/data/application.db</code></pre>
   <p class="muted" style="margin-top: 1rem;">
     Full OpenAPI-spec: <a href="/openapi.json">/openapi.json</a>
   </p>
-</section>
-
-<!-- PROMPT SECTION -->
-<section class="agent-section secondary" id="prompt">
-  <div class="agent-section-header">
-    <div class="agent-section-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-      </svg>
-    </div>
-    <div>
-      <h2>Prompt — för Hermes, ChatGPT, Claude</h2>
-      <p class="muted" style="margin: 0.25rem 0 0 0;">Klistra in detta i din AI-assistent så kan den söka upphandlingar direkt via REST API.</p>
-    </div>
-  </div>
-
-  <p>Kopiera hela texten nedan och klistra in som första meddelande — agenten får då full kontext om Agentanbud, API-endpoints och hur den söker.</p>
-
-  <div class="prompt-copy-wrapper">
-    <button class="btn accent small prompt-copy-btn" onclick="copyPrompt()">📋 Kopiera prompt</button>
-    <pre id="prompt-text" class="prompt-block"><code>Du har tillgång till Agentanbud — en öppen databas för svenska offentliga upphandlingar.
-
-API: Base URL är https://www.agentanbud.se
-Inga API-nycklar behövs. Alla läs-endpoints är öppna.
-
-## Endpoints
-
-GET /api/tenders?q={nyckelord}&amp;source={ted|mercell|ted_awards|ted_pin}&amp;authority={namn}&amp;cpv={kod}&amp;page={n}
-  Sök upphandlingar. Paginerat med 25 per sida.
-  Parametrar är valfria — bara q ger fulltextsökning.
-  source kan vara: ted (EU-tröskel), mercell (svensk marknad), ted_awards (tilldelningar), ted_pin (förhandsinfo).
-
-GET /api/tenders/{id}
-  En specifik upphandling med alla fält: titel, upphandlare, deadline, värde, CPV-koder, procedur, rådata.
-
-GET /api/stats
-  Översikt: antal per källa, topp-upphandlare, senaste synk.
-  Datan synkas automatiskt varje dag — du behöver aldrig trigga något.
-
-## Tips
-
-- CPV-kod "72" = IT, "45" = bygg, "50" = reparation, "79" = juridik, "85" = hälsovård.
-- Söker du deadline snart? Sortera med sort=deadline i q-parametern.
-- PIN (ted_pin) = upphandlingar som planeras, innan formell annons.
-- Awards (ted_awards) = avslutade upphandlingar med vinnare och pris.
-- Alla datum är ISO 8601 (t.ex. 2026-09-18+02:00).
-
-## Exempel
-
-"Hitta IT-upphandlingar i Stockholm med deadline inom 30 dagar"
-→ GET /api/tenders?q=IT&amp;source=mercell
-  Filtrera svaret på deadline &gt; idag och &lt; idag+30d.
-
-"Vad har Trafikverket öppet just nu?"
-→ GET /api/tenders?authority=Trafikverket
-
-"Visa de 5 senaste tilldelningarna"
-→ GET /api/tenders?source=ted_awards&amp;page=1
-
-Börja alltid med att hämta /api/stats för aktuell översikt.</code></pre>
-  </div>
 </section>
 
 <script>
