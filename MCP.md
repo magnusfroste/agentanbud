@@ -7,11 +7,18 @@ Agentanbud exponerar sina data via [Model Context Protocol](https://modelcontext
 | Tool | Beskrivning |
 |---|---|
 | `search_tenders` | Sök upphandlingar (fritext, källa, upphandlare, CPV, öppen/stängd) |
-| `get_tender` | Hämta en specifik upphandling (full beskrivning) |
+| `get_tender` | Hämta en specifik upphandling (full beskrivning + länk till originalannons) |
+| `match_profile` | Matcha upphandlingar mot en profil — nyckelord, CPV-prefix, regioner |
+| `get_authority` | Alla upphandlingar från en organisation, t.ex. Trafikverket |
 | `get_stats` | Databasöversikt + senaste sync |
 | `list_providers` | Datakällor + om ansökan kräver konto |
 | `list_regions` | Län med upphandlingar |
-| `sync_now` | Trigga scraping i bakgrunden |
+| `list_cpv_top` | Vanligaste CPV-kategorierna i databasen |
+| `search_knowledge` | Sök i kunskapsbanken (hållbarhetskriterier + Q&A) |
+| `get_knowledge` | Hämta ett kunskapsobjekt i detalj |
+
+Den publika MCP-endpointen är **read-only** — skriv-/adminåtgärder ligger bakom
+nyckel i REST-API:t. (Stdio-servern för lokal körning har även `sync_now`.)
 
 ---
 
@@ -61,12 +68,21 @@ search_tenders(authority="Uppsala")
 get_tender(id=142)
 ```
 
-### "Uppdatera datat nu"
+### "Bevaka upphandlingar som matchar vår profil"
 
 ```python
-sync_now()
-# Vänta 60-90 sekunder...
-get_stats()                           # verifiera nya counts
+match_profile(
+    keywords=["bredband", "IoT", "fiber"],
+    cpv_prefixes=["32", "72"],
+    regions=["Stockholms län"]
+)
+# Vid träff: get_tender(id=...) → följ länken → hämta underlag → skriv anbudsutkast
+```
+
+### "Vad har Trafikverket öppet just nu?"
+
+```python
+get_authority(name="Trafikverket")
 ```
 
 ### "Vilka organisationer har flest upphandlingar?"
@@ -91,7 +107,10 @@ Agentanbud speglar **publik data** (titlar, beskrivningar, deadlines, CPV-koder)
 | Kommersannons | 🔴 inte i MVP | ❌ konto krävs |
 | Clira (Esource) | 🔴 inte i MVP | ❌ betal-SaaS, konto krävs |
 
-**Dokument och anbudsformulär** (PDF:er, kravspecifikationer) finns hos plattformarna — vi speglar dem inte.
+**Dokument och anbudsformulär** (PDF:er, kravspecifikationer) finns hos plattformarna — vi speglar dem inte. Så här hämtar en agent dem:
+
+- **TED**: öppna `tender_url` — helt publikt. Upphandlingsdokumenten ligger hos upphandlarens plattform; leta efter *"Address of the procurement documents"* i annonsen och följ den länken.
+- **Mercell**: `tender_url` visar annonsen publikt. Bilagor och anbudsinlämning kräver inloggat Mercell-konto — har din användare ett: logga in, öppna länken och hämta bilagorna under **Documents**.
 
 ---
 
@@ -99,7 +118,7 @@ Agentanbud speglar **publik data** (titlar, beskrivningar, deadlines, CPV-koder)
 
 ### Varför dispatcher-pattern (FlowWink-stil)?
 
-FlowWink har 200+ skills och använder två dispatcher-tools (`search_skills` + `execute_skill`) för att inte slösa context-fönstret på 200 tool-definitioner. Vi har bara **6 verktyg, alla relaterade till samma domän** så vi registrerar dem rakt — enklare för LLM:en att lära sig.
+FlowWink har 200+ skills och använder två dispatcher-tools (`search_skills` + `execute_skill`) för att inte slösa context-fönstret på 200 tool-definitioner. Vi har bara **10 verktyg, alla relaterade till samma domän** så vi registrerar dem rakt — enklare för LLM:en att lära sig.
 
 ### Varför stdio-transport?
 
@@ -126,23 +145,32 @@ När vi behöver fjärråtkomst (t.ex. för hostad version) kan vi lägga till S
 
 ### Alt 1: Remote (Streamable HTTP) — inget att installera
 
-Den publika servern `opentender.liteit.se` exponerar MCP via HTTP. Bara
-att peka klienten på URL:en, ingen lokal kod behövs.
+Den publika servern exponerar MCP på `https://www.agentanbud.se/mcp`.
+Bara att peka klienten på URL:en, ingen lokal kod behövs.
+
+**Claude Code** (ett kommando):
+
+```bash
+claude mcp add --transport http agentanbud https://www.agentanbud.se/mcp
+```
+
+**Claude Cowork**: Inställningar → Connectors → Add custom connector →
+URL `https://www.agentanbud.se/mcp`.
+
+**Övriga klienter** (Cursor, Windsurf, Kilo Code, Cline m.fl.):
 
 ```json
 {
   "mcpServers": {
     "agentanbud": {
-      "url": "https://opentender.liteit.se/mcp",
+      "url": "https://www.agentanbud.se/mcp",
       "transport": "streamable-http"
     }
   }
 }
 ```
 
-Klienter som stödjer: **Claude Code**, **Cursor**, **Windsurf**, alla
-framtida MCP-klienter med HTTP-stöd. Klienten listar tools automatiskt
-vid connect.
+Klienten listar tools automatiskt vid connect.
 
 ### Alt 2: Lokal (stdio) — för utvecklare
 
@@ -181,22 +209,24 @@ npx @modelcontextprotocol/inspector python -m mcp_server
 
 ## Säkerhet
 
-MCP-servern är **read-only** mot databasen. Den kan:
-- ✅ Söka och läsa upphandlingar
+Den publika MCP-endpointen (`/mcp`) är **read-only**. Den kan:
+- ✅ Söka och läsa upphandlingar och kunskapsbank
 - ✅ Lista providers/regions/stats
-- ✅ Trigga scraping (`sync_now`)
 
 Den kan **INTE**:
-- ❌ Modifiera databasen direkt
-- ❌ Läsa filer utanför /data
-- ❌ Köra godtyckliga shell-kommandon (bara `scraper.orchestrator`)
+- ❌ Modifiera databasen
+- ❌ Trigga scraping — synk sker automatiskt dagligen; manuella
+  skrivåtgärder ligger bakom `X-Admin-Key` i REST-API:t
+- ❌ Köra shell-kommandon
+
+Stdio-servern (lokal körning mot egen databas) har även `sync_now`,
+eftersom den som kör den redan har lokal åtkomst.
 
 ## Bidra
 
-Vi vill ha fler tools! Speciellt:
-- `match_keywords(profile)` — hitta upphandlingar som matchar en användares profil
-- `list_cpv_top(n)` — top CPV-kategorier i databasen
-- `get_authority(name)` — alla upphandlingar från en specifik organisation
+Vi vill ha fler tools! Idéer:
 - `get_stats_by_cpv(prefix)` — statistik uppdelat per CPV-grupp
+- `similar_tenders(id)` — hitta liknande upphandlingar (samma CPV/upphandlare)
+- `deadline_calendar(days)` — kommande deadlines som kalenderöversikt
 
 Öppna en PR.
