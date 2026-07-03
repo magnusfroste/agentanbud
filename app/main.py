@@ -455,13 +455,27 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 d["cpv_codes_list"] = []
             # Days until deadline
             d["days_until"] = _parse_days_until(d.get("deadline"), datetime.now(timezone.utc))
-            # Pretty raw_json
+            # Pretty raw_json — raw may be a JSON string OR already-parsed dict/list
+            # (depends on driver). Handle both. Fall back to raw on any error.
             raw = d.get("raw_json", "")
             try:
-                d["raw_json_pretty"] = json.dumps(json.loads(raw), indent=2, ensure_ascii=False) if raw else ""
+                if isinstance(raw, (dict, list)):
+                    d["raw_json_pretty"] = json.dumps(raw, indent=2, ensure_ascii=False)
+                elif raw:
+                    d["raw_json_pretty"] = json.dumps(json.loads(raw), indent=2, ensure_ascii=False)
+                else:
+                    d["raw_json_pretty"] = ""
             except Exception:
-                d["raw_json_pretty"] = raw or ""
+                d["raw_json_pretty"] = str(raw) if raw else ""
             return HTMLResponse(render("detail.html", t=d))
+        except HTTPException:
+            raise
+        except Exception as exc:
+            LOG.exception("tender_detail crashed for id=%s", tid)
+            return HTMLResponse(
+                f"<h1>Internal Server Error</h1><p>Kunde inte visa tender #{tid}.</p><pre>{type(exc).__name__}: {exc}</pre>",
+                status_code=500,
+            )
         finally:
             conn.close()
 
