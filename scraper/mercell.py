@@ -42,15 +42,66 @@ def _clean_description(raw: Optional[str]) -> str:
     return html.unescape(raw).replace("\r\n", "\n").replace("\r", "\n").strip()
 
 
+def _mercell_slug(title: str) -> str:
+    """Build a Mercell-style URL slug from a title.
+
+    Mercell slugs are lowercase ASCII with - separators and Swedish
+    characters folded (a, a, o, etc). This is best-effort cosmetic —
+    Mercell ignores the slug in routing, it's purely for SEO/share-link
+    readability.
+    """
+    if not title:
+        return ""
+    s = title.lower()
+    # Fold Swedish/diacritics to ASCII
+    s = (s.replace("å", "a").replace("ä", "a").replace("ö", "o")
+           .replace("é", "e").replace("è", "e").replace("ü", "u")
+           .replace("á", "a").replace("à", "a").replace("í", "i"))
+    import re
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    s = s.strip("-")
+    return s
+
+
+def _mercell_url(rec: dict) -> str:
+    """Build the best public Mercell URL for one tender.
+
+    Mercell records have multiple IDs:
+      - id: internal search index id (can be negative, e.g. "-1204697553")
+      - repsNoticeId: the public REPS number (used in permalinks)
+      - sourceNoticeId: the buyer's local notice id
+
+    The user-facing permalink uses repsNoticeId + a slugified title
+    (e.g. /tender/1841523165/plattformsleverantor-for-bredbant-tv-och-iot).
+    Slug is cosmetic — Mercell resolves by ID and shows the right page
+    regardless. Falls back to /sv-SE/m/tender/{id} for older records
+    that have no repsNoticeId.
+    """
+    public_id = rec.get("repsNoticeId") or rec.get("id")
+    if not public_id:
+        return ""
+    slug = _mercell_slug(rec.get("title", ""))
+    if slug and rec.get("repsNoticeId"):
+        return f"https://app.mercell.com/tender/{public_id}/{slug}"
+    # Fallback for old records (no repsNoticeId) — keep the /sv-SE/m/ form
+    # since /tender/{id} without slug might 404
+    return f"https://app.mercell.com/sv-SE/m/tender/{public_id}"
+
+
 def _map_record(rec: dict) -> dict:
-    """Translate one Mercell record to a `tenders` row dict."""
+    """Translate one Mercell record to a `tenders` row dict.
+
+    NOTE: We keep the internal `id` (which can be negative) as source_id
+    so the UNIQUE(source_system, source_id) constraint doesn't double-count
+    records when Mercell re-indexes. The public URL uses repsNoticeId instead.
+    """
     cpv = rec.get("cpvCodes") or []
     if not isinstance(cpv, list):
         cpv = [str(cpv)]
     return {
         "source_system": "mercell",
         "source_id": str(rec.get("id", "")),
-        "tender_url": f"https://app.mercell.com/sv-SE/m/tender/{rec.get('id','')}",
+        "tender_url": _mercell_url(rec),
         "title": (rec.get("title") or "").strip(),
         "authority": (rec.get("authorityTown") or "").strip(),
         "cpv_codes": json.dumps(cpv, ensure_ascii=False),
