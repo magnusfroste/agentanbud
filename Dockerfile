@@ -13,6 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ /app/app/
 COPY scraper/ /app/scraper/
 COPY web/ /app/web/
+# mcp_http.py and mcp_server.py live at repo root
+COPY mcp_http.py /app/
+COPY mcp_server.py /app/
 
 # Cron entry — runs the orchestrator once daily.
 # Time is interpreted in the container's local timezone.

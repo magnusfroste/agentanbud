@@ -11,6 +11,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+# Set up logging early — used by the mcp_http import try/except below
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+LOG = logging.getLogger(__name__)
+
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,8 +31,6 @@ try:
 except ImportError:
     MCP_HTTP_AVAILABLE = False
     LOG.info("mcp_http not importable, /mcp endpoint disabled")
-
-LOG = logging.getLogger(__name__)
 
 DB_PATH = os.environ.get("DB_PATH", "/data/application.db")
 TEMPLATE_DIR = Path(__file__).parent.parent / "web" / "templates"
