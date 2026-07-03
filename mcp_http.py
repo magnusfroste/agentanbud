@@ -117,7 +117,7 @@ def _tool_list() -> list[dict]:
         },
         {
             "name": "get_tender",
-            "description": "Get full details of one tender by id, including description, CPV codes, and source URL.",
+            "description": "Get full details of one tender by id, including description, CPV codes, and the link to the original notice. To fetch documents/attachments, open tender_url: TED notices are fully public (procurement documents linked inside the notice); Mercell shows the notice publicly but downloading attachments requires a logged-in Mercell account.",
             "inputSchema": {
                 "type": "object",
                 "properties": {"id": {"type": "integer", "description": "Tender id from search_tenders."}},

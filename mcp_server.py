@@ -140,7 +140,6 @@ def _format_tender(t: dict) -> str:
     """Format a tender as readable markdown for the LLM."""
     src = t.get("source_system", "")
     provider = PROVIDERS.get(src, {})
-    p_auth = provider.get("auth", "?")
 
     lines = [f"**{t.get('title') or '(utan titel)'}**"]
     lines.append(f"Upphandlare: {t.get('authority') or '—'} | Plats: {t.get('region') or '—'}")
@@ -171,10 +170,22 @@ def _format_tender(t: dict) -> str:
 
     lines.append("")
     lines.append(f"🔗 Länk: {t.get('tender_url') or t.get('source_url') or '—'}")
-    if p_auth == "required":
-        lines.append("⚠️  Att ansöka kräver konto hos upphandlarens plattform.")
-    else:
-        lines.append("✅ TED EU = helt publikt, inget konto krävs.")
+    # Per-source guidance so an agent knows what it can do at the link
+    if src == "mercell":
+        lines.append(
+            "ℹ️  Annonsen på länken är publik. Bilagor/upphandlingsdokument och "
+            "anbudsinlämning kräver inloggat Mercell-konto — om din användare har "
+            "ett: logga in, öppna länken och hämta bilagorna under 'Documents'."
+        )
+    elif src in ("ted", "ted_awards", "ted_pin"):
+        lines.append(
+            "✅ TED är helt publikt — hela annonsen syns utan konto. "
+            "Upphandlingsdokumenten ligger hos upphandlarens plattform: leta efter "
+            "'Address of the procurement documents' i annonsen och följ den länken "
+            "(nedladdning kan kräva konto där, t.ex. TendSign eller Mercell)."
+        )
+    elif src == "lov":
+        lines.append("ℹ️  LOV: löpande ansökan utan deadline. Ansökan görs hos kommunen via länken.")
 
     if t.get("description"):
         desc = t["description"][:400]
@@ -234,7 +245,11 @@ async def list_tools() -> list[types.Tool]:
             name="get_tender",
             description=(
                 "Get full details for one tender by its internal id (from search_tenders). "
-                "Includes complete description and notes whether applying requires an account."
+                "Includes complete description, deadline and the link to the original notice. "
+                "To fetch documents/attachments: open tender_url. TED notices are fully "
+                "public (procurement documents linked inside the notice); Mercell shows "
+                "the notice publicly but downloading attachments requires a logged-in "
+                "Mercell account."
             ),
             inputSchema={
                 "type": "object",
