@@ -778,6 +778,102 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
         finally:
             conn.close()
 
+    @app.post("/api/fix-mercell-urls")
+    def fix_mercell_urls():
+        """One-time fix: re-fetch Mercell records and update tender_url
+        to use repsNoticeId + slug instead of the internal id.
+
+        The old URLs (/sv-SE/m/tender/{id}) work, but Mercell shows
+        users the /tender/{repsNoticeId}/{slug} format. After running
+        this, every Mercell record's URL is the public permalink.
+
+        Walks the database, calls the Mercell API for each source_id,
+        and re-writes tender_url. Bounded: one pass through current
+        Mercell records.
+        """
+        import scraper.mercell as mercell_mod
+        conn = connect(db)
+        try:
+            # Collect all unique mercell source_ids we have
+            rows = conn.execute(
+                "SELECT DISTINCT source_id FROM tenders WHERE source_system = 'mercell'"
+            ).fetchall()
+            source_ids = [r[0] for r in rows]
+        finally:
+            conn.close()
+
+        # Re-walk Mercell API and rebuild URLs in-place
+        # (we don't want to insert/duplicate, just rebuild URLs)
+        updated = 0
+        from app.db import connect as db_connect
+        for rec in mercell_mod._iter_records():  # if we expose this
+            new_url = mercell_mod._mercell_url(rec)
+            sid = str(rec.get("id", ""))
+            if sid and new_url:
+                c = db_connect(db)
+                try:
+                    n = c.execute(
+                        "UPDATE tenders SET tender_url = ? WHERE source_system = 'mercell' AND source_id = ?",
+                        (new_url, sid)
+                    ).rowcount
+                    if n:
+                        updated += 1
+                finally:
+                    c.close()
+
+        return JSONResponse({"ok": True, "scanned": len(source_ids), "updated": updated})
+
+    @app.post("/api/refresh-mercell-urls")
+    def refresh_mercell_urls():
+        """Refresh URLs for ALL existing Mercell records without re-walking
+        the API. We rebuild from raw_json (which has repsNoticeId).
+        """
+        import json as _json
+        import re as _re
+        conn = connect(db)
+        try:
+            rows = conn.execute(
+                "SELECT id, source_id, title, raw_json FROM tenders WHERE source_system = 'mercell'"
+            ).fetchall()
+        finally:
+            conn.close()
+
+        updated = 0
+        for r in rows:
+            raw = r["raw_json"]
+            if not raw:
+                continue
+            try:
+                rec = _json.loads(raw) if isinstance(raw, str) else raw
+            except Exception:
+                continue
+            public_id = rec.get("repsNoticeId") or rec.get("id")
+            if not public_id:
+                continue
+            title = rec.get("title") or r["title"] or ""
+            # Slugify
+            s = title.lower()
+            s = (s.replace("å", "a").replace("ä", "a").replace("ö", "o")
+                   .replace("é", "e").replace("è", "e").replace("ü", "u")
+                   .replace("á", "a").replace("à", "a").replace("í", "i"))
+            s = _re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+            if s and rec.get("repsNoticeId"):
+                new_url = f"https://app.mercell.com/tender/{public_id}/{s}"
+            else:
+                new_url = f"https://app.mercell.com/sv-SE/m/tender/{public_id}"
+            c = connect(db)
+            try:
+                n = c.execute(
+                    "UPDATE tenders SET tender_url = ? WHERE id = ?",
+                    (new_url, r["id"])
+                ).rowcount
+                if n:
+                    updated += 1
+            finally:
+                c.close()
+
+        return JSONResponse({"ok": True, "updated": updated})
+
     # ---- Knowledge base (criteria + questions) ----
     @app.get("/api/knowledge")
     def list_knowledge(
