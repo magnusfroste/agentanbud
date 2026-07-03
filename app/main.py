@@ -764,115 +764,47 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
                 status_code=500,
             )
 
-    @app.post("/api/fix-ted-urls")
-    def fix_ted_urls():
-        """One-time fix: update TED tender_url from /notice/X to /notice/X/html"""
+    @app.post("/api/repair-links")
+    def repair_links():
+        """Repair tender links (2026-07 URL audit).
+
+        1. ted / ted_awards / ted_pin: append /html — the bare
+           /en/notice/{nr} path 404s on ted.europa.eu.
+        2. mercell: delete all rows and re-sync. Old rows are keyed on
+           unstable search-index ids (duplicates after Mercell
+           re-indexes) and point at the dead /sv-SE/m/tender/ route.
+           The scraper now keys on repsNoticeId, links to /tender/{id}
+           and skips Mercell's TED mirrors.
+        """
         conn = connect(db)
         try:
-            n = conn.execute(
-                "UPDATE tenders SET tender_url = REPLACE(tender_url, '/notice/' || source_id, '/notice/' || source_id || '/html') "
-                "WHERE source_system = 'ted' AND tender_url NOT LIKE '%/html'"
+            ted_fixed = conn.execute(
+                "UPDATE tenders SET tender_url = tender_url || '/html' "
+                "WHERE source_system IN ('ted', 'ted_awards', 'ted_pin') "
+                "AND tender_url LIKE 'https://ted.europa.eu/en/notice/%' "
+                "AND tender_url NOT LIKE '%/html'"
+            ).rowcount
+            mercell_deleted = conn.execute(
+                "DELETE FROM tenders WHERE source_system = 'mercell'"
             ).rowcount
             conn.commit()
-            return JSONResponse({"ok": True, "updated": n})
         finally:
             conn.close()
 
-    @app.post("/api/fix-mercell-urls")
-    def fix_mercell_urls():
-        """One-time fix: re-fetch Mercell records and update tender_url
-        to use repsNoticeId + slug instead of the internal id.
-
-        The old URLs (/sv-SE/m/tender/{id}) work, but Mercell shows
-        users the /tender/{repsNoticeId}/{slug} format. After running
-        this, every Mercell record's URL is the public permalink.
-
-        Walks the database, calls the Mercell API for each source_id,
-        and re-writes tender_url. Bounded: one pass through current
-        Mercell records.
-        """
-        import scraper.mercell as mercell_mod
-        conn = connect(db)
-        try:
-            # Collect all unique mercell source_ids we have
-            rows = conn.execute(
-                "SELECT DISTINCT source_id FROM tenders WHERE source_system = 'mercell'"
-            ).fetchall()
-            source_ids = [r[0] for r in rows]
-        finally:
-            conn.close()
-
-        # Re-walk Mercell API and rebuild URLs in-place
-        # (we don't want to insert/duplicate, just rebuild URLs)
-        updated = 0
-        from app.db import connect as db_connect
-        for rec in mercell_mod._iter_records():  # if we expose this
-            new_url = mercell_mod._mercell_url(rec)
-            sid = str(rec.get("id", ""))
-            if sid and new_url:
-                c = db_connect(db)
-                try:
-                    n = c.execute(
-                        "UPDATE tenders SET tender_url = ? WHERE source_system = 'mercell' AND source_id = ?",
-                        (new_url, sid)
-                    ).rowcount
-                    if n:
-                        updated += 1
-                finally:
-                    c.close()
-
-        return JSONResponse({"ok": True, "scanned": len(source_ids), "updated": updated})
-
-    @app.post("/api/refresh-mercell-urls")
-    def refresh_mercell_urls():
-        """Refresh URLs for ALL existing Mercell records without re-walking
-        the API. We rebuild from raw_json (which has repsNoticeId).
-        """
-        import json as _json
-        import re as _re
-        conn = connect(db)
-        try:
-            rows = conn.execute(
-                "SELECT id, source_id, title, raw_json FROM tenders WHERE source_system = 'mercell'"
-            ).fetchall()
-        finally:
-            conn.close()
-
-        updated = 0
-        for r in rows:
-            raw = r["raw_json"]
-            if not raw:
-                continue
+        def resync():
             try:
-                rec = _json.loads(raw) if isinstance(raw, str) else raw
+                import scraper.mercell as mercell_mod
+                mercell_mod.run(db)
             except Exception:
-                continue
-            public_id = rec.get("repsNoticeId") or rec.get("id")
-            if not public_id:
-                continue
-            title = rec.get("title") or r["title"] or ""
-            # Slugify
-            s = title.lower()
-            s = (s.replace("å", "a").replace("ä", "a").replace("ö", "o")
-                   .replace("é", "e").replace("è", "e").replace("ü", "u")
-                   .replace("á", "a").replace("à", "a").replace("í", "i"))
-            s = _re.sub(r"[^a-z0-9]+", "-", s).strip("-")
-            if s and rec.get("repsNoticeId"):
-                new_url = f"https://app.mercell.com/tender/{public_id}/{s}"
-            else:
-                new_url = f"https://app.mercell.com/sv-SE/m/tender/{public_id}"
-            c = connect(db)
-            try:
-                n = c.execute(
-                    "UPDATE tenders SET tender_url = ? WHERE id = ?",
-                    (new_url, r["id"])
-                ).rowcount
-                if n:
-                    updated += 1
-            finally:
-                c.close()
+                LOG.exception("mercell resync after repair failed")
 
-        return JSONResponse({"ok": True, "updated": updated})
+        threading.Thread(target=resync, daemon=True).start()
+        return JSONResponse({
+            "ok": True,
+            "ted_urls_fixed": ted_fixed,
+            "mercell_rows_deleted": mercell_deleted,
+            "note": "mercell re-sync started — check /api/stats in ~2 min",
+        })
 
     # ---- Knowledge base (criteria + questions) ----
     @app.get("/api/knowledge")

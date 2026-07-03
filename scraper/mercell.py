@@ -9,6 +9,17 @@ Verified live: ~525 SE records / 100 pages in ~80 seconds. The filter
 syntax appears lossy (records ignore the filter and the same record
 shows up across many pages) so we dedupe at the `(source_system,
 source_id)` level via the unique index in schema.sql.
+
+ID semantics (verified 2026-07-03 against app.mercell.com):
+  - `id` is the search-index document id. The public tender page
+    resolves ONLY by this id: /tender/{id} — both positive and negative
+    ids work; repsNoticeId in the URL 404s. Mercell can re-index a
+    notice under a NEW id, so `id` is not stable over time.
+  - `repsNoticeId` is the stable notice number, present on all
+    Mercell-native records. It is the right dedupe key when present.
+  - `sourceId` == "TED" marks records Mercell mirrors from TED. We
+    ingest TED directly (scraper/ted.py), so these are duplicates and
+    are skipped. They also never carry a repsNoticeId.
 """
 from __future__ import annotations
 
@@ -64,43 +75,36 @@ def _mercell_slug(title: str) -> str:
 
 
 def _mercell_url(rec: dict) -> str:
-    """Build the best public Mercell URL for one tender.
+    """Build the public Mercell URL for one tender.
 
-    Mercell records have multiple IDs:
-      - id: internal search index id (can be negative, e.g. "-1204697553")
-      - repsNoticeId: the public REPS number (used in permalinks)
-      - sourceNoticeId: the buyer's local notice id
-
-    The user-facing permalink uses repsNoticeId + a slugified title
-    (e.g. /tender/1841523165/plattformsleverantor-for-bredbant-tv-och-iot).
-    Slug is cosmetic — Mercell resolves by ID and shows the right page
-    regardless. Falls back to /sv-SE/m/tender/{id} for older records
-    that have no repsNoticeId.
+    The page resolves by the search-index `id` (positive or negative) —
+    NOT by repsNoticeId, which 404s in the URL. The slug is cosmetic;
+    Mercell routes on the id alone. The old /sv-SE/m/tender/{id} path is
+    a dead legacy route (404s), never emit it.
     """
-    public_id = rec.get("repsNoticeId") or rec.get("id")
-    if not public_id:
+    tender_id = rec.get("id")
+    if not tender_id:
         return ""
     slug = _mercell_slug(rec.get("title", ""))
-    if slug and rec.get("repsNoticeId"):
-        return f"https://app.mercell.com/tender/{public_id}/{slug}"
-    # Fallback for old records (no repsNoticeId) — keep the /sv-SE/m/ form
-    # since /tender/{id} without slug might 404
-    return f"https://app.mercell.com/sv-SE/m/tender/{public_id}"
+    if slug:
+        return f"https://app.mercell.com/tender/{tender_id}/{slug}"
+    return f"https://app.mercell.com/tender/{tender_id}"
 
 
 def _map_record(rec: dict) -> dict:
     """Translate one Mercell record to a `tenders` row dict.
 
-    NOTE: We keep the internal `id` (which can be negative) as source_id
-    so the UNIQUE(source_system, source_id) constraint doesn't double-count
-    records when Mercell re-indexes. The public URL uses repsNoticeId instead.
+    source_id is repsNoticeId when present — the stable notice number.
+    Mercell re-indexes notices under new search ids over time, so keying
+    on `id` creates duplicate rows for the same notice. Records without
+    repsNoticeId (rare, non-TED) fall back to the search id.
     """
     cpv = rec.get("cpvCodes") or []
     if not isinstance(cpv, list):
         cpv = [str(cpv)]
     return {
         "source_system": "mercell",
-        "source_id": str(rec.get("id", "")),
+        "source_id": str(rec.get("repsNoticeId") or rec.get("id", "")),
         "tender_url": _mercell_url(rec),
         "title": (rec.get("title") or "").strip(),
         "authority": (rec.get("authorityTown") or "").strip(),
@@ -156,8 +160,30 @@ def _walk_pages(
                 # Only Swedish records
                 if rec.get("authorityCountryCode") != "SE":
                     continue
+                # Skip Mercell's TED mirrors — we ingest TED directly
+                # (scraper/ted.py), so these only create duplicates.
+                if rec.get("sourceId") == "TED":
+                    continue
                 yield rec
             time.sleep(delay_s)
+
+
+def _dedupe_stale(records: list[dict]) -> list[dict]:
+    """Drop stale index entries that lack repsNoticeId when a record
+    with repsNoticeId exists for the same (title, authority). Mercell
+    keeps old index documents around after re-indexing; the reps-less
+    copy is the stale one."""
+    def key(rec: dict) -> tuple:
+        title = (rec.get("title") or "").strip().lower()
+        auth = (rec.get("authorityTown") or "").split(",")[0].strip().lower()
+        return (title, auth)
+
+    with_reps = {key(r) for r in records if r.get("repsNoticeId")}
+    kept = [r for r in records if r.get("repsNoticeId") or key(r) not in with_reps]
+    dropped = len(records) - len(kept)
+    if dropped:
+        LOG.info("mercell: dropped %d stale reps-less duplicates", dropped)
+    return kept
 
 
 def run(db_path: str) -> int:
@@ -166,7 +192,7 @@ def run(db_path: str) -> int:
     conn = connect(db_path)
     written = 0
     try:
-        for rec in _walk_pages():
+        for rec in _dedupe_stale(list(_walk_pages())):
             try:
                 upsert_tender(conn, _map_record(rec))
                 written += 1
