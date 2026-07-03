@@ -785,8 +785,9 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
     def repair_links(request: Request):
         """Repair tender links (2026-07 URL audit).
 
-        1. ted / ted_awards / ted_pin: append /html — the bare
-           /en/notice/{nr} path 404s on ted.europa.eu.
+        1. ted / ted_awards / ted_pin: rebuild as /en/notice/-/detail/{nr}
+           — the only form that renders in a browser. Both /en/notice/{nr}
+           and /en/notice/{nr}/html bounce users to the TED homepage.
         2. mercell: delete all rows and re-sync. Old rows are keyed on
            unstable search-index ids (duplicates after Mercell
            re-indexes) and point at the dead /sv-SE/m/tender/ route.
@@ -797,10 +798,9 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
         conn = connect(db)
         try:
             ted_fixed = conn.execute(
-                "UPDATE tenders SET tender_url = tender_url || '/html' "
+                "UPDATE tenders SET tender_url = 'https://ted.europa.eu/en/notice/-/detail/' || source_id "
                 "WHERE source_system IN ('ted', 'ted_awards', 'ted_pin') "
-                "AND tender_url LIKE 'https://ted.europa.eu/en/notice/%' "
-                "AND tender_url NOT LIKE '%/html'"
+                "AND tender_url != 'https://ted.europa.eu/en/notice/-/detail/' || source_id"
             ).rowcount
             mercell_deleted = conn.execute(
                 "DELETE FROM tenders WHERE source_system = 'mercell'"

@@ -119,7 +119,7 @@ def _map_record(rec: dict) -> dict:
     return {
         "source_system": "ted_pin",
         "source_id": pub_no,
-        "tender_url": f"https://ted.europa.eu/en/notice/{pub_no}/html",
+        "tender_url": f"https://ted.europa.eu/en/notice/-/detail/{pub_no}",
         "title": title.strip(),
         "authority": _extract_swedish(rec.get("buyer-name")).strip(),
         "cpv_codes": json.dumps(_extract_list(rec.get("classification-cpv")), ensure_ascii=False),

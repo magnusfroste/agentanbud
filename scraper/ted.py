@@ -125,7 +125,10 @@ def _map_record(rec: dict) -> dict:
     return {
         "source_system": "ted",
         "source_id": pub_no,
-        "tender_url": f"https://ted.europa.eu/en/notice/{pub_no}/html",
+        # /en/notice/-/detail/{nr} is the only form that renders in a
+        # browser — both /en/notice/{nr} and /en/notice/{nr}/html bounce
+        # users to the TED homepage (the /html body is fine for bots).
+        "tender_url": f"https://ted.europa.eu/en/notice/-/detail/{pub_no}",
         "title": title.strip(),
         "authority": _extract_buyer(rec).strip(),
         "cpv_codes": json.dumps(_extract_cpv(rec), ensure_ascii=False),
