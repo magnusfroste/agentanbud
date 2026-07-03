@@ -70,18 +70,28 @@
     </div>
     <div>
       <h2>Prompt — för OpenClaw, Hermes och Odysseus</h2>
-      <p class="muted" style="margin: 0.25rem 0 0 0;">Klistra in detta i din agent så kan den söka upphandlingar direkt via REST API.</p>
+      <p class="muted" style="margin: 0.25rem 0 0 0;">Klistra in detta i din agent — den ansluter via MCP om den kan, annars via REST API.</p>
     </div>
   </div>
 
-  <p>Kopiera hela texten nedan och klistra in som första meddelande — agenten får då full kontext om Agentanbud, API-endpoints och hur den söker. Fungerar i alla agenter som kan surfa eller anropa API:er.</p>
+  <p>Kopiera hela texten nedan och klistra in som första meddelande — agenten får då full kontext om Agentanbud. Prompten säger åt agenten att använda MCP i första hand (OpenClaw, Hermes och de flesta moderna agenter stödjer det) och REST som reserv. Fungerar i allt som kan surfa eller anropa API:er.</p>
 
   <div class="prompt-copy-wrapper">
     <button class="btn accent small prompt-copy-btn" onclick="copyPrompt()">📋 Kopiera prompt</button>
     <pre id="prompt-text" class="prompt-block"><code>Du har tillgång till Agentanbud — en öppen databas för svenska offentliga upphandlingar.
+Inga API-nycklar behövs. All läsning är öppen.
 
-API: Base URL är https://www.agentanbud.se
-Inga API-nycklar behövs. Alla läs-endpoints är öppna.
+## Anslut via MCP (förstahandsval)
+
+Om du stödjer MCP: anslut till https://www.agentanbud.se/mcp
+(transport: streamable-http). Du får då 10 verktyg direkt —
+search_tenders, get_tender, match_profile, get_stats, get_authority,
+list_providers, list_regions, list_cpv_top, search_knowledge,
+get_knowledge — och kan hoppa över REST-delen nedan.
+
+## REST API (reserv, för agenter utan MCP)
+
+Base URL är https://www.agentanbud.se
 
 ## Endpoints
 
