@@ -10,13 +10,13 @@
   <meta name="keywords" content="upphandling, offentlig upphandling, Sverige, anbud, offentlig, Mercell, TED, LOU, direktupphandling, ramavtal, CPV, upphandlingsmyndigheten, fri data, öppen data" />
   <meta name="author" content="Agentanbud" />
   <meta name="robots" content="index, follow" />
-  <link rel="canonical" href="https://agantanbud.se/" />
+  <link rel="canonical" href="https://www.agentanbud.se/" />
 
   <!-- OpenGraph -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Agentanbud — Svenska upphandlingar, öppna för alla" />
   <meta property="og:description" content="Fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och bygg ovanpå med öppet API och MCP. Infrastruktur för demokrati." />
-  <meta property="og:url" content="https://agantanbud.se/" />
+  <meta property="og:url" content="https://www.agentanbud.se/" />
   <meta property="og:site_name" content="Agentanbud" />
   <meta property="og:locale" content="sv_SE" />
 
@@ -32,7 +32,7 @@
     "@type": "WebApplication",
     "name": "Agentanbud",
     "description": "Fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och bygg ovanpå med öppet API och MCP.",
-    "url": "https://agantanbud.se/",
+    "url": "https://www.agentanbud.se/",
     "applicationCategory": "GovernmentApplication",
     "operatingSystem": "Web",
     "offers": {"@type": "Offer", "price": "0", "priceCurrency": "SEK"},
@@ -64,12 +64,12 @@
       {
         "@type": "Question",
         "name": "Kan AI-agenter använda Agentanbud?",
-        "acceptedAnswer": {"@type": "Answer", "text": "Ja. Agentanbud har en MCP-server med 9 verktyg (search_tenders, get_tender, get_stats, list_providers, list_regions, sync_now, list_cpv_top, get_authority, match_profile) som låter Claude Code, Kilo Code och Cline söka och läsa upphandlingar direkt."}
+        "acceptedAnswer": {"@type": "Answer", "text": "Ja. Agentanbud har en MCP-server med 10 läsverktyg (search_tenders, get_tender, get_stats, list_providers, list_regions, list_cpv_top, get_authority, match_profile, search_knowledge, get_knowledge) som låter Claude Code, Cursor och andra MCP-klienter söka och läsa upphandlingar direkt via https://www.agentanbud.se/mcp."}
       },
       {
         "@type": "Question",
         "name": "Hur ofta uppdateras datan?",
-        "acceptedAnswer": {"@type": "Answer", "text": "Cron körs dagligen kl 06:00 UTC som default. Du kan också trigga en synk manuellt via dashboarden eller POST /api/sync."}
+        "acceptedAnswer": {"@type": "Answer", "text": "Datan synkas automatiskt varje dag kl 06:00 UTC från alla källor."}
       }
     ]
   }

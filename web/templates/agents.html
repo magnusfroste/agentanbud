@@ -46,6 +46,16 @@
   </a>
 </div>
 
+<!-- TIP CALLOUT -->
+<div class="agent-tip">
+  <div class="agent-tip-icon">💡</div>
+  <div>
+    <h3>Tips: låt en agent sköta hela bevakningen</h3>
+    <p>Låt din agent bevaka <a href="https://www.agentanbud.se">agentanbud.se</a> löpande. Bifoga alla era produktbeskrivningar till agenten — och vid match, be hen ladda ned allt underlag och skapa ett anbud. Agentisk AI är här för dig!</p>
+    <p class="muted">Läs med fördel Magnus Frostes handbok om hur AI-agenter skapar helt nya förutsättningar: <a href="https://www.clawable.org" target="_blank" rel="noopener">clawable.org ↗</a></p>
+  </div>
+</div>
+
 <p class="muted" style="text-align: center; margin-top: 1rem;">
   Vill du bara söka manuellt? <a href="/browse">Öppna webbläsaren</a>.
 </p>
@@ -84,7 +94,7 @@
         <pre><code>{
   "mcpServers": {
     "agentanbud": {
-      "url": "https://opentender.liteit.se/mcp",
+      "url": "https://www.agentanbud.se/mcp",
       "transport": "streamable-http"
     }
   }
@@ -175,10 +185,6 @@ Environment: DB_PATH=/data/application.db</code></pre>
         <div class="tool-name">get_authority</div>
         <p>Alla upphandlingar från en organisation, t.ex. Trafikverket.</p>
       </div>
-      <div class="tool-card">
-        <div class="tool-name">sync_now</div>
-        <p>Hämta ny data nu. Vänta en minut och kolla sedan statistiken.</p>
-      </div>
     </div>
   </div>
 
@@ -227,18 +233,20 @@ Environment: DB_PATH=/data/application.db</code></pre>
     <div class="api-row">
       <span class="api-method post">POST</span>
       <code>/api/sync</code>
-      <span class="muted">Trigga daglig sync (202, körs i bakgrunden)</span>
+      <span class="muted">🔑 Trigga sync — kräver admin-nyckel (X-Admin-Key)</span>
     </div>
     <div class="api-row">
       <span class="api-method post">POST</span>
       <code>/api/backfill?days=90</code>
-      <span class="muted">Hämta mer historik från TED EU</span>
+      <span class="muted">🔑 Hämta mer historik — kräver admin-nyckel (X-Admin-Key)</span>
     </div>
   </div>
 
+  <p class="muted">Alla GET-endpoints är öppna utan nyckel. Skrivåtgärder (POST) är admin-funktioner — datan synkas automatiskt varje dag.</p>
+
   <h3>Exempel</h3>
-  <pre><code>curl "https://agantanbud.se/api/tenders?q=it-konsult&source=mercell"</code></pre>
-  <pre><code>curl "https://agantanbud.se/api/tenders/42"</code></pre>
+  <pre><code>curl "https://www.agentanbud.se/api/tenders?q=it-konsult&source=mercell"</code></pre>
+  <pre><code>curl "https://www.agentanbud.se/api/tenders/42"</code></pre>
 
   <p class="muted" style="margin-top: 1rem;">
     Full OpenAPI-spec: <a href="/openapi.json">/openapi.json</a>
@@ -265,8 +273,8 @@ Environment: DB_PATH=/data/application.db</code></pre>
     <button class="btn accent small prompt-copy-btn" onclick="copyPrompt()">📋 Kopiera prompt</button>
     <pre id="prompt-text" class="prompt-block"><code>Du har tillgång till Agentanbud — en öppen databas för svenska offentliga upphandlingar.
 
-API: Base URL är https://agantanbud.se
-Inga API-nycklar behövs. Alla endpoints är öppna.
+API: Base URL är https://www.agentanbud.se
+Inga API-nycklar behövs. Alla läs-endpoints är öppna.
 
 ## Endpoints
 
@@ -280,9 +288,7 @@ GET /api/tenders/{id}
 
 GET /api/stats
   Översikt: antal per källa, topp-upphandlare, senaste synk.
-
-POST /api/sync
-  Trigga en ny sync (hämta senaste datan). Returnerar 202, körs i bakgrunden.
+  Datan synkas automatiskt varje dag — du behöver aldrig trigga något.
 
 ## Tips
 
