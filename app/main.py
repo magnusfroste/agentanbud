@@ -1,6 +1,7 @@
 """FastAPI app — multi-page dashboard + JSON API over the SQLite store."""
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import math
@@ -39,9 +40,23 @@ STATIC_DIR = Path(__file__).parent.parent / "web" / "static"
 DEFAULT_PAGE_SIZE = 25
 MAX_PAGE_SIZE = 200
 
+# Admin auth — when set, mutating endpoints require the X-Admin-Key header
+# and /api/admin/query becomes available. When unset (local dev), mutating
+# endpoints stay open and the query endpoint is disabled.
+ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "")
+ADMIN_QUERY_MAX_ROWS = 500
+
 # Sync state — single concurrent run only
 _sync_lock = threading.Lock()
 _sync_running = False
+
+
+def _require_admin(request: Request) -> None:
+    if not ADMIN_API_KEY:
+        return
+    supplied = request.headers.get("x-admin-key", "")
+    if not hmac.compare_digest(supplied, ADMIN_API_KEY):
+        raise HTTPException(status_code=401, detail="missing or invalid X-Admin-Key")
 
 
 def _num(n) -> str:
@@ -706,8 +721,9 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             conn.close()
 
     @app.post("/api/sync")
-    def trigger_sync() -> JSONResponse:
+    def trigger_sync(request: Request) -> JSONResponse:
         """Fire-and-forget: spawn the orchestrator in the background."""
+        _require_admin(request)
         global _sync_running
         if not _sync_lock.acquire(blocking=False):
             return JSONResponse(
@@ -739,10 +755,11 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
         )
 
     @app.post("/api/backfill")
-    def backfill(days: int = Query(default=90, ge=1, le=365)):
+    def backfill(request: Request, days: int = Query(default=90, ge=1, le=365)):
         """Trigger a backfill with a longer lookback for TED EU.
         Default: 90 days. Max: 365 days.
         TED has ~6500 SWE notices per 90 days."""
+        _require_admin(request)
         env = dict(os.environ)
         env["TED_LOOKBACK_DAYS"] = str(days)
         try:
@@ -765,7 +782,7 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             )
 
     @app.post("/api/repair-links")
-    def repair_links():
+    def repair_links(request: Request):
         """Repair tender links (2026-07 URL audit).
 
         1. ted / ted_awards / ted_pin: append /html — the bare
@@ -776,6 +793,7 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
            The scraper now keys on repsNoticeId, links to /tender/{id}
            and skips Mercell's TED mirrors.
         """
+        _require_admin(request)
         conn = connect(db)
         try:
             ted_fixed = conn.execute(
@@ -805,6 +823,51 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             "mercell_rows_deleted": mercell_deleted,
             "note": "mercell re-sync started — check /api/stats in ~2 min",
         })
+
+    @app.post("/api/admin/query")
+    async def admin_query(request: Request):
+        """Read-only SQL access for maintenance and diagnostics.
+
+        Requires ADMIN_API_KEY to be configured AND supplied — unlike the
+        mutating endpoints this one fails closed when no key is set.
+        SELECT/WITH single statements only; the connection is opened with
+        PRAGMA query_only so writes are rejected at the SQLite level too.
+
+        Body: {"sql": "SELECT ...", "params": [...]}
+        Returns: {"columns": [...], "rows": [[...], ...], "truncated": bool}
+        """
+        if not ADMIN_API_KEY:
+            raise HTTPException(status_code=403, detail="ADMIN_API_KEY not configured")
+        _require_admin(request)
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid JSON body")
+        sql = str(body.get("sql") or "").strip().rstrip(";").strip()
+        params = body.get("params") or []
+        if not sql:
+            raise HTTPException(status_code=400, detail="missing sql")
+        if ";" in sql:
+            raise HTTPException(status_code=400, detail="single statement only")
+        if sql.split(None, 1)[0].lower() not in ("select", "with"):
+            raise HTTPException(status_code=400, detail="SELECT/WITH statements only")
+        conn = connect(db)
+        try:
+            conn.execute("PRAGMA query_only = ON")
+            try:
+                cur = conn.execute(sql, params)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"query failed: {exc}")
+            columns = [c[0] for c in cur.description or []]
+            rows = cur.fetchmany(ADMIN_QUERY_MAX_ROWS + 1)
+            truncated = len(rows) > ADMIN_QUERY_MAX_ROWS
+            return JSONResponse({
+                "columns": columns,
+                "rows": [list(r) for r in rows[:ADMIN_QUERY_MAX_ROWS]],
+                "truncated": truncated,
+            })
+        finally:
+            conn.close()
 
     # ---- Knowledge base (criteria + questions) ----
     @app.get("/api/knowledge")

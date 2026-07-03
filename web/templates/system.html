@@ -75,13 +75,15 @@
     const result = document.getElementById('sync-result');
     result.innerHTML = `<span class="spinner"></span> ${label} startar...`;
     try {
-      const r = await fetch(url, { method: 'POST' });
+      const r = await window.adminFetch(url, { method: 'POST' });
       const data = await r.json();
       if (r.status === 202) {
         result.innerHTML = `✅ ${label} startad. Laddar om om 60s.`;
         setTimeout(() => location.reload(), 60000);
+      } else if (r.status === 401) {
+        result.innerHTML = `❌ Fel admin-nyckel`;
       } else {
-        result.innerHTML = `❌ ${data.error || 'Okänt fel'}`;
+        result.innerHTML = `❌ ${data.error || data.detail || 'Okänt fel'}`;
       }
     } catch (e) {
       result.innerHTML = `❌ ${e}`;

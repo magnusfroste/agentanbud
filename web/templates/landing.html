@@ -331,7 +331,7 @@
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Startar...';
     try {
-      const r = await fetch("/api/sync", { method: "POST" });
+      const r = await window.adminFetch("/api/sync", { method: "POST" });
       if (r.status === 202) {
         btn.textContent = "Startad — laddar om om 60s";
         setTimeout(() => location.reload(), 60000);
