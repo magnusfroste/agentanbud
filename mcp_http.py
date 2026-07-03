@@ -200,11 +200,10 @@ def _tool_list() -> list[dict]:
                 "required": ["id"]
             }
         },
-        {
-            "name": "sync_now",
-            "description": "Trigger an immediate sync of all enabled sources. Returns immediately; check get_stats after 60-90s.",
-            "inputSchema": {"type": "object", "properties": {}}
-        },
+        # NOTE: no write/management tools here by design — the public MCP
+        # endpoint is read-only. Admin actions go through the keyed REST
+        # endpoints (X-Admin-Key); the stdio server keeps sync_now since
+        # running it already requires local/container access.
     ]
 
 
