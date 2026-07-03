@@ -235,7 +235,7 @@ async def mcp_get(request: Request):
     return JSONResponse({
         "name": "agentanbud",
         "version": "0.2.0",
-        "description": "Swedish public procurement — open data for AI agents. REST + MCP at https://opentender.liteit.se",
+        "description": "Swedish public procurement — open data for AI agents. REST + MCP at https://www.agentanbud.se",
         "transport": "streamable-http",
         "endpoint": "/mcp",
         "mcp_version": "2024-11-05",
@@ -244,7 +244,7 @@ async def mcp_get(request: Request):
         "client_config": {
             "mcpServers": {
                 "agentanbud": {
-                    "url": "https://opentender.liteit.se/mcp",
+                    "url": "https://www.agentanbud.se/mcp",
                     "transport": "streamable-http"
                 }
             }
