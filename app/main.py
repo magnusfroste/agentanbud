@@ -67,6 +67,66 @@ def _log_usage_safe(conn, channel: str, action: str, query: Optional[str] = None
         LOG.exception("log_usage failed (channel=%s action=%s)", channel, action)
 
 
+# ---- Sponsor-facing demand segments -----------------------------------------
+# Buckets a free-text query / CPV prefix into a broad industry segment. This is
+# what turns raw search logs into "your industry gets N searches/month" — the
+# number a sponsor actually cares about. Coarse on purpose: one keyword hit is
+# enough, first match wins.
+SEGMENTS: list[tuple[str, list[str], list[str]]] = [
+    # (label, keyword substrings, CPV 2-digit prefixes)
+    ("IT & Digitalisering", ["it-", "it ", "digital", "system", "mjukvar", "programvar",
+                             "webb", "app", "moln", "cloud", "data", "cyber", "e-tjänst",
+                             "licens", "server", "nätverk"], ["48", "72", "30", "32"]),
+    ("Bygg & Anläggning", ["bygg", "anläggning", "väg", "entreprenad", "ombyggnad",
+                           "nybyggnad", "renover", "mark", "betong", "asfalt"], ["45", "44", "71"]),
+    ("Vård & Omsorg", ["vård", "omsorg", "sjuk", "hälsa", "medicin", "läkemedel",
+                       "bemanning", "äldre", "hemtjänst", "tandvård", "assistans"], ["85", "33"]),
+    ("Transport & Logistik", ["transport", "logistik", "fordon", "buss", "taxi",
+                              "frakt", "gods", "färdtjänst", "skolskjuts"], ["60", "34", "63"]),
+    ("Livsmedel & Måltid", ["livsmedel", "mat", "måltid", "kost", "catering",
+                            "skolmat", "dryck"], ["15", "55"]),
+    ("Utbildning", ["utbildning", "skola", "förskola", "lärande", "kurs",
+                    "pedagog", "läromedel"], ["80"]),
+    ("Städ & Fastighetsservice", ["städ", "lokalvård", "fastighetsservice",
+                                  "förvaltning", "fastighetsskötsel"], ["90", "70", "77"]),
+    ("Energi & Miljö", ["energi", "elförsörjning", "miljö", "sanering", "avfall",
+                        "återvinning", "solcell", "värme", "vatten", "va-"], ["09", "31", "65", "41"]),
+    ("Juridik & Konsult", ["juridik", "juridisk", "advokat", "rådgivning", "revision",
+                           "konsult", "utredning", "upphandlingsstöd"], ["79", "66", "75"]),
+    ("Möbler & Inredning", ["möbel", "inredning", "kontorsmöbl", "belysning"], ["39"]),
+    ("Säkerhet & Bevakning", ["säkerhet", "bevakning", "larm", "väktare",
+                              "brandskydd"], ["35"]),
+]
+SEGMENT_OTHER = "Övrigt"
+
+
+def _segment_for(query: Optional[str], cpv: Optional[str]) -> str:
+    """Map a search to a sponsor-relevant industry segment. First match wins."""
+    text = (query or "").lower()
+    cpv2 = (cpv or "")[:2]
+    for label, keywords, cpv_prefixes in SEGMENTS:
+        if cpv2 and cpv2 in cpv_prefixes:
+            return label
+        if text and any(kw in text for kw in keywords):
+            return label
+    return SEGMENT_OTHER
+
+
+_BOT_UA_MARKERS = ("bot", "crawler", "spider", "slurp", "bingpreview", "facebookexternalhit",
+                   "gptbot", "claudebot", "ccbot", "perplexity", "python-requests",
+                   "curl", "wget", "headless", "scrapy", "httpx", "go-http", "java/")
+
+
+def _looks_like_bot(user_agent: str) -> bool:
+    """Coarse bot detection from the UA string. We store only this boolean —
+    never the UA itself — so no fingerprinting, but sponsors still get an
+    honest human-vs-automated traffic split."""
+    ua = (user_agent or "").lower()
+    if not ua:
+        return True  # no UA at all → almost certainly automated
+    return any(m in ua for m in _BOT_UA_MARKERS)
+
+
 def _num(n) -> str:
     """Format int with thin-space thousands separator (Swedish style)."""
     return f"{int(n):,}".replace(",", " ")
@@ -113,6 +173,32 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
 
     # ---- Static ----
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    # ---- Pageview logging (visits) ----
+    # Counts every page load so /analytics can show reach — how many visits,
+    # and how many are human vs automated (bots/crawlers/agents). We store
+    # ONLY a coarse bot flag derived from the User-Agent, never the UA string
+    # or IP, so this stays cookie-free and non-identifying.
+    _PAGEVIEW_SKIP_PREFIXES = ("/static", "/api", "/mcp", "/openapi", "/docs", "/redoc", "/favicon")
+
+    @app.middleware("http")
+    async def _log_pageviews(request: Request, call_next):
+        response = await call_next(request)
+        try:
+            path = request.url.path
+            if (request.method == "GET"
+                    and response.status_code < 400
+                    and not path.startswith(_PAGEVIEW_SKIP_PREFIXES)):
+                is_bot = _looks_like_bot(request.headers.get("user-agent", ""))
+                conn = connect(db)
+                try:
+                    _log_usage_safe(conn, "browser", "view", query=path,
+                                     meta={"bot": is_bot})
+                finally:
+                    conn.close()
+        except Exception:
+            LOG.exception("pageview logging failed")
+        return response
 
     # ---- MCP over HTTP (Streamable HTTP transport) ----
     # Lets remote clients (Claude Code, Cursor, Windsurf, future MCP-aware
@@ -391,10 +477,6 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 where.append("(title LIKE ? OR description LIKE ?)")
                 args.extend([f"%{q}%", f"%{q}%"])
 
-            if page == 1 and (q or source or authority or cpv):
-                _log_usage_safe(conn, "browser", "search", query=q or None,
-                                 meta={"source": source, "authority": authority, "cpv": cpv, "status": status})
-
             now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
             if status == "open":
                 where.append("(deadline IS NULL OR deadline > ?)")
@@ -411,6 +493,12 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
             total = conn.execute(
                 f"SELECT COUNT(*) FROM tenders {where_sql}", args
             ).fetchone()[0]
+
+            if page == 1 and (q or source or authority or cpv):
+                _log_usage_safe(conn, "browser", "search", query=q or None,
+                                 meta={"source": source, "authority": authority,
+                                       "cpv": cpv, "status": status,
+                                       "segment": _segment_for(q, cpv), "results": total})
 
             sort_map = {
                 "deadline": "CASE WHEN deadline IS NULL THEN 1 ELSE 0 END, deadline ASC",
@@ -531,32 +619,89 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
 
     @app.get("/analytics", include_in_schema=False)
     def analytics(request: Request):
-        """Transparency page: what's being searched for, and how Agentanbud
-        is used — browser, MCP-agent, or REST API. Mirrors the read-usage
-        page from clawable.org."""
+        """Usage insights — doubles as a transparency page and a sponsor deck.
+        What industries are in demand, where the gaps are, how traffic grows,
+        and how it's used (browser / MCP-agent / REST API). Cookie-free: built
+        entirely from our own aggregated usage_log."""
+        from collections import defaultdict, Counter
+        from datetime import timedelta
+
         conn = connect(db)
         try:
             total = conn.execute("SELECT COUNT(*) FROM usage_log").fetchone()[0]
 
-            channel_labels = {"browser": "Webbläsare", "mcp": "MCP-agenter", "api": "REST API"}
-            channel_colors = {"browser": "#2563eb", "mcp": "#10b981", "api": "#f59e0b"}
-            channel_rows = conn.execute(
-                "SELECT channel, COUNT(*) AS n FROM usage_log GROUP BY channel ORDER BY n DESC"
+            # ---- Headline KPIs -------------------------------------------
+            view_total = conn.execute(
+                "SELECT COUNT(*) FROM usage_log WHERE action = 'view'"
+            ).fetchone()[0]
+            human_views = conn.execute(
+                "SELECT COUNT(*) FROM usage_log WHERE action = 'view' "
+                "AND json_extract(meta, '$.bot') = 0"
+            ).fetchone()[0]
+            bot_views = view_total - human_views
+            search_total = conn.execute(
+                "SELECT COUNT(*) FROM usage_log WHERE action = 'search'"
+            ).fetchone()[0]
+            agent_calls = conn.execute(
+                "SELECT COUNT(*) FROM usage_log WHERE action LIKE 'tool:%'"
+            ).fetchone()[0]
+
+            kpis = {
+                "views": view_total,
+                "human_views": human_views,
+                "bot_views": bot_views,
+                "human_pct": int(human_views / view_total * 100) if view_total else 0,
+                "searches": search_total,
+                "agent_calls": agent_calls,
+            }
+
+            # ---- Industry demand (the sponsor hero) ----------------------
+            # Bucket every query (browser + api + mcp) into a segment at read
+            # time so all channels are classified uniformly.
+            demand_rows = conn.execute(
+                "SELECT query, meta FROM usage_log "
+                "WHERE (action = 'search' OR action LIKE 'tool:%') "
+                "AND query IS NOT NULL AND TRIM(query) != ''"
             ).fetchall()
-            channels = [
-                {
-                    "channel": r["channel"],
-                    "label": channel_labels.get(r["channel"], r["channel"]),
-                    "n": r["n"],
-                    "pct": int(r["n"] / total * 100) if total else 0,
-                    "color": channel_colors.get(r["channel"], "#64748b"),
-                }
-                for r in channel_rows
+            seg_counter: Counter = Counter()
+            for r in demand_rows:
+                cpv = None
+                if r["meta"]:
+                    try:
+                        cpv = json.loads(r["meta"]).get("cpv") or None
+                    except Exception:
+                        pass
+                seg_counter[_segment_for(r["query"], cpv)] += 1
+            seg_total = sum(seg_counter.values()) or 1
+            seg_colors = ["#2563eb", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444",
+                          "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6",
+                          "#a855f7", "#64748b"]
+            segments = []
+            for i, (label, n) in enumerate(seg_counter.most_common()):
+                segments.append({
+                    "label": label, "n": n,
+                    "pct": int(n / seg_total * 100),
+                    "bar": int(n / seg_counter.most_common(1)[0][1] * 100),
+                    "color": seg_colors[i % len(seg_colors)],
+                })
+
+            # ---- Unmet demand: searches that returned nothing ------------
+            gap_rows = conn.execute(
+                "SELECT LOWER(TRIM(query)) AS term, COUNT(*) AS n FROM usage_log "
+                "WHERE action = 'search' AND json_extract(meta, '$.results') = 0 "
+                "AND query IS NOT NULL AND TRIM(query) != '' "
+                "GROUP BY term ORDER BY n DESC LIMIT 12"
+            ).fetchall()
+            max_gap = gap_rows[0]["n"] if gap_rows else 1
+            unmet = [
+                {"term": r["term"], "n": r["n"], "pct": int(r["n"] / max_gap * 100)}
+                for r in gap_rows
             ]
 
+            # ---- Top search terms ----------------------------------------
             term_rows = conn.execute(
                 "SELECT LOWER(TRIM(query)) AS term, COUNT(*) AS n FROM usage_log "
-                "WHERE query IS NOT NULL AND TRIM(query) != '' "
+                "WHERE query IS NOT NULL AND TRIM(query) != '' AND action != 'view' "
                 "GROUP BY term ORDER BY n DESC LIMIT 15"
             ).fetchall()
             max_term = term_rows[0]["n"] if term_rows else 1
@@ -565,43 +710,66 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 for r in term_rows
             ]
 
+            # ---- How it's used: activity-type split ----------------------
+            usage_types = [
+                {"label": "Sidvisningar", "n": view_total, "color": "#2563eb"},
+                {"label": "Webbsökningar", "n": search_total, "color": "#8b5cf6"},
+                {"label": "MCP-agentverktyg", "n": agent_calls, "color": "#10b981"},
+                {"label": "API-anrop", "n": conn.execute(
+                    "SELECT COUNT(*) FROM usage_log WHERE channel = 'api'"
+                ).fetchone()[0], "color": "#f59e0b"},
+            ]
+            ut_total = sum(u["n"] for u in usage_types) or 1
+            for u in usage_types:
+                u["pct"] = int(u["n"] / ut_total * 100)
+            usage_types = [u for u in usage_types if u["n"] > 0]
+
+            # ---- MCP tool breakdown --------------------------------------
             tool_rows = conn.execute(
-                "SELECT action, COUNT(*) AS n FROM usage_log WHERE channel = 'mcp' "
+                "SELECT action, COUNT(*) AS n FROM usage_log WHERE action LIKE 'tool:%' "
                 "GROUP BY action ORDER BY n DESC LIMIT 12"
             ).fetchall()
             max_tool = tool_rows[0]["n"] if tool_rows else 1
             top_tools = [
-                {"tool": r["action"].removeprefix("tool:"), "n": r["n"], "pct": int(r["n"] / max_tool * 100)}
+                {"tool": r["action"][5:], "n": r["n"], "pct": int(r["n"] / max_tool * 100)}
                 for r in tool_rows
             ]
 
-            # Daily activity for the last 14 days, split by channel
-            from collections import defaultdict
-            from datetime import timedelta
+            # ---- 30-day momentum: visits vs searches vs agents -----------
             day_rows = conn.execute(
-                "SELECT DATE(created_at) AS day, channel, COUNT(*) AS n FROM usage_log "
-                "WHERE created_at >= DATE('now', '-13 days') GROUP BY day, channel"
+                "SELECT DATE(created_at) AS day, "
+                "SUM(action = 'view') AS views, "
+                "SUM(action = 'search') AS searches, "
+                "SUM(action LIKE 'tool:%') AS agents "
+                "FROM usage_log WHERE created_at >= DATE('now', '-29 days') GROUP BY day"
             ).fetchall()
-            by_day = defaultdict(lambda: {"browser": 0, "mcp": 0, "api": 0})
-            for r in day_rows:
-                by_day[r["day"]][r["channel"]] = r["n"]
+            by_day = {r["day"]: r for r in day_rows}
             today = datetime.now(timezone.utc).date()
             daily_raw = []
-            for i in range(13, -1, -1):
+            for i in range(29, -1, -1):
                 d = today - timedelta(days=i)
-                counts = by_day.get(d.isoformat(), {"browser": 0, "mcp": 0, "api": 0})
-                daily_raw.append({"day": d.strftime("%d/%m"), "n": sum(counts.values()), **counts})
+                r = by_day.get(d.isoformat())
+                views = (r["views"] if r else 0) or 0
+                searches = (r["searches"] if r else 0) or 0
+                agents = (r["agents"] if r else 0) or 0
+                daily_raw.append({
+                    "day": d.strftime("%d/%m"),
+                    "n": views + searches + agents,
+                    "views": views, "searches": searches, "agents": agents,
+                })
             max_day = max((d["n"] for d in daily_raw), default=0) or 1
             daily = [{**d, "pct": int(d["n"] / max_day * 100)} for d in daily_raw]
 
+            # ---- Recent search/agent activity (skip raw pageviews) -------
             recent = [dict(r) for r in conn.execute(
                 "SELECT channel, action, query, created_at FROM usage_log "
-                "ORDER BY created_at DESC LIMIT 30"
+                "WHERE action != 'view' ORDER BY created_at DESC LIMIT 25"
             ).fetchall()]
 
             return HTMLResponse(render("analytics.html",
-                total=total, channels=channels, top_terms=top_terms,
-                top_tools=top_tools, daily=daily, recent=recent,
+                total=total, kpis=kpis, segments=segments, unmet=unmet,
+                top_terms=top_terms, usage_types=usage_types, top_tools=top_tools,
+                daily=daily, recent=recent,
             ))
         finally:
             conn.close()
@@ -764,13 +932,14 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             if q:
                 where.append("(title LIKE ? OR description LIKE ?)")
                 args.extend([f"%{q}%", f"%{q}%"])
-            if page == 1 and (q or source or authority):
-                _log_usage_safe(conn, "api", "search", query=q,
-                                 meta={"source": source, "authority": authority})
             where_sql = ("WHERE " + " AND ".join(where)) if where else ""
             total = conn.execute(
                 f"SELECT COUNT(*) FROM tenders {where_sql}", args
             ).fetchone()[0]
+            if page == 1 and (q or source or authority):
+                _log_usage_safe(conn, "api", "search", query=q,
+                                 meta={"source": source, "authority": authority,
+                                       "segment": _segment_for(q, None), "results": total})
             rows = conn.execute(
                 f"""
                 SELECT id, source_system, source_id, tender_url, title, authority,

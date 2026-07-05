@@ -178,16 +178,26 @@ REST) finns även på [/agenter](https://www.agentanbud.se/agenter).
 
 ### 📈 Öppen insyn i användningen
 
-[/analytics](https://www.agentanbud.se/analytics) visar vad som faktiskt
-söks på — och om sökningen kom från webbläsaren, en MCP-agent eller REST
-API:t. Samma idé som transparenssidan i [clawable.org](https://www.clawable.org):
-om vi bygger infrastruktur för agenter ska det synas hur den används,
-inte bara att den finns.
+[/analytics](https://www.agentanbud.se/analytics) är både en transparenssida
+och ett datadrivet underlag för sponsorer. Den visar:
+
+- **Branschefterfrågan** — sökningar grupperade i segment (IT, bygg, vård,
+  transport, energi …), dvs. vad marknaden faktiskt letar efter.
+- **Efterfrågan utan träff** — sökningar som gav noll resultat, dvs. luckor
+  i datan (och en konkret pitch för att lägga till en källa).
+- **Trafik & tillväxt** — besök, sökningar och agentanrop per dag, senaste
+  30 dagarna, med en grov uppdelning mänskliga besök vs botar/agenter.
+- **Kanal- & verktygsmix** — webbläsare vs MCP-agent vs REST API, och vilka
+  MCP-verktyg agenterna använder mest.
+
+Samma idé som transparenssidan i [clawable.org](https://www.clawable.org):
+om vi bygger infrastruktur för agenter ska det synas hur den används.
 
 **Inga cookies, ingen tredjepartsanalys.** Loggen är vår egen — kanal,
-sökterm och tidpunkt i vår egen SQLite, inget Google Analytics eller
-Mixpanel, ingen IP-adress eller besökar-ID som kopplar en sökning till
-en person.
+sökterm, en grov bot-flagga och tidpunkt i vår egen SQLite. Inget Google
+Analytics eller Mixpanel, ingen IP-adress, ingen User-Agent-sträng, inget
+besökar-ID som kopplar en sökning till en person. Bot-flaggan härleds från
+User-Agent vid inloggningstillfället — bara boolean sparas, aldrig strängen.
 
 ---
 
