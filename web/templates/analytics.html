@@ -5,6 +5,22 @@
 <h1>Analys</h1>
 <p class="sub">Öppen insyn i hur Agentanbud används — vad söks det på, och kommer sökningen från webbläsaren, en MCP-agent eller REST API:t?</p>
 
+<section class="insight-section">
+  <h2>🔒 Integritet</h2>
+  <p>
+    Inga cookies. Ingen tredjepartsanalys — inget Google Analytics, ingen
+    Mixpanel, inga spårningspixlar. Det du ser på den här sidan kommer från
+    vår egen logg, i vår egen SQLite, på vår egen server.
+  </p>
+  <p class="muted">
+    Vi sparar kanal (webbläsare/MCP/API), sökterm och tidpunkt för varje
+    sökning — inget mer. Ingen IP-adress, inget besökar-ID, inget som
+    kopplar en sökning till en person. Temaval (ljust/mörkt) sparas lokalt
+    i din webbläsare (<code>localStorage</code>) och lämnar aldrig din
+    dator.
+  </p>
+</section>
+
 <section class="insight-kpis">
   <div class="insight-kpi">
     <div class="v">{{ "{:,}".format(total).replace(",", " ") }}</div>

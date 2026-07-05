@@ -184,6 +184,11 @@ API:t. Samma idé som transparenssidan i [clawable.org](https://www.clawable.org
 om vi bygger infrastruktur för agenter ska det synas hur den används,
 inte bara att den finns.
 
+**Inga cookies, ingen tredjepartsanalys.** Loggen är vår egen — kanal,
+sökterm och tidpunkt i vår egen SQLite, inget Google Analytics eller
+Mixpanel, ingen IP-adress eller besökar-ID som kopplar en sökning till
+en person.
+
 ---
 
 ## 🌍 Datakällor
