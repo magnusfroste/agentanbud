@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Analys — hur används Agentanbud{% endblock %}
+
+{% block content %}
+<h1>Analys</h1>
+<p class="sub">Öppen insyn i hur Agentanbud används — vad söks det på, och kommer sökningen från webbläsaren, en MCP-agent eller REST API:t?</p>
+
+<section class="insight-kpis">
+  <div class="insight-kpi">
+    <div class="v">{{ "{:,}".format(total).replace(",", " ") }}</div>
+    <div class="l">Sökningar/anrop totalt</div>
+  </div>
+  {% for c in channels %}
+  <div class="insight-kpi">
+    <div class="v">{{ c.n }}</div>
+    <div class="l">{{ c.label }} ({{ c.pct }}%)</div>
+  </div>
+  {% endfor %}
+</section>
+
+{% if not total %}
+<section class="insight-section">
+  <p class="muted">Inga sökningar loggade än. Så fort någon söker via webben, MCP eller API:t dyker det upp här.</p>
+</section>
+{% else %}
+
+<!-- CHANNEL SPLIT -->
+{% if channels %}
+<section class="insight-section">
+  <h2>Kanalfördelning</h2>
+  <p class="muted">Hur kommer trafiken in — mänsklig webbläsare eller en agent?</p>
+  <div class="donut-chart">
+    <div class="donut" style="background: conic-gradient({% set ns = namespace(cumulative=0) %}{% for c in channels %}{{ c.color }} {{ ns.cumulative }}% {{ ns.cumulative + c.pct }}%{% set ns.cumulative = ns.cumulative + c.pct %}{% if not loop.last %}, {% endif %}{% endfor %}{% if ns.cumulative < 100 %}, var(--surface-2) {{ ns.cumulative }}% 100%{% endif %})">
+      <div class="donut-center">
+        <span class="donut-total">{{ total }}</span>
+        <span class="donut-label">totalt</span>
+      </div>
+    </div>
+    <div class="donut-legend">
+      {% for c in channels %}
+      <div class="legend-item">
+        <span class="legend-dot" style="background: {{ c.color }}"></span>
+        <span class="legend-label">{{ c.label }}</span>
+        <span class="legend-value">{{ c.n }} ({{ c.pct }}%)</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- DAILY ACTIVITY -->
+<section class="insight-section">
+  <h2>Aktivitet, senaste 14 dagarna</h2>
+  <p class="muted">Antal sökningar/anrop per dag, alla kanaler.</p>
+  <div class="weekday-chart">
+    {% for d in daily %}
+    <div class="weekday-col">
+      <div class="weekday-bar" style="height: {{ d.pct }}%"></div>
+      <span class="weekday-label">{{ d.day }}</span>
+      <span class="weekday-count">{{ d.n }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- TOP SEARCH TERMS -->
+{% if top_terms %}
+<section class="insight-section">
+  <h2>Vad söks det på?</h2>
+  <p class="muted">Vanligaste söktermerna, alla kanaler.</p>
+  <div class="bar-chart">
+    {% for t in top_terms %}
+    <div class="bar-row">
+      <span class="bar-label">{{ t.term[:40] }}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width: {{ t.pct }}%"></div>
+        <span class="bar-value">{{ t.n }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- MCP TOOL BREAKDOWN -->
+{% if top_tools %}
+<section class="insight-section">
+  <h2>MCP-verktyg som anropas</h2>
+  <p class="muted">Vilka verktyg använder AI-agenter mest?</p>
+  <div class="bar-chart">
+    {% for t in top_tools %}
+    <div class="bar-row">
+      <span class="bar-label"><code>{{ t.tool }}</code></span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width: {{ t.pct }}%"></div>
+        <span class="bar-value">{{ t.n }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- RECENT ACTIVITY -->
+<section class="insight-section">
+  <h2>Senaste aktivitet</h2>
+  <table class="sync-table">
+    <thead>
+      <tr><th>Kanal</th><th>Åtgärd</th><th>Sökterm</th><th>Tid</th></tr>
+    </thead>
+    <tbody>
+      {% for r in recent %}
+      <tr>
+        <td><span class="badge badge-source">{{ r.channel }}</span></td>
+        <td>{{ r.action }}</td>
+        <td class="muted">{{ r.query or '—' }}</td>
+        <td class="muted">{{ r.created_at[:19] if r.created_at else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% endif %}
+{% endblock %}

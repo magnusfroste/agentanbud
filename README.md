@@ -3,9 +3,13 @@
 > **Svenska upphandlingar — fri tillgång, en SQLite, en container.**
 > Open by design. Data är dina medborgares rättighet.
 
+![Agentanbud — startsidan](docs/screenshot.png)
+
 Agentanbud samlar in offentlig upphandlingsdata från Mercell och TED EU,
-lagrar allt i en lokal SQLite, och serverar en enkel dashboard + JSON API via
-FastAPI. Allt-i-ett-container, deployas till Easypanel via en
+lagrar allt i en lokal SQLite, och serverar den på tre sätt: en webbdashboard,
+ett öppet JSON API, och en **MCP-server** så att AI-agenter (Claude Code,
+Codex CLI, Cursor, Kilo Code m.fl.) kan söka och läsa upphandlingar direkt i
+sina arbetsflöden. Allt-i-ett-container, deployas till Easypanel via en
 `docker-compose.yml`. Inga molntjänster, inga API-nycklar, inga paywalls.
 
 **Varför det här finns:** Svenska myndigheter måste enligt lag publicera
@@ -41,22 +45,24 @@ Agentanbud finns för att **minska informationsasymmetrin**. Vi speglar publik u
 ## Arkitektur
 
 ```
-┌─────────────────────────────────────────────┐
-│  Easypanel service: agentanbud              │
-│  (single container via docker-compose)      │
-│                                             │
-│  ┌──────────────┐  ┌──────────────────────┐ │
-│  │ cron 06:00   │  │ FastAPI (uvicorn)    │ │
-│  │  ↓           │  │  /api/health         │ │
-│  │  scraper     │  │  /api/stats          │ │
-│  │   • mercell  │  │  /api/tenders        │ │
-│  │   • ted      │  │  /   (dashboard)     │ │
-│  │  ↓           │──│  reads ────→ SQLite  │ │
-│  └──────────────┘  └──────────────────────┘ │
-│                  ↳ /data/application.db       │
-└─────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────┐
+│  Easypanel service: agentanbud                    │
+│  (single container via docker-compose)            │
+│                                                   │
+│  ┌──────────────┐  ┌────────────────────────────┐ │
+│  │ cron 06:00   │  │ FastAPI (uvicorn)          │ │
+│  │  ↓           │  │  /            (dashboard)  │ │
+│  │  scraper     │  │  /api/*       (JSON API)   │ │
+│  │   • mercell  │  │  /mcp         (MCP server) │ │
+│  │   • ted      │  │  /analytics   (usage insyn)│ │
+│  │  ↓           │──│  reads/writes ───→ SQLite  │ │
+│  └──────────────┘  └────────────────────────────┘ │
+│                  ↳ /data/application.db             │
+└───────────────────────────────────────────────────┘
           ↕ HTTPS
        Traefik (Easypanel)
+          ↕
+  Webbläsare · AI-agenter (MCP) · Egna script (REST)
 ```
 
 **Inga Supabase-konton, inga externa databaser, inga buildpacks, inga
@@ -118,6 +124,65 @@ curl 'http://localhost:8080/api/tenders/42'
 
 Svaret är rent JSON. Bygg din egen frontend, integrera i ditt CRM, eller
 använd det från en Jupyter notebook — your call.
+
+---
+
+## 🤖 MCP — för AI-agenter
+
+Agentanbud exponerar samma data via [Model Context Protocol](https://modelcontextprotocol.io/)
+på `https://www.agentanbud.se/mcp` — read-only, ingen API-nyckel, inga
+konton. AI-agenter kan ansluta med bara en URL och får **10 verktyg** direkt:
+
+| Tool | Beskrivning |
+|---|---|
+| `search_tenders` | Sök upphandlingar (fritext, källa, upphandlare, CPV, öppen/stängd) |
+| `get_tender` | Hämta en specifik upphandling |
+| `match_profile` | Matcha upphandlingar mot en profil — nyckelord, CPV-prefix, regioner |
+| `get_authority` | Alla upphandlingar från en organisation, t.ex. Trafikverket |
+| `get_stats` | Databasöversikt + senaste sync |
+| `list_providers` | Datakällor + om ansökan kräver konto |
+| `list_regions` | Län med upphandlingar |
+| `list_cpv_top` | Vanligaste CPV-kategorierna |
+| `search_knowledge` | Sök i kunskapsbanken (hållbarhetskriterier + Q&A) |
+| `get_knowledge` | Hämta ett kunskapsobjekt i detalj |
+
+**Anslut från Claude Code** (ett kommando):
+
+```bash
+claude mcp add --transport http agentanbud https://www.agentanbud.se/mcp
+```
+
+**Anslut från Codex CLI** — lägg till i `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.agentanbud]
+url = "https://www.agentanbud.se/mcp"
+```
+
+**Övriga MCP-klienter** (Cursor, Windsurf, Kilo Code, Cline m.fl.):
+
+```json
+{
+  "mcpServers": {
+    "agentanbud": {
+      "url": "https://www.agentanbud.se/mcp",
+      "transport": "streamable-http"
+    }
+  }
+}
+```
+
+Fullständig dokumentation, cookbook-exempel och lokal (stdio) installation:
+se [MCP.md](MCP.md). Guide för samtliga anslutningssätt (webb-prompt, MCP,
+REST) finns även på [/agenter](https://www.agentanbud.se/agenter).
+
+### 📈 Öppen insyn i användningen
+
+[/analytics](https://www.agentanbud.se/analytics) visar vad som faktiskt
+söks på — och om sökningen kom från webbläsaren, en MCP-agent eller REST
+API:t. Samma idé som transparenssidan i [clawable.org](https://www.clawable.org):
+om vi bygger infrastruktur för agenter ska det synas hur den används,
+inte bara att den finns.
 
 ---
 

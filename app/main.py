@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
 
 from .cron import get_schedule, next_run
-from .db import connect, init_db
+from .db import connect, init_db, log_usage
 
 # MCP-over-HTTP is optional — only loaded if mcp_http module is present
 # (it's a separate file so the stdio MCP server stays independent).
@@ -57,6 +57,14 @@ def _require_admin(request: Request) -> None:
     supplied = request.headers.get("x-admin-key", "")
     if not hmac.compare_digest(supplied, ADMIN_API_KEY):
         raise HTTPException(status_code=401, detail="missing or invalid X-Admin-Key")
+
+
+def _log_usage_safe(conn, channel: str, action: str, query: Optional[str] = None, meta: Optional[dict] = None) -> None:
+    """Fire-and-forget usage logging — never let analytics break a request."""
+    try:
+        log_usage(conn, channel, action, query=query, meta=meta)
+    except Exception:
+        LOG.exception("log_usage failed (channel=%s action=%s)", channel, action)
 
 
 def _num(n) -> str:
@@ -383,6 +391,10 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 where.append("(title LIKE ? OR description LIKE ?)")
                 args.extend([f"%{q}%", f"%{q}%"])
 
+            if page == 1 and (q or source or authority or cpv):
+                _log_usage_safe(conn, "browser", "search", query=q or None,
+                                 meta={"source": source, "authority": authority, "cpv": cpv, "status": status})
+
             now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
             if status == "open":
                 where.append("(deadline IS NULL OR deadline > ?)")
@@ -514,6 +526,83 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 "next_run": nr.strftime("%Y-%m-%d %H:%M UTC") if nr else "—",
             }
             return HTMLResponse(render("system.html", health=health, syncs=syncs, sources=sources))
+        finally:
+            conn.close()
+
+    @app.get("/analytics", include_in_schema=False)
+    def analytics(request: Request):
+        """Transparency page: what's being searched for, and how Agentanbud
+        is used — browser, MCP-agent, or REST API. Mirrors the read-usage
+        page from clawable.org."""
+        conn = connect(db)
+        try:
+            total = conn.execute("SELECT COUNT(*) FROM usage_log").fetchone()[0]
+
+            channel_labels = {"browser": "Webbläsare", "mcp": "MCP-agenter", "api": "REST API"}
+            channel_colors = {"browser": "#2563eb", "mcp": "#10b981", "api": "#f59e0b"}
+            channel_rows = conn.execute(
+                "SELECT channel, COUNT(*) AS n FROM usage_log GROUP BY channel ORDER BY n DESC"
+            ).fetchall()
+            channels = [
+                {
+                    "channel": r["channel"],
+                    "label": channel_labels.get(r["channel"], r["channel"]),
+                    "n": r["n"],
+                    "pct": int(r["n"] / total * 100) if total else 0,
+                    "color": channel_colors.get(r["channel"], "#64748b"),
+                }
+                for r in channel_rows
+            ]
+
+            term_rows = conn.execute(
+                "SELECT LOWER(TRIM(query)) AS term, COUNT(*) AS n FROM usage_log "
+                "WHERE query IS NOT NULL AND TRIM(query) != '' "
+                "GROUP BY term ORDER BY n DESC LIMIT 15"
+            ).fetchall()
+            max_term = term_rows[0]["n"] if term_rows else 1
+            top_terms = [
+                {"term": r["term"], "n": r["n"], "pct": int(r["n"] / max_term * 100)}
+                for r in term_rows
+            ]
+
+            tool_rows = conn.execute(
+                "SELECT action, COUNT(*) AS n FROM usage_log WHERE channel = 'mcp' "
+                "GROUP BY action ORDER BY n DESC LIMIT 12"
+            ).fetchall()
+            max_tool = tool_rows[0]["n"] if tool_rows else 1
+            top_tools = [
+                {"tool": r["action"].removeprefix("tool:"), "n": r["n"], "pct": int(r["n"] / max_tool * 100)}
+                for r in tool_rows
+            ]
+
+            # Daily activity for the last 14 days, split by channel
+            from collections import defaultdict
+            from datetime import timedelta
+            day_rows = conn.execute(
+                "SELECT DATE(created_at) AS day, channel, COUNT(*) AS n FROM usage_log "
+                "WHERE created_at >= DATE('now', '-13 days') GROUP BY day, channel"
+            ).fetchall()
+            by_day = defaultdict(lambda: {"browser": 0, "mcp": 0, "api": 0})
+            for r in day_rows:
+                by_day[r["day"]][r["channel"]] = r["n"]
+            today = datetime.now(timezone.utc).date()
+            daily_raw = []
+            for i in range(13, -1, -1):
+                d = today - timedelta(days=i)
+                counts = by_day.get(d.isoformat(), {"browser": 0, "mcp": 0, "api": 0})
+                daily_raw.append({"day": d.strftime("%d/%m"), "n": sum(counts.values()), **counts})
+            max_day = max((d["n"] for d in daily_raw), default=0) or 1
+            daily = [{**d, "pct": int(d["n"] / max_day * 100)} for d in daily_raw]
+
+            recent = [dict(r) for r in conn.execute(
+                "SELECT channel, action, query, created_at FROM usage_log "
+                "ORDER BY created_at DESC LIMIT 30"
+            ).fetchall()]
+
+            return HTMLResponse(render("analytics.html",
+                total=total, channels=channels, top_terms=top_terms,
+                top_tools=top_tools, daily=daily, recent=recent,
+            ))
         finally:
             conn.close()
 
@@ -675,6 +764,9 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             if q:
                 where.append("(title LIKE ? OR description LIKE ?)")
                 args.extend([f"%{q}%", f"%{q}%"])
+            if page == 1 and (q or source or authority):
+                _log_usage_safe(conn, "api", "search", query=q,
+                                 meta={"source": source, "authority": authority})
             where_sql = ("WHERE " + " AND ".join(where)) if where else ""
             total = conn.execute(
                 f"SELECT COUNT(*) FROM tenders {where_sql}", args

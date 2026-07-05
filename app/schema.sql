@@ -60,3 +60,17 @@ CREATE TABLE IF NOT EXISTS knowledge (
 CREATE INDEX IF NOT EXISTS idx_knowledge_source ON knowledge(source_system);
 CREATE INDEX IF NOT EXISTS idx_knowledge_category ON knowledge(category);
 CREATE INDEX IF NOT EXISTS idx_knowledge_subcategory ON knowledge(subcategory);
+
+-- Usage log — every search/tool-call, tagged by channel (browser/mcp/api).
+-- Powers /analytics: what's being searched for, and how Agentanbud is used.
+CREATE TABLE IF NOT EXISTS usage_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel TEXT NOT NULL,                 -- 'browser' | 'mcp' | 'api'
+    action TEXT NOT NULL,                  -- 'search' | 'tool:search_tenders' | ...
+    query TEXT,                            -- search term, if any
+    meta TEXT,                             -- JSON with extra filters (source, cpv, ...)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_log_time ON usage_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_log_channel ON usage_log(channel);
