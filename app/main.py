@@ -694,10 +694,14 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
                 if not ws:
                     continue
                 contracts += 1
+                # TED uses a placeholder value of 1 (or 0) SEK when the real
+                # award value isn't published — treat as unreported so totals
+                # aren't distorted by phantom 1-SEK contracts.
+                val = r[1] if (r[1] and r[1] > 1) else None
                 for w in ws:
                     wins[w] += 1
-                    if r[1]:
-                        value_by_winner[w] = value_by_winner.get(w, 0.0) + float(r[1])
+                    if val:
+                        value_by_winner[w] = value_by_winner.get(w, 0.0) + float(val)
             ranked = [
                 {"winner": w, "wins": n, "total_value": round(value_by_winner.get(w, 0.0))}
                 for w, n in wins.most_common(top)

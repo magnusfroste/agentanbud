@@ -788,7 +788,10 @@ async def _get_winner_history(conn, args: dict) -> list[types.Content]:
         if not winners:
             continue
         contracts += 1
-        val = r[1]
+        # TED often carries a placeholder value of 1 (or 0) SEK when the real
+        # award value isn't published — treat those as "unreported" so summed
+        # totals stay honest instead of showing e.g. "8 vinster — 1 SEK totalt".
+        val = r[1] if (r[1] and r[1] > 1) else None
         for w in winners:
             wins[w] += 1
             if val:
