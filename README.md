@@ -47,11 +47,12 @@ Agentanbud finns för att **minska informationsasymmetrin**. Vi speglar publik u
 │                                             │
 │  ┌──────────────┐  ┌──────────────────────┐ │
 │  │ cron 06:00   │  │ FastAPI (uvicorn)    │ │
-│  │  ↓           │  │  /api/health         │ │
-│  │  scraper     │  │  /api/stats          │ │
-│  │   • mercell  │  │  /api/tenders        │ │
-│  │   • ted      │  │  /   (dashboard)     │ │
-│  │  ↓           │──│  reads ────→ SQLite  │ │
+│  │  ↓           │  │  /api/*  (REST)      │ │
+│  │  scraper     │  │  /mcp    (agenter)   │ │
+│  │   • mercell  │  │  /api/winners        │ │
+│  │   • ted ×3   │  │  /   (dashboard)     │ │
+│  │   • lov      │──│  reads ────→ SQLite  │ │
+│  │   • kunskap  │  │                      │ │
 │  └──────────────┘  └──────────────────────┘ │
 │                  ↳ /data/application.db       │
 └─────────────────────────────────────────────┘
@@ -92,16 +93,24 @@ docker compose exec app python -m scraper.orchestrator
 
 ## 📊 API
 
-Alla endpoints är read-only, ingen auth, inga tokens.
+Alla **läs**-endpoints är öppna — ingen auth, inga tokens.
 
 | Endpoint | Beskrivning |
 |---|---|
 | `GET /` | Dashboard (vanilla HTML, ingen build) |
 | `GET /api/health` | Hälsa + senaste sync |
 | `GET /api/stats` | KPI:er + senaste 20 syncs + top-15 upphandlare |
-| `GET /api/tenders?source=&q=&page=&page_size=` | Paginerad lista, max 200/sida |
+| `GET /api/tenders?source=&q=&authority=&cpv=&page=&page_size=` | Paginerad lista, max 200/sida |
 | `GET /api/tenders/{id}` | Enskild upphandling (inkl. `raw_json`) |
+| `GET /api/winners?authority=&cpv=&top=` | **Vem brukar vinna?** — leverantörer rankade per köpare/CPV med totalt värde |
+| `GET /api/knowledge?q=&source=` | Kunskapsbas (hållbarhetskriterier + Q&A) |
+| `POST /mcp` | MCP-server (Streamable HTTP) för AI-agenter — se nedan |
 | `GET /docs` | Swagger UI (auto-genererad av FastAPI) |
+
+**Skriv-/adminåtgärder** (`POST /api/sync`, `/api/backfill`, `/api/reset-ted`,
+`/api/repair-links`, `/api/admin/query`) kräver headern `X-Admin-Key` när
+`ADMIN_API_KEY` är satt. Datan synkas ändå automatiskt varje dag — du behöver
+normalt aldrig trigga något.
 
 **Exempel:**
 
@@ -109,8 +118,8 @@ Alla endpoints är read-only, ingen auth, inga tokens.
 # Hämta alla IT-upphandlingar
 curl 'http://localhost:8080/api/tenders?q=it&page=1'
 
-# Hämta bara TED-notiser
-curl 'http://localhost:8080/api/tenders?source=ted'
+# Vem vinner byggupphandlingar hos Trafikverket?
+curl 'http://localhost:8080/api/winners?authority=Trafikverket&cpv=45'
 
 # Hämta en specifik upphandling (inkl. hela raw_json)
 curl 'http://localhost:8080/api/tenders/42'
@@ -121,21 +130,48 @@ använd det från en Jupyter notebook — your call.
 
 ---
 
+## 🤖 MCP — för AI-agenter
+
+Agentanbud exponerar sina läsdata via [Model Context Protocol](https://modelcontextprotocol.io/)
+på `POST /mcp` (Streamable HTTP). Anslut Claude Code, Claude Cowork, Cursor,
+Kilo Code m.fl. med bara en URL — inga nycklar, verktygen listas automatiskt.
+
+```bash
+claude mcp add --transport http agentanbud https://www.agentanbud.se/mcp
+```
+
+**11 läsverktyg:** `search_tenders`, `get_tender`, `match_profile`,
+`get_winner_history`, `get_authority`, `get_stats`, `list_providers`,
+`list_regions`, `list_cpv_top`, `search_knowledge`, `get_knowledge`.
+
+`get_winner_history` är marknadsintelligensen: fråga *"vem brukar vinna
+byggupphandlingar hos Trafikverket?"* och få leverantörer rankade efter
+antal vinster och totalt tilldelat värde — beslutsunderlaget ett litet
+företag behöver för att avgöra om det är värt att lägga anbud. Full
+klientdokumentation i [`MCP.md`](MCP.md).
+
+---
+
 ## 🌍 Datakällor
 
 ### Live upphandlingar (tenders)
 
 | Källa | Typ | Status |
 |---|---|---|
-| **Mercell** | Publik JSON-API | ✅ Live (~500 SE records) |
-| **TED EU** (Contract Notices) | Publik JSON-API (POST) | ✅ Live (~6 500 / 90d) |
-| **TED EU Awards** | Samma API, notice-subtype 16-19 | ✅ Live (~3 500 / 90d) |
-| **TED EU PIN** | Samma API, notice-subtype 4,5,25,26 | ✅ Live (~180 / 90d) |
+| **Mercell** | Publik JSON-API | ✅ Live (~320 SE records) |
+| **TED EU** (Contract Notices) | Publik JSON-API (POST), `notice-type` cn-* | ✅ Live (~7 300, öppna upphandlingar) |
+| **TED EU Awards** | Samma API, `notice-type` can-* | ✅ Live (~5 200, ~88% med vinnare) |
+| **TED EU PIN** | Samma API, `notice-type` pin-* | ✅ Live (~295, förhandsinfo) |
 | **Upphandlingsmyndigheten LOV** | Publik JSON-API | ✅ Live (~429 st) |
 | Tendsign / MeForm | Inget öppet API | 🔴 Kräver Selenium (PRs välkomna!) |
 | e-Avrop | robots.txt Disallow: / | 🔴 Respekterat — ingen scraping |
 | Kommersannons | Inget öppet API | 🔴 Vanilla HTTP-scrape möjligt |
 | Clira / Esource | Sanctum-skyddat | 🔴 Kräver konto/headless browser |
+
+> **TED-filtrering:** vi filtrerar på `notice-type` (inte legacy `notice-subtype`,
+> som TED:s expert-search tyst tolkar som `cn-standard`). Öppna upphandlingar
+> (`cn-*`), tilldelningar (`can-*`) och förhandsinfo (`pin-*`) hålls därför i
+> separata källor utan dubbletter.
 
 ### Kunskapsbas (knowledge)
 
@@ -182,6 +218,7 @@ CREATE TABLE tenders (
     contract_type TEXT,
     document_type TEXT,
     region TEXT,
+    winner_name TEXT,                    -- JSON-lista med tilldelade leverantörer (ted_awards)
     raw_json TEXT,                       -- hela källposten (för debugging)
     fetched_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(source_system, source_id)     -- idempotenta synkar
@@ -205,14 +242,17 @@ sqlite> SELECT title, authority FROM tenders WHERE cpv_codes LIKE '%72%' LIMIT 5
 
 Vi vill ha bidrag. Speciellt:
 
-- **Nya datakällor** — Tendsign, e-Avrop, Kommersannons. Varje scraper är
-  en ~150-rad fil som implementerar `run(db_path) -> int`.
-- **Frontend-förbättringar** — dashboarden är vanilla HTML, ingen build.
-  Maps, filter, export-knappar, dark mode — allt välkommet.
+- **Nya datakällor** — Tendsign, Kommersannons, kommuners egna
+  upphandlingssidor (kräver ofta Selenium/Playwright). Varje scraper är
+  en ~150-rad fil som implementerar `run(db_path) -> int`. Tänk på
+  dubbletter: kolla om annonsen redan finns via Mercell/TED innan du
+  lägger till en källa.
 - **CPV-mappning** — `cpv_codes` lagras råa. En `cpv_labels` JOIN-tabell
   med svenska etiketter (via `cpv-eu`-biblioteket) skulle ge oss sökbar
   kategorisering.
 - **Notifieringar** — e-post/RSS när nya upphandlingar matchar en query.
+- **Fler MCP-verktyg** — t.ex. `similar_tenders(id)` eller en
+  deadline-kalender. Se önskelistan i [`MCP.md`](MCP.md).
 
 Inget bidrag är för litet. Öppna en issue först om du vill diskutera
 innan du kodar.
