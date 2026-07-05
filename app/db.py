@@ -53,9 +53,23 @@ def init_db(db_path: str | Path) -> None:
     conn = connect(db_path)
     try:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        _migrate(conn)
         conn.commit()
     finally:
         conn.close()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply idempotent column migrations to an existing tenders table.
+
+    CREATE TABLE IF NOT EXISTS never adds columns to a table that already
+    exists, so new columns are added here via ALTER TABLE guarded by a
+    PRAGMA check. Cheap enough to run on every init_db().
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(tenders)")}
+    if "winner_name" not in cols:
+        conn.execute("ALTER TABLE tenders ADD COLUMN winner_name TEXT")
+        LOG.info("migrated: added tenders.winner_name column")
 
 
 def upsert_tender(conn: sqlite3.Connection, t: dict) -> None:
@@ -63,16 +77,21 @@ def upsert_tender(conn: sqlite3.Connection, t: dict) -> None:
     # Normalise CPV list to JSON string
     if "cpv_codes" in t and not isinstance(t["cpv_codes"], str):
         t["cpv_codes"] = json.dumps(t["cpv_codes"], ensure_ascii=False)
+    # winner_name is optional (only ted_awards sets it); normalise list→JSON
+    wn = t.get("winner_name")
+    if wn is not None and not isinstance(wn, str):
+        wn = json.dumps(wn, ensure_ascii=False)
+    t = {**t, "winner_name": wn}
     conn.execute(
         """
         INSERT INTO tenders (
             source_system, source_id, tender_url, title, authority,
             cpv_codes, deadline, published_at, description, value,
-            procedure, contract_type, document_type, region, raw_json
+            procedure, contract_type, document_type, region, winner_name, raw_json
         ) VALUES (
             :source_system, :source_id, :tender_url, :title, :authority,
             :cpv_codes, :deadline, :published_at, :description, :value,
-            :procedure, :contract_type, :document_type, :region, :raw_json
+            :procedure, :contract_type, :document_type, :region, :winner_name, :raw_json
         )
         ON CONFLICT(source_system, source_id) DO UPDATE SET
             tender_url=excluded.tender_url,
@@ -87,6 +106,7 @@ def upsert_tender(conn: sqlite3.Connection, t: dict) -> None:
             contract_type=excluded.contract_type,
             document_type=excluded.document_type,
             region=excluded.region,
+            winner_name=excluded.winner_name,
             raw_json=excluded.raw_json,
             fetched_at=CURRENT_TIMESTAMP
         """,

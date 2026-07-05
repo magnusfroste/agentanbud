@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS tenders (
     contract_type TEXT,
     document_type TEXT,
     region TEXT,
+    winner_name TEXT,                      -- JSON list of awarded suppliers (ted_awards only)
     raw_json TEXT,                         -- full source record (for debugging)
     fetched_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(source_system, source_id)

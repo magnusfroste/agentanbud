@@ -437,6 +437,36 @@ async def list_tools() -> list[types.Tool]:
                 }
             },
         ),
+        types.Tool(
+            name="get_winner_history",
+            description=(
+                "Who tends to WIN contracts in a given area — market intelligence from TED "
+                "award notices. Filter by buyer/authority and/or CPV prefix. Returns the "
+                "suppliers ranked by number of awards won, with total awarded value. "
+                "Use this to answer 'is it worth bidding, or does the same supplier always win?'. "
+                "Examples: authority='Trafikverket'; cpv='45' (construction); authority='Region Stockholm', cpv='85'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "authority": {
+                        "type": "string",
+                        "description": "Buyer/authority name (substring match). Example: 'Trafikverket'."
+                    },
+                    "cpv": {
+                        "type": "string",
+                        "description": "CPV code prefix. Examples: '45' (construction), '72' (IT), '85' (health)."
+                    },
+                    "top": {
+                        "type": "integer",
+                        "default": 15,
+                        "minimum": 1,
+                        "maximum": 50,
+                        "description": "How many top winners to return (default 15)."
+                    }
+                }
+            },
+        ),
     ]
 
 
@@ -468,6 +498,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.Content]:
             return await _search_knowledge(conn, arguments)
         elif name == "get_knowledge":
             return await _get_knowledge(conn, arguments)
+        elif name == "get_winner_history":
+            return await _get_winner_history(conn, arguments)
         else:
             return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
     finally:
@@ -489,7 +521,7 @@ async def _search_tenders(conn, args: dict) -> list[types.Content]:
         params.append(f"%{args['authority']}%")
     if args.get("cpv"):
         where.append("cpv_codes LIKE ?")
-        params.append(f'%"{args["cpv"]}')
+        params.append(f'%"{args["cpv"]}%')
 
     if args.get("open_only", True):
         where.append("(deadline IS NULL OR deadline > ?)")
@@ -705,6 +737,88 @@ async def _get_authority(conn, args: dict) -> list[types.Content]:
     return [types.TextContent(type="text", text="\n".join(lines))]
 
 
+async def _get_winner_history(conn, args: dict) -> list[types.Content]:
+    """Aggregate award notices to show who wins in a given area.
+
+    winner_name is a JSON list (framework agreements have several winners),
+    so we parse each row and count per supplier, summing awarded value.
+    """
+    from collections import Counter
+
+    authority = (args.get("authority") or "").strip()
+    cpv = (args.get("cpv") or "").strip()
+    if not authority and not cpv:
+        return [types.TextContent(
+            type="text",
+            text="Ange minst en filter: authority (upphandlare) och/eller cpv (kategori-prefix).",
+        )]
+
+    where = ["source_system = 'ted_awards'", "winner_name IS NOT NULL", "winner_name != ''"]
+    params: list = []
+    if authority:
+        where.append("authority LIKE ?")
+        params.append(f"%{authority}%")
+    if cpv:
+        where.append("cpv_codes LIKE ?")
+        params.append(f'%"{cpv}%')
+
+    rows = conn.execute(
+        f"SELECT winner_name, value FROM tenders WHERE {' AND '.join(where)}",
+        params,
+    ).fetchall()
+
+    if not rows:
+        scope = " och ".join(filter(None, [
+            f"upphandlare '{authority}'" if authority else "",
+            f"CPV '{cpv}'" if cpv else "",
+        ]))
+        return [types.TextContent(
+            type="text",
+            text=f"Inga tilldelningar hittades för {scope}. Prova bredare filter eller kortare namn.",
+        )]
+
+    wins: Counter = Counter()
+    value_by_winner: dict = {}
+    contracts = 0
+    for r in rows:
+        try:
+            winners = json.loads(r[0])
+        except Exception:
+            continue
+        if not winners:
+            continue
+        contracts += 1
+        val = r[1]
+        for w in winners:
+            wins[w] += 1
+            if val:
+                value_by_winner[w] = value_by_winner.get(w, 0.0) + float(val)
+
+    if not wins:
+        return [types.TextContent(type="text", text="Tilldelningar hittades men utan namngivna vinnare.")]
+
+    scope = ", ".join(filter(None, [
+        f"upphandlare '{authority}'" if authority else "",
+        f"CPV-prefix '{cpv}'" if cpv else "",
+    ]))
+    top = min(args.get("top", 15), 50)
+    ranked = wins.most_common(top)
+    lines = [
+        f"**Vem vinner — {scope}**",
+        f"Baserat på {contracts} tilldelningar ({len(wins)} unika leverantörer).",
+        "",
+    ]
+    for i, (w, n) in enumerate(ranked, 1):
+        tot = value_by_winner.get(w)
+        val_str = f" — {tot:,.0f} SEK totalt".replace(",", " ") if tot else ""
+        lines.append(f"{i}. **{w}** — {n} vinst{'er' if n != 1 else ''}{val_str}")
+    lines.append("")
+    lines.append("💡 Tips: en dominerande vinnare kan betyda hård konkurrens — men också "
+                 "att marknaden är öppen för en utmanare. Använd get_authority för att se "
+                 "kommande upphandlingar från samma köpare.")
+    return [types.TextContent(type="text", text="\n".join(lines))]
+
+
 async def _match_profile(conn, args: dict) -> list[types.Content]:
     """Match tenders against a profile: keywords (any-match) + CPV prefixes + regions."""
     where = []
@@ -722,7 +836,7 @@ async def _match_profile(conn, args: dict) -> list[types.Content]:
         cpv_ors = " OR ".join(["cpv_codes LIKE ?" for _ in cpv_prefixes])
         where.append(f"({cpv_ors})")
         for pfx in cpv_prefixes:
-            params.append(f'%"{pfx}')
+            params.append(f'%"{pfx}%')
 
     regions = args.get("regions", [])
     if regions:

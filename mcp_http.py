@@ -88,6 +88,8 @@ async def _dispatch_tool(name: str, arguments: dict) -> list:
             return await mcp_server._search_knowledge(conn, arguments or {})
         if name == "get_knowledge":
             return await mcp_server._get_knowledge(conn, arguments or {})
+        if name == "get_winner_history":
+            return await mcp_server._get_winner_history(conn, arguments or {})
         raise ValueError(f"Unknown tool: {name}")
     finally:
         conn.close()
@@ -198,6 +200,18 @@ def _tool_list() -> list[dict]:
                 "type": "object",
                 "properties": {"id": {"type": "integer"}},
                 "required": ["id"]
+            }
+        },
+        {
+            "name": "get_winner_history",
+            "description": "Who tends to WIN contracts in a given area — market intelligence from TED award notices. Filter by authority and/or CPV prefix; returns suppliers ranked by awards won with total value. Answers 'is it worth bidding, or does the same supplier always win?'. Examples: authority='Trafikverket'; cpv='45'.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "authority": {"type": "string", "description": "Buyer/authority name (substring). Example: 'Trafikverket'."},
+                    "cpv": {"type": "string", "description": "CPV code prefix. '45'=construction, '72'=IT, '85'=health."},
+                    "top": {"type": "integer", "default": 15, "minimum": 1, "maximum": 50, "description": "How many top winners (default 15)."}
+                }
             }
         },
         # NOTE: no write/management tools here by design — the public MCP

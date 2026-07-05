@@ -10,6 +10,7 @@ Agentanbud exponerar sina data via [Model Context Protocol](https://modelcontext
 | `get_tender` | Hämta en specifik upphandling (full beskrivning + länk till originalannons) |
 | `match_profile` | Matcha upphandlingar mot en profil — nyckelord, CPV-prefix, regioner |
 | `get_authority` | Alla upphandlingar från en organisation, t.ex. Trafikverket |
+| `get_winner_history` | Vem brukar vinna? Rankar leverantörer per köpare/CPV med totalt värde |
 | `get_stats` | Databasöversikt + senaste sync |
 | `list_providers` | Datakällor + om ansökan kräver konto |
 | `list_regions` | Län med upphandlingar |
@@ -68,6 +69,14 @@ search_tenders(authority="Uppsala")
 get_tender(id=142)
 ```
 
+### "Vem brukar vinna byggupphandlingar hos Trafikverket? Är det värt att lägga anbud?"
+
+```python
+get_winner_history(authority="Trafikverket", cpv="45")
+# → leverantörer rankade efter antal vinster + totalt tilldelat värde.
+#   En dominerande vinnare = hård konkurrens; jämn spridning = öppen marknad.
+```
+
 ### "Bevaka upphandlingar som matchar vår profil"
 
 ```python
@@ -118,7 +127,7 @@ Agentanbud speglar **publik data** (titlar, beskrivningar, deadlines, CPV-koder)
 
 ### Varför dispatcher-pattern (FlowWink-stil)?
 
-FlowWink har 200+ skills och använder två dispatcher-tools (`search_skills` + `execute_skill`) för att inte slösa context-fönstret på 200 tool-definitioner. Vi har bara **10 verktyg, alla relaterade till samma domän** så vi registrerar dem rakt — enklare för LLM:en att lära sig.
+FlowWink har 200+ skills och använder två dispatcher-tools (`search_skills` + `execute_skill`) för att inte slösa context-fönstret på 200 tool-definitioner. Vi har bara **11 verktyg, alla relaterade till samma domän** så vi registrerar dem rakt — enklare för LLM:en att lära sig.
 
 ### Varför stdio-transport?
 

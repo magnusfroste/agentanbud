@@ -152,6 +152,7 @@ def _map_record(rec: dict) -> dict:
         "contract_type": _extract_swedish(rec.get("cvd-contract-type-lot")),
         "document_type": "Contract Award Notice",
         "region": "Sverige",
+        "winner_name": winner,  # deduped list; upsert serialises to JSON
         "raw_json": json.dumps(rec, ensure_ascii=False),
     }
 

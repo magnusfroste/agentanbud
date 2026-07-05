@@ -378,7 +378,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 args.append(f"%{authority}%")
             if cpv:
                 where.append("cpv_codes LIKE ?")
-                args.append(f'%"{cpv}')
+                args.append(f'%"{cpv}%')
             if q:
                 where.append("(title LIKE ? OR description LIKE ?)")
                 args.extend([f"%{q}%", f"%{q}%"])
@@ -650,6 +650,64 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
                 "by_source": [dict(r) for r in by_source],
                 "top_authorities": [dict(r) for r in top_auth],
                 "recent_syncs": [dict(r) for r in recent],
+            }
+        finally:
+            conn.close()
+
+    @app.get("/api/winners")
+    def winners(
+        authority: Optional[str] = Query(default=None),
+        cpv: Optional[str] = Query(default=None),
+        top: int = Query(default=15, ge=1, le=50),
+    ) -> dict:
+        """Who wins contracts in a given area (from TED award notices).
+
+        Filter by authority and/or cpv prefix. Returns suppliers ranked by
+        number of awards won, with total awarded value. At least one filter
+        is required to keep the aggregation meaningful.
+        """
+        if not authority and not cpv:
+            raise HTTPException(status_code=400, detail="provide authority and/or cpv")
+        conn = connect(db)
+        try:
+            where = ["source_system = 'ted_awards'", "winner_name IS NOT NULL", "winner_name != ''"]
+            args: list = []
+            if authority:
+                where.append("authority LIKE ?")
+                args.append(f"%{authority}%")
+            if cpv:
+                where.append("cpv_codes LIKE ?")
+                args.append(f'%"{cpv}%')
+            rows = conn.execute(
+                f"SELECT winner_name, value FROM tenders WHERE {' AND '.join(where)}", args
+            ).fetchall()
+
+            from collections import Counter
+            wins: Counter = Counter()
+            value_by_winner: dict = {}
+            contracts = 0
+            for r in rows:
+                try:
+                    ws = json.loads(r[0])
+                except Exception:
+                    continue
+                if not ws:
+                    continue
+                contracts += 1
+                for w in ws:
+                    wins[w] += 1
+                    if r[1]:
+                        value_by_winner[w] = value_by_winner.get(w, 0.0) + float(r[1])
+            ranked = [
+                {"winner": w, "wins": n, "total_value": round(value_by_winner.get(w, 0.0))}
+                for w, n in wins.most_common(top)
+            ]
+            return {
+                "authority": authority,
+                "cpv": cpv,
+                "contracts": contracts,
+                "unique_winners": len(wins),
+                "winners": ranked,
             }
         finally:
             conn.close()
