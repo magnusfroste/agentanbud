@@ -5,9 +5,10 @@ Prior Information Notices are early signals: a buyer announces that they
 INTEND to procure something in the near future, before the formal call
 for tenders. For small businesses, this is the earliest possible heads-up.
 
-Subtypes 4 (standard PIN) and 5 (sectoral PIN) cover the main cases.
-Some PINs include an estimated value or expected publication date for the
-future notice — we capture what we can.
+We filter on notice-type (pin-only + the "PIN used as call for competition"
+variants), not the legacy notice-subtype numbers, so this source stays clean
+and doesn't overlap with `ted`. Some PINs include an estimated value or
+expected publication date for the future notice — we capture what we can.
 """
 from __future__ import annotations
 
@@ -30,12 +31,11 @@ DEFAULT_LOOKBACK_DAYS = 90
 DEFAULT_LIMIT = 100
 MAX_PAGES = 50  # PINs are lower volume
 
-# eForms subtypes for Prior Information Notices
-# 4 = PIN (standard directive)
-# 5 = PIN (sectoral directive)
-# 25 = PIN used as call for competition (standard)
-# 26 = PIN used as call for competition (sectoral)
-PIN_SUBTYPES = ["4", "5", "25", "26"]
+# eForms notice-type values for Prior Information Notices.
+# pin-only        = plain prior-information (no immediate call)
+# pin-cfc-standard= PIN used as a call for competition (standard directive)
+# pin-cfc-social  = PIN used as a call for competition (social/other services)
+PIN_NOTICE_TYPES = ["pin-only", "pin-cfc-standard", "pin-cfc-social"]
 
 TED_PIN_FIELDS = [
     "publication-number",
@@ -135,8 +135,8 @@ def _map_record(rec: dict) -> dict:
     }
 
 
-def _build_subtype_query() -> str:
-    parts = [f'notice-subtype = "{s}"' for s in PIN_SUBTYPES]
+def _build_type_query() -> str:
+    parts = [f'notice-type = "{t}"' for t in PIN_NOTICE_TYPES]
     return "(" + " OR ".join(parts) + ")"
 
 
@@ -164,7 +164,7 @@ def walk_notices(
     max_pages: int = MAX_PAGES,
 ) -> Iterator[dict]:
     cutoff = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).strftime("%Y%m%d")
-    query = f"buyer-country = SWE AND publication-date >= {cutoff} AND {_build_subtype_query()}"
+    query = f"buyer-country = SWE AND publication-date >= {cutoff} AND {_build_type_query()}"
 
     for page in range(1, max_pages + 1):
         try:
@@ -198,7 +198,7 @@ def run(db_path: str, lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> int:
                 LOG.warning("ted_pin record %r failed: %s", rec.get("publication-number"), exc)
         conn.commit()
         log_sync(conn, source="ted_pin", status="ok", count=written,
-                 message=f"lookback {lookback_days}d, subtypes {PIN_SUBTYPES}")
+                 message=f"lookback {lookback_days}d, types {PIN_NOTICE_TYPES}")
         LOG.info("ted_pin: wrote/updated %d PIN notices (lookback %dd)", written, lookback_days)
         return written
     except Exception as exc:

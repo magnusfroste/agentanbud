@@ -824,6 +824,46 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             "note": "mercell re-sync started — check /api/stats in ~2 min",
         })
 
+    @app.post("/api/reset-ted")
+    def reset_ted(request: Request, days: int = Query(default=180, ge=1, le=365)):
+        """Purge and rebuild the three TED sources (2026-07 notice-type fix).
+
+        The old scrapers filtered on legacy notice-subtype numbers, which the
+        TED expert-search silently mapped to cn-standard. Result: `ted` mixed
+        awards/PINs in with open tenders, and `ted_awards`/`ted_pin` were 100%
+        duplicates of `ted` with no winner data. The scrapers now filter on
+        notice-type (cn-* / can-* / pin-*). Old rows won't be overwritten by
+        the new (different) publication numbers, so we delete first, then
+        re-sync the three sources with a wider lookback.
+        """
+        _require_admin(request)
+        conn = connect(db)
+        try:
+            deleted = conn.execute(
+                "DELETE FROM tenders WHERE source_system IN ('ted', 'ted_awards', 'ted_pin')"
+            ).rowcount
+            conn.commit()
+        finally:
+            conn.close()
+
+        def resync():
+            import scraper.ted as ted_mod
+            import scraper.ted_awards as awards_mod
+            import scraper.ted_pin as pin_mod
+            for name, mod in (("ted", ted_mod), ("ted_awards", awards_mod), ("ted_pin", pin_mod)):
+                try:
+                    mod.run(db, lookback_days=days)
+                except Exception:
+                    LOG.exception("%s re-sync after reset failed", name)
+
+        threading.Thread(target=resync, daemon=True).start()
+        return JSONResponse({
+            "ok": True,
+            "ted_rows_deleted": deleted,
+            "lookback_days": days,
+            "note": "TED re-sync started (ted, ted_awards, ted_pin) — check /api/stats in ~3-5 min",
+        }, status_code=202)
+
     @app.post("/api/admin/query")
     async def admin_query(request: Request):
         """Read-only SQL access for maintenance and diagnostics.

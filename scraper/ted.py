@@ -5,8 +5,10 @@ The API uses POST with a JSON body containing query + fields + pagination.
 Fields follow the eForms BT-* standard. We extract Swedish titles,
 buyer names, CPV codes, deadlines, values, and procedure types.
 
-Coverage: EU-threshold procurements only (~6500 SWE notices / 90 days).
-Historical data available back to 2016 (208k total SWE notices).
+Coverage: EU-threshold OPEN tenders only. We filter to Contract Notice
+types (cn-*); awards (can-*) and prior-information (pin-*) are handled by
+ted_awards.py / ted_pin.py so each source stays clean and de-duplicated.
+Historical data available back to 2016.
 """
 from __future__ import annotations
 
@@ -28,6 +30,15 @@ DEFAULT_USER_AGENT = "agentanbud/0.1"
 DEFAULT_LOOKBACK_DAYS = 30
 DEFAULT_LIMIT = 100
 MAX_PAGES = 100
+
+# Only real "open tender" notice types belong in this source. Without this
+# filter the query returns everything TED has for Sweden — awards (can-*),
+# prior-information (pin-*), voluntary transparency (veat), qualification
+# systems (qu-sy) — all mislabeled as open tenders. Awards and PINs live in
+# ted_awards / ted_pin; the rest is dropped.
+# cn-standard = standard directive, cn-social = social/other services,
+# cn-desg = design contest.
+CN_NOTICE_TYPES = ["cn-standard", "cn-social", "cn-desg"]
 
 # eForms field names (verified against the API's supported-values list)
 TED_FIELDS = [
@@ -175,7 +186,8 @@ def walk_notices(
 ) -> Iterator[dict]:
     """Yield TED notices for Sweden, paginating until done."""
     cutoff = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).strftime("%Y%m%d")
-    query = f"buyer-country = SWE AND publication-date >= {cutoff}"
+    type_clause = " OR ".join(f'notice-type = "{t}"' for t in CN_NOTICE_TYPES)
+    query = f"buyer-country = SWE AND publication-date >= {cutoff} AND ({type_clause})"
 
     for page in range(1, max_pages + 1):
         try:

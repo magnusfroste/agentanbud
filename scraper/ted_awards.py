@@ -1,16 +1,16 @@
 """
 TED EU Contract Award Notices (CAN) — "who won what".
 
-Uses the same TED v3 Search API as ted.py, but filters to notice-subtype
-values that represent Contract Award Notices (subtypes 16, 17, 18, 19).
+Uses the same TED v3 Search API as ted.py, but filters to the Contract
+Award Notice types (can-standard, can-social).
 
 These notices answer a different question than open tenders: instead of
 "what can I bid on?", they answer "who won the last contract, and at what
 price?" — market intelligence for small businesses.
 
-Winner fields (winner-name, winner-country, result-value-lot) are requested
-but often empty in TED's search response — the full data lives in the notice
-XML body, not the search index. We store what we get.
+Winner fields (winner-name, winner-country, result-value-lot) come back
+populated in the search index for these types: verified ~86% of SWE awards
+carry a winner-name and ~82% a decision date.
 """
 from __future__ import annotations
 
@@ -33,12 +33,13 @@ DEFAULT_LOOKBACK_DAYS = 90  # awards are published after the decision; give wide
 DEFAULT_LIMIT = 100
 MAX_PAGES = 100
 
-# eForms subtypes for Contract Award Notices
-# 16 = CAN (standard directive, supplies/services)
-# 17 = CAN (sectoral directive)
-# 18 = CAN (concessions)
-# 19 = CAN (defence)
-CAN_SUBTYPES = ["16", "17", "18", "19"]
+# eForms notice-type values for Contract Award Notices. The old code
+# filtered on notice-subtype = "16".."19", which the TED expert-search
+# silently treats as cn-standard (open tenders) — so this source used to be
+# 100% duplicates of `ted` with zero winner data. notice-type is the correct
+# field. can-standard = standard/sectoral awards, can-social = social/other
+# services. (can-desg design-contest results exist but are ~0 for SE.)
+CAN_NOTICE_TYPES = ["can-standard", "can-social"]
 
 # Fields we want from award notices (all verified working against the API)
 TED_AWARD_FIELDS = [
@@ -155,9 +156,9 @@ def _map_record(rec: dict) -> dict:
     }
 
 
-def _build_subtype_query() -> str:
-    """Build OR clause for CAN subtypes."""
-    parts = [f'notice-subtype = "{s}"' for s in CAN_SUBTYPES]
+def _build_type_query() -> str:
+    """Build OR clause for CAN notice types."""
+    parts = [f'notice-type = "{t}"' for t in CAN_NOTICE_TYPES]
     return "(" + " OR ".join(parts) + ")"
 
 
@@ -190,7 +191,7 @@ def walk_notices(
     max_pages: int = MAX_PAGES,
 ) -> Iterator[dict]:
     cutoff = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).strftime("%Y%m%d")
-    query = f"buyer-country = SWE AND publication-date >= {cutoff} AND {_build_subtype_query()}"
+    query = f"buyer-country = SWE AND publication-date >= {cutoff} AND {_build_type_query()}"
 
     for page in range(1, max_pages + 1):
         try:
@@ -224,7 +225,7 @@ def run(db_path: str, lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> int:
                 LOG.warning("ted_awards record %r failed: %s", rec.get("publication-number"), exc)
         conn.commit()
         log_sync(conn, source="ted_awards", status="ok", count=written,
-                 message=f"lookback {lookback_days}d, subtypes {CAN_SUBTYPES}")
+                 message=f"lookback {lookback_days}d, types {CAN_NOTICE_TYPES}")
         LOG.info("ted_awards: wrote/updated %d award notices (lookback %dd)", written, lookback_days)
         return written
     except Exception as exc:
