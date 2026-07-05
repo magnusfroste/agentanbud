@@ -1,6 +1,6 @@
-# Agentanbud — MCP server (för Claude Code, Kilo Code, Cline m.fl.)
+# Agentanbud — MCP server (för Claude Code, Codex, Antigravity, Cursor m.fl.)
 
-Agentanbud exponerar sina data via [Model Context Protocol](https://modelcontextprotocol.io/) så att AI-agenter (Claude Code, Kilo Code, Cline, OpenAI Assistants m.fl.) kan söka och läsa svenska offentliga upphandlingar direkt i sina arbetsflöden.
+Agentanbud exponerar sina data via [Model Context Protocol](https://modelcontextprotocol.io/) så att AI-agenter (Claude Code, Claude Cowork, Codex, Google Antigravity, Cursor, Kilo Code, Cline m.fl.) kan söka och läsa svenska offentliga upphandlingar direkt i sina arbetsflöden.
 
 ## Verktyg
 
@@ -165,6 +165,27 @@ claude mcp add --transport http agentanbud https://www.agentanbud.se/mcp
 
 **Claude Cowork**: Inställningar → Connectors → Add custom connector →
 URL `https://www.agentanbud.se/mcp`.
+
+**Codex (OpenAI)** — lägg till i `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.agentanbud]
+url = "https://www.agentanbud.se/mcp"
+```
+
+**Antigravity (Google)** — Antigravity 2.0 (IDE) och Antigravity CLI (som
+ersatte Gemini CLI 2026) delar `~/.gemini/config/mcp_config.json`. Obs:
+Antigravity använder `serverUrl`, inte `url`:
+
+```json
+{
+  "mcpServers": {
+    "agentanbud": {
+      "serverUrl": "https://www.agentanbud.se/mcp"
+    }
+  }
+}
+```
 
 **Övriga klienter** (Cursor, Windsurf, Kilo Code, Cline m.fl.):
 

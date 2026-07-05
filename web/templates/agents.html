@@ -31,7 +31,7 @@
     </div>
     <div class="path-badge">Mest kraft</div>
     <h3>2. MCP — för agentverktyg</h3>
-    <p>Claude Cowork, Claude Code, Kilo Code, VS Code, Cursor — anslut med URL, verktygen listas automatiskt. Inga API-nycklar.</p>
+    <p>Claude Cowork, Claude Code, Codex, Antigravity, Cursor, VS Code — anslut med URL, verktygen listas automatiskt. Inga API-nycklar.</p>
   </a>
 
   <a href="#rest" class="path-card">
@@ -160,7 +160,7 @@ Börja alltid med att hämta /api/stats för aktuell översikt.</code></pre>
     </div>
     <div>
       <h2>MCP — för agentverktyg</h2>
-      <p class="muted" style="margin: 0.25rem 0 0 0;">Claude Cowork, Claude Code, Kilo Code, VS Code, Cursor, Cline — verktygen listas automatiskt när du anslutit.</p>
+      <p class="muted" style="margin: 0.25rem 0 0 0;">Claude Cowork, Claude Code, Codex, Antigravity, Cursor, VS Code, Kilo Code, Cline — verktygen listas automatiskt när du anslutit.</p>
     </div>
   </div>
 
@@ -172,6 +172,8 @@ Börja alltid med att hämta /api/stats för aktuell översikt.</code></pre>
       <button class="code-tab active" data-tab="remote">Remote (URL)</button>
       <button class="code-tab" data-tab="cowork">Claude Cowork</button>
       <button class="code-tab" data-tab="claude">Claude Code</button>
+      <button class="code-tab" data-tab="codex">Codex (OpenAI)</button>
+      <button class="code-tab" data-tab="antigravity">Antigravity (Google)</button>
       <button class="code-tab" data-tab="kilo">Kilo Code</button>
       <button class="code-tab" data-tab="cline">Cline</button>
       <button class="code-tab" data-tab="docker">Docker (lokal)</button>
@@ -188,7 +190,7 @@ Börja alltid med att hämta /api/stats för aktuell översikt.</code></pre>
     }
   }
 }</code></pre>
-        <p class="muted">Klienter med stöd: Claude Cowork, Claude Code, Cursor, VS Code, Windsurf och andra MCP-klienter.</p>
+        <p class="muted">Klienter med stöd: Claude Cowork, Claude Code, Codex (OpenAI), Antigravity (Google), Cursor, VS Code, Windsurf och andra MCP-klienter.</p>
       </div>
       <div class="code-content hidden" id="tab-cowork">
         <pre><code>// Claude Cowork (skrivbordsappen)
@@ -201,6 +203,25 @@ URL:  https://www.agentanbud.se/mcp</code></pre>
         <pre><code># Ett kommando i terminalen:
 claude mcp add --transport http agentanbud https://www.agentanbud.se/mcp</code></pre>
         <p class="muted">Verifiera med <code>/mcp</code> inne i Claude Code — verktygen listas automatiskt.</p>
+      </div>
+      <div class="code-content hidden" id="tab-codex">
+        <pre><code># Codex CLI — lägg till i ~/.codex/config.toml:
+[mcp_servers.agentanbud]
+url = "https://www.agentanbud.se/mcp"</code></pre>
+        <p class="muted">Codex stödjer både stdio och Streamable HTTP. Verktygen listas automatiskt vid start.</p>
+      </div>
+      <div class="code-content hidden" id="tab-antigravity">
+        <pre><code>// Google Antigravity (IDE + CLI, drivs av Gemini)
+// Fil: ~/.gemini/config/mcp_config.json
+// OBS: Antigravity använder "serverUrl", inte "url".
+{
+  "mcpServers": {
+    "agentanbud": {
+      "serverUrl": "https://www.agentanbud.se/mcp"
+    }
+  }
+}</code></pre>
+        <p class="muted">Samma config delas av Antigravity 2.0 (IDE) och Antigravity CLI (ersatte Gemini CLI 2026).</p>
       </div>
       <div class="code-content hidden" id="tab-kilo">
         <pre><code>// Kilo Code → Inställningar → MCP Servers → Add
