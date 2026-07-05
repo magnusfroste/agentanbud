@@ -56,6 +56,29 @@
   </div>
 </section>
 
+<!-- VEM VINNER -->
+{% if top_winners %}
+<section class="insight-section">
+  <div class="flex between items-center mb-2">
+    <h2 style="margin: 0;">Vem vinner i Sverige?</h2>
+    <a href="/browse?source=ted_awards" class="muted">Visa tilldelningar →</a>
+  </div>
+  <p class="muted">Leverantörer rankade efter antal vunna kontrakt (TED-tilldelningar). {{ "{:,}".format(awards_total).replace(",", " ") }} tilldelningar · {{ unique_winners }} unika vinnare{% if awarded_value_total %} · {{ format_money(awarded_value_total) }} tilldelat{% endif %}.</p>
+  <div class="bar-chart">
+    {% for w in top_winners %}
+    <div class="bar-row">
+      <span class="bar-label">{{ w.winner[:32] }}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width: {{ w.pct }}%; background: #8b5cf6"></div>
+        <span class="bar-value">{{ w.n }}{% if w.value %} · {{ format_money(w.value) }}{% endif %}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="muted" style="margin-top: 0.75rem; font-size: 0.85rem;">💡 En dominerande vinnare kan betyda hård konkurrens — eller en marknad öppen för en utmanare. Fråga en agent "vem brukar vinna X hos Y?" via <a href="/agenter">MCP</a>.</p>
+</section>
+{% endif %}
+
 <!-- BRANSCHFÖRDELNING -->
 {% if cpv_top %}
 <section class="insight-section">

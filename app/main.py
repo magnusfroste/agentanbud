@@ -234,6 +234,43 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 for r in top_auth_rows
             ]
 
+            # Who wins? Market intelligence from award notices. winner_name is a
+            # JSON list (framework agreements have several winners), so we
+            # aggregate in Python across all awards — not via the row-capped
+            # admin query. TED's 1-SEK placeholder is treated as unreported.
+            from collections import Counter as _Counter
+            award_rows = conn.execute(
+                "SELECT winner_name, value FROM tenders "
+                "WHERE source_system = 'ted_awards' "
+                "AND winner_name IS NOT NULL AND winner_name != ''"
+            ).fetchall()
+            win_counter: _Counter = _Counter()
+            win_value: dict = {}
+            awards_total = 0
+            awarded_value_total = 0.0
+            for r in award_rows:
+                try:
+                    ws = json.loads(r["winner_name"])
+                except Exception:
+                    continue
+                if not ws:
+                    continue
+                awards_total += 1
+                v = r["value"] if (r["value"] and r["value"] > 1) else None
+                if v:
+                    awarded_value_total += float(v)
+                for w in ws:
+                    win_counter[w] += 1
+                    if v:
+                        win_value[w] = win_value.get(w, 0.0) + float(v)
+            max_win = win_counter.most_common(1)[0][1] if win_counter else 1
+            top_winners = [
+                {"winner": w, "n": n, "pct": int(n / max_win * 100),
+                 "value": win_value.get(w, 0.0)}
+                for w, n in win_counter.most_common(10)
+            ]
+            unique_winners = len(win_counter)
+
             # CPV top categories (first 2 digits = division)
             cpv_rows = conn.execute(
                 "SELECT cpv_codes FROM tenders WHERE cpv_codes IS NOT NULL AND cpv_codes != ''"
@@ -346,6 +383,8 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 total=total, open_count=open_count, total_value=total_value,
                 biggest=biggest, closing_soon=closing_soon, authority_count=authority_count,
                 top_authorities=top_authorities, cpv_top=cpv_top,
+                top_winners=top_winners, awards_total=awards_total,
+                unique_winners=unique_winners, awarded_value_total=awarded_value_total,
                 deadline_weekday=deadline_weekday, recent_tenders=recent_tenders,
                 recent_syncs=recent_syncs, schedule=get_schedule(),
                 next_run_iso=nr.strftime("%Y-%m-%d %H:%M UTC") if nr else "—",
