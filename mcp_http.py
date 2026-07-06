@@ -90,6 +90,10 @@ async def _dispatch_tool(name: str, arguments: dict) -> list:
             return await mcp_server._get_knowledge(conn, arguments or {})
         if name == "get_winner_history":
             return await mcp_server._get_winner_history(conn, arguments or {})
+        if name == "similar_tenders":
+            return await mcp_server._similar_tenders(conn, arguments or {})
+        if name == "deadline_calendar":
+            return await mcp_server._deadline_calendar(conn, arguments or {})
         raise ValueError(f"Unknown tool: {name}")
     finally:
         conn.close()
@@ -211,6 +215,32 @@ def _tool_list() -> list[dict]:
                     "authority": {"type": "string", "description": "Buyer/authority name (substring). Example: 'Trafikverket'."},
                     "cpv": {"type": "string", "description": "CPV code prefix. '45'=construction, '72'=IT, '85'=health."},
                     "top": {"type": "integer", "default": 15, "minimum": 1, "maximum": 50, "description": "How many top winners (default 15)."}
+                }
+            }
+        },
+        {
+            "name": "similar_tenders",
+            "description": "Find tenders similar to a given one — same CPV categories and/or same buyer. Use after search_tenders/get_tender when the user likes one and wants more like it. Example: similar_tenders(id=142).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer", "description": "Tender id to find similar ones for."},
+                    "open_only": {"type": "boolean", "default": True, "description": "If true (default), only open tenders."},
+                    "limit": {"type": "integer", "default": 10, "minimum": 1, "maximum": 30, "description": "Max results (default 10)."}
+                },
+                "required": ["id"]
+            }
+        },
+        {
+            "name": "deadline_calendar",
+            "description": "Upcoming tender deadlines within N days, soonest first — for planning what to bid on. Optional CPV/buyer filter; groups by this week / this month. Example: deadline_calendar(days=14, cpv='72').",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "default": 30, "minimum": 1, "maximum": 365, "description": "Look-ahead window in days (default 30)."},
+                    "cpv": {"type": "string", "description": "Optional CPV prefix. '45'=construction, '72'=IT."},
+                    "authority": {"type": "string", "description": "Optional buyer name (substring)."},
+                    "limit": {"type": "integer", "default": 25, "minimum": 1, "maximum": 100, "description": "Max tenders to list (default 25)."}
                 }
             }
         },

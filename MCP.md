@@ -8,6 +8,8 @@ Agentanbud exponerar sina data via [Model Context Protocol](https://modelcontext
 |---|---|
 | `search_tenders` | Sök upphandlingar (fritext, källa, upphandlare, CPV, öppen/stängd) |
 | `get_tender` | Hämta en specifik upphandling (full beskrivning + länk till originalannons) |
+| `similar_tenders` | Hitta upphandlingar som liknar en given (delad CPV + samma köpare) |
+| `deadline_calendar` | Kommande deadlines inom N dagar, snarast först — planera anbud |
 | `match_profile` | Matcha upphandlingar mot en profil — nyckelord, CPV-prefix, regioner |
 | `get_authority` | Alla upphandlingar från en organisation, t.ex. Trafikverket |
 | `get_winner_history` | Vem brukar vinna? Rankar leverantörer per köpare/CPV med totalt värde |
@@ -77,6 +79,20 @@ get_winner_history(authority="Trafikverket", cpv="45")
 #   En dominerande vinnare = hård konkurrens; jämn spridning = öppen marknad.
 ```
 
+### "Den här upphandlingen passar oss — finns fler som liknar den?"
+
+```python
+similar_tenders(id=142)
+# → upphandlingar med samma CPV-kategori och/eller köpare, rankade.
+```
+
+### "Vad stänger de närmaste två veckorna inom IT?"
+
+```python
+deadline_calendar(days=14, cpv="72")
+# → deadlines snarast först, med hur många som stänger denna vecka/månad.
+```
+
 ### "Bevaka upphandlingar som matchar vår profil"
 
 ```python
@@ -127,7 +143,7 @@ Agentanbud speglar **publik data** (titlar, beskrivningar, deadlines, CPV-koder)
 
 ### Varför dispatcher-pattern (FlowWink-stil)?
 
-FlowWink har 200+ skills och använder två dispatcher-tools (`search_skills` + `execute_skill`) för att inte slösa context-fönstret på 200 tool-definitioner. Vi har bara **11 verktyg, alla relaterade till samma domän** så vi registrerar dem rakt — enklare för LLM:en att lära sig.
+FlowWink har 200+ skills och använder två dispatcher-tools (`search_skills` + `execute_skill`) för att inte slösa context-fönstret på 200 tool-definitioner. Vi har bara **13 verktyg, alla relaterade till samma domän** så vi registrerar dem rakt — enklare för LLM:en att lära sig.
 
 ### Varför stdio-transport?
 

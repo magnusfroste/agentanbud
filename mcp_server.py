@@ -24,7 +24,7 @@ import os
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -467,6 +467,41 @@ async def list_tools() -> list[types.Tool]:
                 }
             },
         ),
+        types.Tool(
+            name="similar_tenders",
+            description=(
+                "Find tenders similar to a given one — same CPV categories and/or same buyer. "
+                "Use after search_tenders/get_tender when the user likes one and wants more like it. "
+                "Ranks by shared CPV codes (weighted) plus a bonus for the same authority. "
+                "Example: similar_tenders(id=142)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer", "description": "Tender id to find similar ones for (from search_tenders)."},
+                    "open_only": {"type": "boolean", "default": True, "description": "If true (default), only open tenders."},
+                    "limit": {"type": "integer", "default": 10, "minimum": 1, "maximum": 30, "description": "Max results (default 10)."}
+                },
+                "required": ["id"]
+            },
+        ),
+        types.Tool(
+            name="deadline_calendar",
+            description=(
+                "Upcoming tender deadlines within N days, soonest first — for planning what to bid on. "
+                "Optionally filter by CPV prefix and/or buyer. Groups by this week / this month so an "
+                "agent can flag urgency. Example: deadline_calendar(days=14, cpv='72')."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "default": 30, "minimum": 1, "maximum": 365, "description": "Look-ahead window in days (default 30)."},
+                    "cpv": {"type": "string", "description": "Optional CPV prefix filter. '45'=construction, '72'=IT."},
+                    "authority": {"type": "string", "description": "Optional buyer name (substring match)."},
+                    "limit": {"type": "integer", "default": 25, "minimum": 1, "maximum": 100, "description": "Max tenders to list (default 25)."}
+                }
+            },
+        ),
     ]
 
 
@@ -500,6 +535,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.Content]:
             return await _get_knowledge(conn, arguments)
         elif name == "get_winner_history":
             return await _get_winner_history(conn, arguments)
+        elif name == "similar_tenders":
+            return await _similar_tenders(conn, arguments)
+        elif name == "deadline_calendar":
+            return await _deadline_calendar(conn, arguments)
         else:
             return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
     finally:
@@ -819,6 +858,143 @@ async def _get_winner_history(conn, args: dict) -> list[types.Content]:
     lines.append("💡 Tips: en dominerande vinnare kan betyda hård konkurrens — men också "
                  "att marknaden är öppen för en utmanare. Använd get_authority för att se "
                  "kommande upphandlingar från samma köpare.")
+    return [types.TextContent(type="text", text="\n".join(lines))]
+
+
+def _as_cpv_list(raw) -> list:
+    """Normalise a cpv_codes cell (JSON string or list) to a list of str."""
+    if isinstance(raw, list):
+        return [str(c) for c in raw]
+    if isinstance(raw, str) and raw:
+        try:
+            return [str(c) for c in json.loads(raw)]
+        except Exception:
+            return []
+    return []
+
+
+async def _similar_tenders(conn, args: dict) -> list[types.Content]:
+    """Find tenders similar to a given one by shared CPV codes + same buyer."""
+    tid = args.get("id")
+    if not isinstance(tid, int):
+        return [types.TextContent(type="text", text="Missing or invalid 'id' (must be integer).")]
+    src_row = conn.execute(
+        "SELECT id, title, authority, cpv_codes FROM tenders WHERE id = ?", (tid,)
+    ).fetchone()
+    if not src_row:
+        return [types.TextContent(type="text", text=f"Tender {tid} not found.")]
+    src = _row_dict(src_row)
+    src_cpvs = _as_cpv_list(src.get("cpv_codes"))
+    src_auth = (src.get("authority") or "").strip()
+
+    # Candidate fetch: share a CPV group (first 4 digits) OR same buyer.
+    prefixes = sorted({c[:4] for c in src_cpvs if c})
+    clauses, params = [], []
+    for p in prefixes:
+        clauses.append("cpv_codes LIKE ?")
+        params.append(f'%"{p}%')
+    if src_auth:
+        clauses.append("authority = ?")
+        params.append(src_auth)
+    if not clauses:
+        return [types.TextContent(
+            type="text",
+            text=f"Upphandling #{tid} saknar CPV-koder och upphandlare — går inte att hitta liknande.")]
+
+    where = f"({' OR '.join(clauses)}) AND id != ?"
+    params.append(tid)
+    if args.get("open_only", True):
+        where += " AND (deadline IS NULL OR deadline > ?)"
+        params.append(datetime.now().isoformat(timespec="seconds"))
+
+    rows = conn.execute(
+        f"""SELECT id, source_system, source_id, tender_url, title, authority,
+                   cpv_codes, deadline, value, region
+            FROM tenders WHERE {where} LIMIT 300""",
+        params,
+    ).fetchall()
+
+    src_set = set(src_cpvs)
+    scored = []
+    for r in rows:
+        t = _row_dict(r)
+        shared = len(src_set & set(_as_cpv_list(t.get("cpv_codes"))))
+        score = shared * 2 + (3 if (t.get("authority") or "").strip() == src_auth and src_auth else 0)
+        if score > 0:
+            scored.append((score, t))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    limit = min(args.get("limit", 10), 30)
+    top = [t for _, t in scored[:limit]]
+
+    if not top:
+        return [types.TextContent(
+            type="text",
+            text=f"Inga liknande upphandlingar hittades för #{tid}. Prova open_only=false för att inkludera stängda.")]
+
+    header = f"{len(top)} upphandlingar liknande #{tid} — {src.get('title') or '(utan titel)'}"[:120]
+    body = "\n\n---\n\n".join(_format_tender(t) for t in top)
+    return [types.TextContent(type="text", text=f"{header}\n\n{body}")]
+
+
+async def _deadline_calendar(conn, args: dict) -> list[types.Content]:
+    """Upcoming deadlines within N days, soonest first, with urgency buckets."""
+    days = min(max(int(args.get("days", 30)), 1), 365)
+    now = datetime.now()
+    cutoff = (now + timedelta(days=days)).isoformat(timespec="seconds")
+
+    where = ["deadline IS NOT NULL", "deadline > ?", "deadline <= ?"]
+    params: list = [now.isoformat(timespec="seconds"), cutoff]
+    cpv = (args.get("cpv") or "").strip()
+    authority = (args.get("authority") or "").strip()
+    if cpv:
+        where.append("cpv_codes LIKE ?")
+        params.append(f'%"{cpv}%')
+    if authority:
+        where.append("authority LIKE ?")
+        params.append(f"%{authority}%")
+
+    limit = min(int(args.get("limit", 25)), 100)
+    rows = conn.execute(
+        f"""SELECT id, source_system, source_id, tender_url, title, authority,
+                   cpv_codes, deadline, value, region
+            FROM tenders WHERE {' AND '.join(where)}
+            ORDER BY deadline ASC LIMIT ?""",
+        params + [limit],
+    ).fetchall()
+
+    scope = ", ".join(filter(None, [
+        f"CPV '{cpv}'" if cpv else "",
+        f"upphandlare '{authority}'" if authority else "",
+    ]))
+    scope_str = f" ({scope})" if scope else ""
+    if not rows:
+        return [types.TextContent(
+            type="text",
+            text=f"Inga upphandlingar stänger inom {days} dagar{scope_str}.")]
+
+    week = month = 0
+    tender_lines = []
+    for r in rows:
+        t = _row_dict(r)
+        d = _days_until(t.get("deadline"))
+        if d is None:
+            continue
+        if d <= 7:
+            week += 1
+        if d <= 30:
+            month += 1
+        flag = "⚠️ " if d <= 3 else ""
+        value = f" · {t['value']:,.0f} SEK".replace(",", " ") if t.get("value") else ""
+        tender_lines.append(
+            f"- {flag}**{d}d** — {(t.get('title') or '(utan titel)')[:70]} "
+            f"[{t.get('authority') or '—'}]{value}  (#{t['id']})"
+        )
+    lines = [
+        f"**Deadlines inom {days} dagar{scope_str}** — {len(tender_lines)} upphandlingar, snarast först:",
+        f"⏰ {week} stänger inom en vecka, {month} inom en månad.",
+        "",
+        *tender_lines,
+    ]
     return [types.TextContent(type="text", text="\n".join(lines))]
 
 

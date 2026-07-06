@@ -140,9 +140,10 @@ Kilo Code m.fl. med bara en URL — inga nycklar, verktygen listas automatiskt.
 claude mcp add --transport http agentanbud https://www.agentanbud.se/mcp
 ```
 
-**11 läsverktyg:** `search_tenders`, `get_tender`, `match_profile`,
-`get_winner_history`, `get_authority`, `get_stats`, `list_providers`,
-`list_regions`, `list_cpv_top`, `search_knowledge`, `get_knowledge`.
+**13 läsverktyg:** `search_tenders`, `get_tender`, `similar_tenders`,
+`deadline_calendar`, `match_profile`, `get_winner_history`, `get_authority`,
+`get_stats`, `list_providers`, `list_regions`, `list_cpv_top`,
+`search_knowledge`, `get_knowledge`.
 
 `get_winner_history` är marknadsintelligensen: fråga *"vem brukar vinna
 byggupphandlingar hos Trafikverket?"* och få leverantörer rankade efter
@@ -251,8 +252,8 @@ Vi vill ha bidrag. Speciellt:
   med svenska etiketter (via `cpv-eu`-biblioteket) skulle ge oss sökbar
   kategorisering.
 - **Notifieringar** — e-post/RSS när nya upphandlingar matchar en query.
-- **Fler MCP-verktyg** — t.ex. `similar_tenders(id)` eller en
-  deadline-kalender. Se önskelistan i [`MCP.md`](MCP.md).
+- **Fler MCP-verktyg** — t.ex. `similar_authorities` eller anbuds-mallar.
+  Se önskelistan i [`MCP.md`](MCP.md).
 
 Inget bidrag är för litet. Öppna en issue först om du vill diskutera
 innan du kodar.
