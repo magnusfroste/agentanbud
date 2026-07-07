@@ -2742,7 +2742,11 @@ pre code {
 }
 
 /* Compact 30-day variant: many thin bars, sparse labels (analytics) */
-.weekday-chart-30 { gap: 3px; height: 140px; overflow-x: auto; }
+.weekday-chart-30 { gap: 3px; height: 140px; overflow: hidden; }
+/* min-width:0 lets the 30 flex columns shrink to fit — without it the
+   rotated nowrap labels force a min width and the chart overflows to the
+   right of the card. */
+.weekday-chart-30 .weekday-col { min-width: 0; }
 .weekday-chart-30 .weekday-bar { max-width: none; border-radius: 2px 2px 0 0; }
 .weekday-chart-30 .weekday-label {
   font-size: 0.6rem;
