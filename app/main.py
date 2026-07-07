@@ -184,6 +184,20 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
     env.filters["format_num"] = _num
 
+    # Cache-busting: a short hash of the static assets, computed once at
+    # startup. When style.css / app.js change and are redeployed the hash
+    # changes, so every visitor's browser (and Cloudflare) fetches the new
+    # file instead of a stale cached copy. Exposed to all templates as
+    # {{ asset_ver }} and appended to the static URLs in base.html.
+    import hashlib
+    _h = hashlib.md5()
+    for _name in ("style.css", "app.js"):
+        try:
+            _h.update((STATIC_DIR / _name).read_bytes())
+        except Exception:
+            pass
+    env.globals["asset_ver"] = _h.hexdigest()[:10]
+
     def render(template: str, **ctx) -> str:
         tpl = env.get_template(template)
         return tpl.render(request=ctx.pop("request", None), **ctx)
