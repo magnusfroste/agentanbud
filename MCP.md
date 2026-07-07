@@ -19,9 +19,20 @@ Agentanbud exponerar sina data via [Model Context Protocol](https://modelcontext
 | `list_cpv_top` | Vanligaste CPV-kategorierna i databasen |
 | `search_knowledge` | Sök i kunskapsbanken (hållbarhetskriterier + Q&A) |
 | `get_knowledge` | Hämta ett kunskapsobjekt i detalj |
+| `list_posts` | Lista publicerade blogginlägg (nyast först) |
+| `get_post` | Hämta ett blogginlägg + engagemangsstatistik |
+| `get_post_stats` | Visningar, läste-hela och läs-grad per inlägg |
 
-Den publika MCP-endpointen är **read-only** — skriv-/adminåtgärder ligger bakom
-nyckel i REST-API:t. (Stdio-servern för lokal körning har även `sync_now`.)
+**Nyckel-skyddade skrivverktyg** (kräver `X-Admin-Key`-header, exponeras bara då):
+
+| Tool | Beskrivning |
+|---|---|
+| `create_post` | Publicera ett nytt blogginlägg (Markdown) |
+| `update_post` | Uppdatera/avpublicera ett inlägg |
+
+De 16 läsverktygen är alltid öppna. Skrivverktygen (blogg) kräver nyckeln —
+skickas som `X-Admin-Key`-header i MCP-klientens config. Övriga skriv-/adminåtgärder
+går via REST. (Stdio-servern för lokal körning har även `sync_now`.)
 
 ---
 
@@ -93,6 +104,26 @@ deadline_calendar(days=14, cpv="72")
 # → deadlines snarast först, med hur många som stänger denna vecka/månad.
 ```
 
+### "Skriv dagens blogginlägg om offentlig upphandling" (kräver admin-nyckel)
+
+```python
+# 1. Se vad läsarna gillade sist — styr ämnesvalet
+get_post_stats()
+# 2. Browsa nyheter + sök relevanta upphandlingar (search_tenders, get_winner_history …)
+# 3. Publicera
+create_post(
+    title="Rekordmånga IT-ramavtal tilldelas Q3",
+    summary="Kort sammanfattning för listvyn och social delning.",
+    body_md="## Vad händer\n\nText i **Markdown** …",
+    tags=["IT", "ramavtal"],
+)
+# → publiceras direkt på https://www.agentanbud.se/blogg/{slug}
+```
+
+En agent kan alltså köra en daglig loop: `get_post_stats` (vad engagerade) →
+browsa/sök → `create_post`. Läs-graden (hur många som scrollade till slutet)
+blir input till nästa ämnesval.
+
 ### "Bevaka upphandlingar som matchar vår profil"
 
 ```python
@@ -143,7 +174,7 @@ Agentanbud speglar **publik data** (titlar, beskrivningar, deadlines, CPV-koder)
 
 ### Varför dispatcher-pattern (FlowWink-stil)?
 
-FlowWink har 200+ skills och använder två dispatcher-tools (`search_skills` + `execute_skill`) för att inte slösa context-fönstret på 200 tool-definitioner. Vi har bara **13 verktyg, alla relaterade till samma domän** så vi registrerar dem rakt — enklare för LLM:en att lära sig.
+FlowWink har 200+ skills och använder två dispatcher-tools (`search_skills` + `execute_skill`) för att inte slösa context-fönstret på 200 tool-definitioner. Vi har **16 öppna läsverktyg + 2 nyckel-skyddade skrivverktyg**, alla relaterade till samma domän, så vi registrerar dem rakt — enklare för LLM:en att lära sig.
 
 ### Varför stdio-transport?
 

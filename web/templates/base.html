@@ -64,7 +64,7 @@
       {
         "@type": "Question",
         "name": "Kan AI-agenter använda Agentanbud?",
-        "acceptedAnswer": {"@type": "Answer", "text": "Ja. Agentanbud har en MCP-server med 13 läsverktyg (search_tenders, get_tender, similar_tenders, deadline_calendar, get_stats, list_providers, list_regions, list_cpv_top, get_authority, match_profile, get_winner_history, search_knowledge, get_knowledge) som låter Claude Code, Claude Cowork, Codex, Google Antigravity, Cursor och andra MCP-klienter söka och läsa upphandlingar direkt via https://www.agentanbud.se/mcp."}
+        "acceptedAnswer": {"@type": "Answer", "text": "Ja. Agentanbud har en MCP-server med 16 öppna läsverktyg (search_tenders, get_tender, similar_tenders, deadline_calendar, get_stats, list_providers, list_regions, list_cpv_top, get_authority, match_profile, get_winner_history, search_knowledge, get_knowledge, list_posts, get_post, get_post_stats) plus 2 nyckel-skyddade skrivverktyg för bloggen (create_post, update_post) som låter Claude Code, Claude Cowork, Codex, Google Antigravity, Cursor och andra MCP-klienter söka, läsa och publicera direkt via https://www.agentanbud.se/mcp."}
       },
       {
         "@type": "Question",
@@ -80,6 +80,7 @@
 
   <link rel="stylesheet" href="/static/style.css" />
   <script defer src="/static/app.js"></script>
+  {% block head_extra %}{% endblock %}
 </head>
 <body>
   <a class="skip-link" href="#main">Hoppa till innehåll</a>
@@ -95,6 +96,7 @@
         <a href="/dashboard" class="{% set p=request.url.path if request else '' %}{% if p.startswith('/dashboard') %}active{% endif %}">Insikter</a>
         <a href="/providers" class="{% set p=request.url.path if request else '' %}{% if p.startswith('/providers') %}active{% endif %}">Providers</a>
         <a href="/agenter" class="{% set p=request.url.path if request else '' %}{% if p.startswith('/agenter') %}active{% endif %}">Agenter</a>
+        <a href="/blogg" class="{% set p=request.url.path if request else '' %}{% if p.startswith('/blogg') %}active{% endif %}">Blogg</a>
         <a href="/kunskap" class="{% set p=request.url.path if request else '' %}{% if p.startswith('/kunskap') %}active{% endif %}">Kunskap</a>
         <button id="theme-toggle" class="theme-toggle" aria-label="Växla mörkt/ljust läge" title="Mörkt/ljust läge">◐</button>
      </nav>

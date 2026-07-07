@@ -157,3 +157,96 @@ def upsert_knowledge(conn: sqlite3.Connection, k: dict) -> None:
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# ----- Blog helpers ---------------------------------------------------------
+
+import re as _re
+
+
+def slugify(text: str) -> str:
+    """Make a URL-safe slug from a title. Swedish å/ä/ö → a/a/o."""
+    s = (text or "").strip().lower()
+    for a, b in (("å", "a"), ("ä", "a"), ("ö", "o"), ("é", "e"), ("ü", "u")):
+        s = s.replace(a, b)
+    s = _re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s[:80] or "inlagg"
+
+
+def unique_slug(conn: sqlite3.Connection, base: str, exclude_id: int | None = None) -> str:
+    """Return `base`, or base-2, base-3… if taken by another post."""
+    slug = base
+    n = 1
+    while True:
+        row = conn.execute("SELECT id FROM posts WHERE slug = ?", (slug,)).fetchone()
+        if not row or (exclude_id is not None and row[0] == exclude_id):
+            return slug
+        n += 1
+        slug = f"{base}-{n}"
+
+
+def create_post(conn: sqlite3.Connection, p: dict) -> dict:
+    """Insert a new blog post. Returns {id, slug}."""
+    tags = p.get("tags")
+    if tags is not None and not isinstance(tags, str):
+        tags = json.dumps(tags, ensure_ascii=False)
+    base = p.get("slug") or slugify(p.get("title", ""))
+    slug = unique_slug(conn, slugify(base))
+    cur = conn.execute(
+        """
+        INSERT INTO posts (slug, title, summary, body_md, tags, author, status, published_at, updated_at)
+        VALUES (:slug, :title, :summary, :body_md, :tags, :author, :status,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """,
+        {
+            "slug": slug,
+            "title": p.get("title") or "(utan titel)",
+            "summary": p.get("summary"),
+            "body_md": p.get("body_md") or "",
+            "tags": tags,
+            "author": p.get("author") or "Agentanbud AI",
+            "status": p.get("status") or "published",
+        },
+    )
+    conn.commit()
+    return {"id": cur.lastrowid, "slug": slug}
+
+
+def update_post(conn: sqlite3.Connection, slug: str, fields: dict) -> bool:
+    """Update mutable fields of a post by slug. Returns True if a row changed."""
+    row = conn.execute("SELECT id FROM posts WHERE slug = ?", (slug,)).fetchone()
+    if not row:
+        return False
+    allowed = {"title", "summary", "body_md", "status"}
+    sets, params = [], []
+    for k in allowed:
+        if k in fields and fields[k] is not None:
+            sets.append(f"{k} = ?")
+            params.append(fields[k])
+    if "tags" in fields and fields["tags"] is not None:
+        tags = fields["tags"]
+        sets.append("tags = ?")
+        params.append(tags if isinstance(tags, str) else json.dumps(tags, ensure_ascii=False))
+    if not sets:
+        return False
+    sets.append("updated_at = CURRENT_TIMESTAMP")
+    params.append(row[0])
+    conn.execute(f"UPDATE posts SET {', '.join(sets)} WHERE id = ?", params)
+    conn.commit()
+    return True
+
+
+def record_post_event(conn: sqlite3.Connection, slug: str, kind: str) -> bool:
+    """Log a privacy-preserving engagement event ('view' | 'read')."""
+    if kind not in ("view", "read"):
+        return False
+    row = conn.execute("SELECT id FROM posts WHERE slug = ?", (slug,)).fetchone()
+    if not row:
+        return False
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    conn.execute(
+        "INSERT INTO post_events (post_id, kind, day) VALUES (?, ?, ?)",
+        (row[0], kind, day),
+    )
+    conn.commit()
+    return True

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Blogg — nyheter om offentlig upphandling{% endblock %}
+
+{% block content %}
+<div class="agents-hero">
+  <h1>Blogg</h1>
+  <p class="lead">Nyheter och analys om svensk offentlig upphandling — bevakat och skrivet dagligen av vår AI-agent.</p>
+</div>
+
+{% if posts %}
+<div class="blog-list">
+  {% for p in posts %}
+  <a class="blog-card" href="/blogg/{{ p.slug }}">
+    <div class="blog-card-meta">{{ p.date }} · {{ p.author }}</div>
+    <h2>{{ p.title }}</h2>
+    {% if p.summary %}<p>{{ p.summary }}</p>{% endif %}
+    {% if p.tags %}
+    <div class="blog-tags">
+      {% for t in p.tags %}<span class="blog-tag">{{ t }}</span>{% endfor %}
+    </div>
+    {% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <p class="muted">Inga inlägg ännu — vår agent skriver det första snart. Kom gärna tillbaka!</p>
+</div>
+{% endif %}
+{% endblock %}

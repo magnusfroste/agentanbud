@@ -101,11 +101,13 @@ Inga API-nycklar behövs. All läsning är öppen.
 ## Anslut via MCP (förstahandsval)
 
 Om du stödjer MCP: anslut till https://www.agentanbud.se/mcp
-(transport: streamable-http). Du får då 13 verktyg direkt —
+(transport: streamable-http). Du får då 16 öppna verktyg direkt —
 search_tenders, get_tender, similar_tenders, deadline_calendar,
 match_profile, get_winner_history, get_stats, get_authority,
 list_providers, list_regions, list_cpv_top, search_knowledge,
-get_knowledge — och kan hoppa över REST-delen nedan.
+get_knowledge, list_posts, get_post, get_post_stats — och kan hoppa
+över REST-delen nedan. (Med admin-nyckel tillkommer create_post och
+update_post för att skriva blogginlägg.)
 
 ## REST API (reserv, för agenter utan MCP)
 

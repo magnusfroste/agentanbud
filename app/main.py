@@ -22,7 +22,25 @@ from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
 
 from .cron import get_schedule, next_run
-from .db import connect, init_db
+from .db import (
+    connect, init_db,
+    create_post as db_create_post, update_post as db_update_post,
+    record_post_event,
+)
+
+# Markdown rendering for blog posts — optional dependency, degrade gracefully.
+try:
+    import markdown as _markdown
+
+    def render_markdown(md: str) -> str:
+        return _markdown.markdown(md or "", extensions=["extra", "sane_lists", "nl2br"])
+except Exception:  # pragma: no cover — lib missing in some envs
+    import html as _html
+
+    def render_markdown(md: str) -> str:
+        # Minimal safe fallback: escape + preserve paragraphs.
+        paras = (_html.escape(md or "")).split("\n\n")
+        return "".join(f"<p>{p.replace(chr(10), '<br>')}</p>" for p in paras if p.strip())
 
 # MCP-over-HTTP is optional — only loaded if mcp_http module is present
 # (it's a separate file so the stdio MCP server stays independent).
@@ -560,6 +578,51 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
     def agents(request: Request):
         return HTMLResponse(render("agents.html"))
 
+    @app.get("/blogg", include_in_schema=False)
+    def blog_index(request: Request):
+        conn = connect(db)
+        try:
+            rows = conn.execute(
+                "SELECT slug, title, summary, tags, author, published_at "
+                "FROM posts WHERE status = 'published' "
+                "ORDER BY published_at DESC LIMIT 100"
+            ).fetchall()
+            posts = []
+            for r in rows:
+                p = dict(r)
+                try:
+                    p["tags"] = json.loads(p["tags"]) if p.get("tags") else []
+                except Exception:
+                    p["tags"] = []
+                p["date"] = (p.get("published_at") or "")[:10]
+                posts.append(p)
+            return HTMLResponse(render("blog.html", posts=posts, request=request))
+        finally:
+            conn.close()
+
+    @app.get("/blogg/{slug}", include_in_schema=False)
+    def blog_post(request: Request, slug: str):
+        conn = connect(db)
+        try:
+            row = conn.execute(
+                "SELECT slug, title, summary, body_md, tags, author, published_at, updated_at "
+                "FROM posts WHERE slug = ? AND status = 'published'",
+                (slug,),
+            ).fetchone()
+            if not row:
+                return HTMLResponse(render("404.html"), status_code=404) \
+                    if (TEMPLATE_DIR / "404.html").exists() else HTMLResponse("Inte hittad", status_code=404)
+            p = dict(row)
+            try:
+                p["tags"] = json.loads(p["tags"]) if p.get("tags") else []
+            except Exception:
+                p["tags"] = []
+            p["date"] = (p.get("published_at") or "")[:10]
+            p["body_html"] = render_markdown(p.get("body_md") or "")
+            return HTMLResponse(render("blog_post.html", post=p, request=request))
+        finally:
+            conn.close()
+
     @app.get("/providers", include_in_schema=False)
     def providers(request: Request):
         conn = connect(db)
@@ -752,6 +815,131 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
                 "unique_winners": len(wins),
                 "winners": ranked,
             }
+        finally:
+            conn.close()
+
+    # ---- Blog API ----
+    def _post_stats(conn, post_id: int) -> dict:
+        row = conn.execute(
+            "SELECT "
+            "SUM(CASE WHEN kind='view' THEN 1 ELSE 0 END) AS views, "
+            "SUM(CASE WHEN kind='read' THEN 1 ELSE 0 END) AS reads "
+            "FROM post_events WHERE post_id = ?",
+            (post_id,),
+        ).fetchone()
+        views = (row["views"] or 0) if row else 0
+        reads = (row["reads"] or 0) if row else 0
+        return {
+            "views": views,
+            "reads": reads,
+            "read_rate": round(reads / views, 3) if views else 0.0,
+        }
+
+    @app.get("/api/blog")
+    def api_blog_list(tag: Optional[str] = Query(default=None), limit: int = Query(default=50, ge=1, le=100)):
+        conn = connect(db)
+        try:
+            rows = conn.execute(
+                "SELECT id, slug, title, summary, tags, author, published_at "
+                "FROM posts WHERE status = 'published' ORDER BY published_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            items = []
+            for r in rows:
+                p = dict(r)
+                try:
+                    p["tags"] = json.loads(p["tags"]) if p.get("tags") else []
+                except Exception:
+                    p["tags"] = []
+                if tag and tag not in p["tags"]:
+                    continue
+                stats = _post_stats(conn, p.pop("id"))
+                p.update(stats)
+                items.append(p)
+            return {"posts": items, "total": len(items)}
+        finally:
+            conn.close()
+
+    @app.get("/api/blog/{slug}")
+    def api_blog_get(slug: str):
+        conn = connect(db)
+        try:
+            row = conn.execute(
+                "SELECT id, slug, title, summary, body_md, tags, author, published_at, updated_at "
+                "FROM posts WHERE slug = ? AND status = 'published'",
+                (slug,),
+            ).fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="post not found")
+            p = dict(row)
+            try:
+                p["tags"] = json.loads(p["tags"]) if p.get("tags") else []
+            except Exception:
+                p["tags"] = []
+            p.update(_post_stats(conn, p.pop("id")))
+            return p
+        finally:
+            conn.close()
+
+    @app.get("/api/blog/{slug}/stats")
+    def api_blog_stats(slug: str):
+        conn = connect(db)
+        try:
+            row = conn.execute("SELECT id FROM posts WHERE slug = ?", (slug,)).fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="post not found")
+            return {"slug": slug, **_post_stats(conn, row[0])}
+        finally:
+            conn.close()
+
+    @app.post("/api/blog/{slug}/event")
+    async def api_blog_event(slug: str, request: Request):
+        """Privacy-preserving engagement beacon. Body: {"kind": "view"|"read"}."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        kind = (body.get("kind") or "").strip()
+        conn = connect(db)
+        try:
+            ok = record_post_event(conn, slug, kind)
+            return JSONResponse({"ok": ok}, status_code=200 if ok else 400)
+        finally:
+            conn.close()
+
+    @app.post("/api/blog")
+    async def api_blog_create(request: Request):
+        """Create a post (admin/agent only). Body: title, body_md, summary?, tags?."""
+        _require_admin(request)
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid JSON body")
+        if not (body.get("title") and body.get("body_md")):
+            raise HTTPException(status_code=400, detail="title and body_md are required")
+        conn = connect(db)
+        try:
+            res = db_create_post(conn, body)
+            return JSONResponse(
+                {"ok": True, **res, "url": f"https://www.agentanbud.se/blogg/{res['slug']}"},
+                status_code=201,
+            )
+        finally:
+            conn.close()
+
+    @app.put("/api/blog/{slug}")
+    async def api_blog_update(slug: str, request: Request):
+        _require_admin(request)
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid JSON body")
+        conn = connect(db)
+        try:
+            ok = db_update_post(conn, slug, body)
+            if not ok:
+                raise HTTPException(status_code=404, detail="post not found or nothing to update")
+            return {"ok": True, "slug": slug}
         finally:
             conn.close()
 

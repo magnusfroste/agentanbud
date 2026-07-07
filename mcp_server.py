@@ -34,7 +34,11 @@ from mcp.server import Server
 
 # Reuse Agentanbud's DB layer
 sys.path.insert(0, str(Path(__file__).parent))
-from app.db import connect  # noqa: E402
+from app.db import (  # noqa: E402
+    connect,
+    create_post as _db_create_post,
+    update_post as _db_update_post,
+)
 
 DB_PATH = os.environ.get("DB_PATH", "/data/application.db")
 
@@ -502,6 +506,64 @@ async def list_tools() -> list[types.Tool]:
                 }
             },
         ),
+        types.Tool(
+            name="list_posts",
+            description="List published blog posts about Swedish public procurement (newest first). Optional tag filter.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tag": {"type": "string", "description": "Optional tag filter."},
+                    "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 50}
+                }
+            },
+        ),
+        types.Tool(
+            name="get_post",
+            description="Get one blog post by slug, including its Markdown body and engagement stats.",
+            inputSchema={
+                "type": "object",
+                "properties": {"slug": {"type": "string", "description": "Post slug (from list_posts)."}},
+                "required": ["slug"]
+            },
+        ),
+        types.Tool(
+            name="get_post_stats",
+            description="Engagement stats per blog post — views, full-reads, read-rate. Omit slug for all posts. Use this to see what resonated and pick topics for the next post.",
+            inputSchema={
+                "type": "object",
+                "properties": {"slug": {"type": "string", "description": "Optional: one post's slug. Omit for all."}}
+            },
+        ),
+        types.Tool(
+            name="create_post",
+            description="Publish a new blog post (requires admin key). Write body_md in Markdown. Use for a daily procurement-news post; check get_post_stats first to see what engages readers.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Post title."},
+                    "body_md": {"type": "string", "description": "Post body in Markdown."},
+                    "summary": {"type": "string", "description": "Short excerpt for the list view and social preview."},
+                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags, e.g. ['LOU','IT','tröskelvärden']."}
+                },
+                "required": ["title", "body_md"]
+            },
+        ),
+        types.Tool(
+            name="update_post",
+            description="Update an existing blog post by slug (requires admin key). Set status='draft' to unpublish.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "slug": {"type": "string", "description": "Post slug to update."},
+                    "title": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "body_md": {"type": "string"},
+                    "tags": {"type": "array", "items": {"type": "string"}},
+                    "status": {"type": "string", "enum": ["published", "draft"]}
+                },
+                "required": ["slug"]
+            },
+        ),
     ]
 
 
@@ -539,6 +601,16 @@ async def call_tool(name: str, arguments: dict) -> list[types.Content]:
             return await _similar_tenders(conn, arguments)
         elif name == "deadline_calendar":
             return await _deadline_calendar(conn, arguments)
+        elif name == "list_posts":
+            return await _list_posts(conn, arguments)
+        elif name == "get_post":
+            return await _get_post(conn, arguments)
+        elif name == "get_post_stats":
+            return await _get_post_stats(conn, arguments)
+        elif name == "create_post":
+            return await _create_post(conn, arguments)
+        elif name == "update_post":
+            return await _update_post(conn, arguments)
         else:
             return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
     finally:
@@ -996,6 +1068,114 @@ async def _deadline_calendar(conn, args: dict) -> list[types.Content]:
         *tender_lines,
     ]
     return [types.TextContent(type="text", text="\n".join(lines))]
+
+
+# ----- Blog tools -----------------------------------------------------------
+
+def _post_engagement(conn, slug: str) -> tuple[int, int]:
+    r = conn.execute(
+        "SELECT SUM(CASE WHEN pe.kind='view' THEN 1 ELSE 0 END), "
+        "       SUM(CASE WHEN pe.kind='read' THEN 1 ELSE 0 END) "
+        "FROM posts p LEFT JOIN post_events pe ON pe.post_id = p.id WHERE p.slug = ?",
+        (slug,),
+    ).fetchone()
+    return (r[0] or 0, r[1] or 0) if r else (0, 0)
+
+
+async def _list_posts(conn, args: dict) -> list[types.Content]:
+    limit = min(int(args.get("limit", 20)), 50)
+    tag = (args.get("tag") or "").strip()
+    rows = conn.execute(
+        "SELECT slug, title, summary, tags, published_at FROM posts "
+        "WHERE status = 'published' ORDER BY published_at DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    items = []
+    for r in rows:
+        d = _row_dict(r)
+        try:
+            tags = json.loads(d.get("tags") or "[]")
+        except Exception:
+            tags = []
+        if tag and tag not in tags:
+            continue
+        items.append((d, tags))
+    if not items:
+        return [types.TextContent(type="text", text="Inga blogginlägg ännu.")]
+    lines = [f"**{len(items)} blogginlägg:**", ""]
+    for d, tags in items:
+        tagstr = f" [{', '.join(tags)}]" if tags else ""
+        lines.append(f"- {(d.get('published_at') or '')[:10]} — **{d['title']}** (`{d['slug']}`){tagstr}")
+        if d.get("summary"):
+            lines.append(f"    {d['summary']}")
+    return [types.TextContent(type="text", text="\n".join(lines))]
+
+
+async def _get_post(conn, args: dict) -> list[types.Content]:
+    slug = (args.get("slug") or "").strip()
+    if not slug:
+        return [types.TextContent(type="text", text="Ange 'slug'.")]
+    row = conn.execute(
+        "SELECT slug, title, summary, body_md, author, published_at FROM posts WHERE slug = ?",
+        (slug,),
+    ).fetchone()
+    if not row:
+        return [types.TextContent(type="text", text=f"Inget inlägg med slug '{slug}'.")]
+    d = _row_dict(row)
+    views, reads = _post_engagement(conn, slug)
+    body = (
+        f"# {d['title']}\n\n_{(d.get('published_at') or '')[:10]} · {d.get('author')}_\n\n"
+        f"{d.get('body_md') or ''}\n\n---\n📊 {views} visningar · {reads} läste hela."
+    )
+    return [types.TextContent(type="text", text=body)]
+
+
+async def _get_post_stats(conn, args: dict) -> list[types.Content]:
+    slug = (args.get("slug") or "").strip()
+    if slug:
+        rows = conn.execute(
+            "SELECT slug, title FROM posts WHERE slug = ?", (slug,)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT slug, title FROM posts WHERE status = 'published' "
+            "ORDER BY published_at DESC LIMIT 30"
+        ).fetchall()
+    if not rows:
+        return [types.TextContent(type="text", text="Inga inlägg att visa statistik för.")]
+    lines = ["**Engagemang per inlägg** (visningar · läste hela · läs-grad):", ""]
+    for r in rows:
+        views, reads = _post_engagement(conn, r["slug"])
+        rate = f"{100 * reads // views}%" if views else "—"
+        lines.append(f"- **{r['title']}** — {views} visningar · {reads} läste hela · {rate}  (`{r['slug']}`)")
+    lines.append("")
+    lines.append("💡 Använd läs-graden för att välja ämnen som engagerar till nästa inlägg.")
+    return [types.TextContent(type="text", text="\n".join(lines))]
+
+
+async def _create_post(conn, args: dict) -> list[types.Content]:
+    title = (args.get("title") or "").strip()
+    body_md = (args.get("body_md") or "").strip()
+    if not title or not body_md:
+        return [types.TextContent(type="text", text="Ange både 'title' och 'body_md'.")]
+    res = _db_create_post(conn, {
+        "title": title, "body_md": body_md,
+        "summary": args.get("summary"), "tags": args.get("tags"),
+    })
+    return [types.TextContent(
+        type="text",
+        text=f"✅ Publicerat: **{title}**\nURL: https://www.agentanbud.se/blogg/{res['slug']}\nslug: `{res['slug']}`",
+    )]
+
+
+async def _update_post(conn, args: dict) -> list[types.Content]:
+    slug = (args.get("slug") or "").strip()
+    if not slug:
+        return [types.TextContent(type="text", text="Ange 'slug'.")]
+    fields = {k: args[k] for k in ("title", "summary", "body_md", "tags", "status") if k in args}
+    ok = _db_update_post(conn, slug, fields)
+    msg = f"✅ Uppdaterat inlägg '{slug}'." if ok else f"Hittade inget inlägg '{slug}' att uppdatera."
+    return [types.TextContent(type="text", text=msg)]
 
 
 async def _match_profile(conn, args: dict) -> list[types.Content]:

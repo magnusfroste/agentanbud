@@ -23,8 +23,10 @@ Mounted from app/main.py via:
 """
 from __future__ import annotations
 
+import hmac
 import json
 import logging
+import os
 import sqlite3
 import time
 import uuid
@@ -36,6 +38,19 @@ from fastapi.responses import JSONResponse
 
 from app.db import connect
 import mcp_server
+
+# Admin key gates the blog write tools on the public /mcp endpoint. Reads stay
+# open for every visiting agent; writing (create_post/update_post) requires the
+# same X-Admin-Key as the REST admin endpoints. When unset (local dev), writes
+# are open — matching the REST _require_admin behaviour.
+ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "")
+WRITE_TOOLS = {"create_post", "update_post"}
+
+
+def _is_authed(request: Request) -> bool:
+    if not ADMIN_API_KEY:
+        return True
+    return hmac.compare_digest(request.headers.get("x-admin-key", ""), ADMIN_API_KEY)
 
 LOG = logging.getLogger(__name__)
 
@@ -94,18 +109,32 @@ async def _dispatch_tool(name: str, arguments: dict) -> list:
             return await mcp_server._similar_tenders(conn, arguments or {})
         if name == "deadline_calendar":
             return await mcp_server._deadline_calendar(conn, arguments or {})
+        if name == "list_posts":
+            return await mcp_server._list_posts(conn, arguments or {})
+        if name == "get_post":
+            return await mcp_server._get_post(conn, arguments or {})
+        if name == "get_post_stats":
+            return await mcp_server._get_post_stats(conn, arguments or {})
+        if name == "create_post":
+            return await mcp_server._create_post(conn, arguments or {})
+        if name == "update_post":
+            return await mcp_server._update_post(conn, arguments or {})
         raise ValueError(f"Unknown tool: {name}")
     finally:
         conn.close()
 
 
-def _tool_list() -> list[dict]:
+def _tool_list(include_write: bool = False) -> list[dict]:
     """Mirror of mcp_server's @server.list_tools() — return tool metadata as dicts.
 
     The full Tool objects are defined in mcp_server.py. We rebuild the
     same shape here as dicts (no need to import pydantic types).
+
+    Read tools are always listed (open for every visiting agent). The blog
+    write tools (create_post/update_post) are appended only when the caller
+    is authenticated with the admin key.
     """
-    return [
+    tools = [
         {
             "name": "search_tenders",
             "description": "Search Swedish public procurement tenders. Examples: query='IT-konsult stockholm', cpv='72' (IT), cpv='45' (construction), source='ted' (EU-thresholds only), open_only=false (include closed). Returns title, buyer, deadline with days-until, value, CPV, and a deep link.",
@@ -244,11 +273,69 @@ def _tool_list() -> list[dict]:
                 }
             }
         },
-        # NOTE: no write/management tools here by design — the public MCP
-        # endpoint is read-only. Admin actions go through the keyed REST
-        # endpoints (X-Admin-Key); the stdio server keeps sync_now since
-        # running it already requires local/container access.
+        {
+            "name": "list_posts",
+            "description": "List published blog posts about Swedish public procurement (newest first). Optional tag filter.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "tag": {"type": "string", "description": "Optional tag filter."},
+                    "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 50}
+                }
+            }
+        },
+        {
+            "name": "get_post",
+            "description": "Get one blog post by slug, including its Markdown body and engagement stats.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"slug": {"type": "string", "description": "Post slug (from list_posts)."}},
+                "required": ["slug"]
+            }
+        },
+        {
+            "name": "get_post_stats",
+            "description": "Engagement stats per blog post — views, full-reads, read-rate. Omit slug for all posts. Use this to see what resonated and pick topics for the next post.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"slug": {"type": "string", "description": "Optional: one post's slug. Omit for all."}}
+            }
+        },
     ]
+    if include_write:
+        tools += [
+            {
+                "name": "create_post",
+                "description": "Publish a new blog post (admin only). Write body_md in Markdown. Use for a daily procurement-news post; check get_post_stats first to see what engages readers.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "Post title."},
+                        "body_md": {"type": "string", "description": "Post body in Markdown."},
+                        "summary": {"type": "string", "description": "Short excerpt for the list view and social preview."},
+                        "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags, e.g. ['LOU','IT']."}
+                    },
+                    "required": ["title", "body_md"]
+                }
+            },
+            {
+                "name": "update_post",
+                "description": "Update an existing blog post by slug (admin only). Set status='draft' to unpublish.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "slug": {"type": "string", "description": "Post slug to update."},
+                        "title": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "body_md": {"type": "string"},
+                        "tags": {"type": "array", "items": {"type": "string"}},
+                        "status": {"type": "string", "enum": ["published", "draft"]}
+                    },
+                    "required": ["slug"]
+                }
+            },
+        ]
+    return tools
 
 
 # ----- FastAPI router -------------------------------------------------------
@@ -261,7 +348,7 @@ def _cors_headers() -> dict:
     return {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Accept, mcp-session-id",
+        "Access-Control-Allow-Headers": "Content-Type, Accept, mcp-session-id, x-admin-key",
         "Access-Control-Max-Age": "86400",
     }
 
@@ -345,12 +432,20 @@ async def mcp_post(request: Request):
         elif method == "ping":
             result = {}  # MCP keepalive
         elif method == "tools/list":
-            result = {"tools": _tool_list()}
+            result = {"tools": _tool_list(_is_authed(request))}
         elif method == "tools/call":
             name = params.get("name")
             arguments = params.get("arguments") or {}
             if not name:
                 raise ValueError("Missing 'name' in tools/call params")
+            if name in WRITE_TOOLS and not _is_authed(request):
+                return JSONResponse(
+                    {"jsonrpc": "2.0", "id": rpc_id,
+                     "error": {"code": -32001,
+                               "message": f"Tool '{name}' requires the X-Admin-Key header."}},
+                    status_code=401,
+                    headers={**_cors_headers(), "mcp-session-id": session_id},
+                )
             content = await _dispatch_tool(name, arguments)
             result = _format_result(content)
         else:

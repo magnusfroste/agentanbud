@@ -61,3 +61,33 @@ CREATE TABLE IF NOT EXISTS knowledge (
 CREATE INDEX IF NOT EXISTS idx_knowledge_source ON knowledge(source_system);
 CREATE INDEX IF NOT EXISTS idx_knowledge_category ON knowledge(category);
 CREATE INDEX IF NOT EXISTS idx_knowledge_subcategory ON knowledge(subcategory);
+
+-- Blog — agent-authored posts about Swedish public procurement.
+-- An AI agent (with the admin key) creates posts via MCP/REST; the public
+-- reads them. body_md is Markdown, rendered to HTML at request time.
+CREATE TABLE IF NOT EXISTS posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT NOT NULL UNIQUE,              -- URL slug, e.g. 'nya-lou-troskelvarden-2026'
+    title TEXT NOT NULL,
+    summary TEXT,                           -- short excerpt (list view + og:description)
+    body_md TEXT NOT NULL,                  -- Markdown source
+    tags TEXT,                              -- JSON list of tags
+    author TEXT DEFAULT 'Agentanbud AI',
+    status TEXT DEFAULT 'published',        -- 'published' | 'draft'
+    published_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_posts_status_pub ON posts(status, published_at DESC);
+
+-- Engagement events — privacy-preserving: no IP, no cookies, no PII.
+-- 'view' = post page loaded; 'read' = reader scrolled to the end.
+CREATE TABLE IF NOT EXISTS post_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,                     -- 'view' | 'read'
+    day TEXT,                               -- YYYY-MM-DD (for daily aggregation)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_post_events ON post_events(post_id, kind);
