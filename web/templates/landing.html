@@ -26,7 +26,7 @@
 
   <div class="hero-cta">
     <a href="/browse" class="btn primary large">Utforska upphandlingar →</a>
-    <a href="/agenter" class="btn large">Agenter</a>
+    <a href="#anslut" class="btn accent large">🤖 Anslut din agent</a>
     <a href="https://github.com/magnusfroste/agentanbud" class="btn ghost large" target="_blank" rel="noopener">Källkod ↗</a>
   </div>
 
@@ -168,6 +168,29 @@
   </div>
 </section>
 
+<!-- ANSLUT DIN AGENT — USP -->
+<section id="anslut" class="connect-agent">
+  <div class="connect-copy">
+    <div class="connect-badge">⚡ Det som gör oss unika</div>
+    <h2>Anslut din AI-agent — på 10 sekunder</h2>
+    <p>Agentanbud är byggt för agenter. Peka din assistent på vår MCP-server så söker, matchar och bevakar den upphandlingar åt dig — och kan till och med ladda ned underlag och skriva anbudsutkast. Inga konton, inga API-nycklar.</p>
+    <p class="connect-clients">Fungerar med <strong>Claude</strong>, <strong>Codex</strong>, <strong>Antigravity</strong>, <strong>Cursor</strong>, VS Code och andra MCP-klienter.</p>
+  </div>
+  <div class="connect-cmd">
+    <div class="cmd-label">Claude Code — ett kommando i terminalen:</div>
+    <div class="cmd-box">
+      <code id="mcp-cmd">claude mcp add --transport http agentanbud https://www.agentanbud.se/mcp</code>
+      <button class="cmd-copy" type="button" onclick="copyMcpCmd(this)" aria-label="Kopiera kommando">📋</button>
+    </div>
+    <div class="cmd-label">…eller peka vilken MCP-klient som helst på URL:en:</div>
+    <div class="cmd-box">
+      <code>https://www.agentanbud.se/mcp</code>
+      <button class="cmd-copy" type="button" onclick="copyMcpUrl(this)" aria-label="Kopiera URL">📋</button>
+    </div>
+    <a href="/agenter" class="btn primary" style="margin-top: 1.1rem;">Se alla sätt att koppla in din agent →</a>
+  </div>
+</section>
+
 <!-- KPIs / live stats -->
 {% if total %}
 <section>
@@ -293,7 +316,7 @@
         </svg>
       </div>
       <strong>AI-native</strong>
-      <p>Förstklassig MCP-server för Claude Code, Kilo Code, Cline. Din agent kan söka, filtrera och bevaka upphandlingar direkt.</p>
+      <p>MCP-server med 16 verktyg för Claude, Codex, Antigravity, Cursor m.fl. Anslut med en URL — din agent kan söka, matcha och bevaka upphandlingar direkt.</p>
     </div>
     <div class="why-card">
       <div class="why-icon-wrap">
@@ -326,6 +349,18 @@
 </section>
 
 <script>
+  function _copyText(text, btn) {
+    var done = function () { if (btn) { var o = btn.textContent; btn.textContent = "✓"; setTimeout(function () { btn.textContent = o; }, 1500); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () {});
+    } else {
+      var ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta);
+      ta.select(); try { document.execCommand("copy"); } catch (e) {} document.body.removeChild(ta); done();
+    }
+  }
+  function copyMcpCmd(btn) { _copyText(document.getElementById("mcp-cmd").textContent, btn); }
+  function copyMcpUrl(btn) { _copyText("https://www.agentanbud.se/mcp", btn); }
+
   document.getElementById("empty-sync")?.addEventListener("click", async () => {
     const btn = document.getElementById("empty-sync");
     btn.disabled = true;
