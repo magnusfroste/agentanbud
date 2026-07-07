@@ -17,7 +17,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 LOG = logging.getLogger(__name__)
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
 
@@ -133,6 +133,111 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
     else:
         LOG.warning("MCP HTTP endpoint NOT mounted (mcp_http module missing)")
 
+    # ---- Discovery files: robots.txt, llms.txt, sitemap.xml ----
+    SITE_URL = "https://www.agentanbud.se"
+
+    @app.get("/robots.txt", include_in_schema=False)
+    def robots_txt():
+        # Agentanbud WANTS to be found by AI agents — explicitly welcome the
+        # major AI/LLM crawlers that many sites block.
+        ai_bots = [
+            "GPTBot", "OAI-SearchBot", "ChatGPT-User", "ClaudeBot", "Claude-Web",
+            "anthropic-ai", "PerplexityBot", "Google-Extended", "CCBot",
+            "Applebot-Extended", "cohere-ai",
+        ]
+        lines = [
+            "# Agentanbud — öppen upphandlingsdata. AI-agenter och crawlers välkomna.",
+            "User-agent: *",
+            "Allow: /",
+            "",
+            "# Explicit välkomnande av AI/LLM-crawlers:",
+        ]
+        for bot in ai_bots:
+            lines += [f"User-agent: {bot}", "Allow: /", ""]
+        lines.append(f"Sitemap: {SITE_URL}/sitemap.xml")
+        return PlainTextResponse("\n".join(lines) + "\n")
+
+    @app.get("/llms.txt", include_in_schema=False)
+    def llms_txt():
+        body = f"""# Agentanbud
+
+> Fri, öppen tillgång till svenska offentliga upphandlingar. Sök, bevaka och
+> bygg ovanpå — via webb, REST API och MCP för AI-agenter. Data speglas från
+> Mercell och TED EU. Ingen inloggning, inga nycklar för läsning.
+
+Agentanbud finns för att minska informationsasymmetrin i offentlig upphandling:
+samma tillgång för småföretag som för de stora konsultbolagen.
+
+## För AI-agenter (MCP)
+
+- MCP-endpoint (Streamable HTTP): {SITE_URL}/mcp
+- 16 öppna läsverktyg: search_tenders, get_tender, similar_tenders,
+  deadline_calendar, match_profile, get_winner_history, get_authority,
+  get_stats, list_providers, list_regions, list_cpv_top, search_knowledge,
+  get_knowledge, list_posts, get_post, get_post_stats.
+- Inga API-nycklar krävs för läsning. Anslut med bara URL:en.
+
+## REST API (öppet, ingen auth)
+
+- GET {SITE_URL}/api/tenders?q=&source=&authority=&cpv=&page=
+- GET {SITE_URL}/api/tenders/{{id}}
+- GET {SITE_URL}/api/winners?authority=&cpv=  — vem brukar vinna
+- GET {SITE_URL}/api/stats
+- GET {SITE_URL}/api/blog  — agent-författad blogg om upphandling
+- OpenAPI: {SITE_URL}/openapi.json
+
+## Nyckelsidor
+
+- Sök/browse: {SITE_URL}/browse
+- Insikter: {SITE_URL}/dashboard
+- Anslut en agent: {SITE_URL}/agenter
+- Datakällor & policy: {SITE_URL}/providers
+- Blogg: {SITE_URL}/blogg
+- Kunskapsbank (LOU/LOV, hållbarhetskriterier): {SITE_URL}/kunskap
+
+## Datakällor
+
+- Mercell (publikt sök-API), TED EU (Contract Notices, Awards, PIN),
+  Upphandlingsmyndigheten (LOV + hållbarhetskriterier).
+- Vi respekterar robots.txt och speglar bara publik data. Länkar alltid
+  tillbaka till originalannonsen.
+
+## Licens
+
+Kod: MIT ({SITE_URL} — github.com/magnusfroste/agentanbud). Data: respektive
+källas villkor gäller originalet; vi är en spegel som pekar vidare.
+"""
+        return PlainTextResponse(body, media_type="text/markdown; charset=utf-8")
+
+    @app.get("/sitemap.xml", include_in_schema=False)
+    def sitemap_xml():
+        conn = connect(db)
+        try:
+            static_paths = ["/", "/browse", "/dashboard", "/providers",
+                            "/agenter", "/blogg", "/kunskap"]
+            posts = conn.execute(
+                "SELECT slug, updated_at FROM posts WHERE status = 'published' "
+                "ORDER BY published_at DESC"
+            ).fetchall()
+            tenders = conn.execute(
+                "SELECT id FROM tenders ORDER BY id DESC"
+            ).fetchall()
+        finally:
+            conn.close()
+
+        parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+                 '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+        for p in static_paths:
+            parts.append(f"<url><loc>{SITE_URL}{p}</loc><changefreq>daily</changefreq></url>")
+        for r in posts:
+            lastmod = (r["updated_at"] or "")[:10]
+            lm = f"<lastmod>{lastmod}</lastmod>" if lastmod else ""
+            parts.append(f"<url><loc>{SITE_URL}/blogg/{r['slug']}</loc>{lm}</url>")
+        for r in tenders:
+            parts.append(f"<url><loc>{SITE_URL}/tenders/{r['id']}</loc></url>")
+        parts.append("</urlset>")
+        return Response("\n".join(parts), media_type="application/xml")
+
     # ---- Pages ----
     @app.get("/", include_in_schema=False)
     def landing(request: Request):
@@ -195,6 +300,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 region_count=region_count,
                 recent_tenders=recent,
                 top_authorities=top_authorities,
+                request=request,
             ))
         finally:
             conn.close()
@@ -406,7 +512,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 deadline_weekday=deadline_weekday, recent_tenders=recent_tenders,
                 recent_syncs=recent_syncs, schedule=get_schedule(),
                 next_run_iso=nr.strftime("%Y-%m-%d %H:%M UTC") if nr else "—",
-                format_money=format_money,
+                format_money=format_money, request=request,
             ))
         finally:
             conn.close()
@@ -504,7 +610,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                                        authority=authority, cpv=cpv, status=status, sort=sort,
                                        total=total, tenders=items, page=page, pages=pages,
                                        sources=[dict(r) for r in sources],
-                                       qs_prev=qs_prev, qs_next=qs_next))
+                                       qs_prev=qs_prev, qs_next=qs_next, request=request))
         finally:
             conn.close()
 
@@ -539,7 +645,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                     d["raw_json_pretty"] = ""
             except Exception:
                 d["raw_json_pretty"] = str(raw) if raw else ""
-            return HTMLResponse(render("detail.html", t=d))
+            return HTMLResponse(render("detail.html", t=d, request=request))
         except HTTPException:
             raise
         except Exception as exc:
@@ -570,13 +676,13 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 "cron_schedule": get_schedule(),
                 "next_run": nr.strftime("%Y-%m-%d %H:%M UTC") if nr else "—",
             }
-            return HTMLResponse(render("system.html", health=health, syncs=syncs, sources=sources))
+            return HTMLResponse(render("system.html", health=health, syncs=syncs, sources=sources, request=request))
         finally:
             conn.close()
 
     @app.get("/agenter", include_in_schema=False)
     def agents(request: Request):
-        return HTMLResponse(render("agents.html"))
+        return HTMLResponse(render("agents.html", request=request))
 
     @app.get("/blogg", include_in_schema=False)
     def blog_index(request: Request):
@@ -709,7 +815,7 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
                 ),
             ]
 
-            return HTMLResponse(render("providers.html", providers=providers))
+            return HTMLResponse(render("providers.html", providers=providers, request=request))
         finally:
             conn.close()
 
@@ -1334,7 +1440,7 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
                 q=q, source=source, category=category, page=page, pages=pages,
                 total=total, items=items,
                 top_categories=[dict(r) for r in top_categories],
-                source_counts=sc,
+                source_counts=sc, request=request,
             ))
         finally:
             conn.close()

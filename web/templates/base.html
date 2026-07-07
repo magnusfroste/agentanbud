@@ -5,25 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}Agentanbud{% endblock %} — Svenska upphandlingar</title>
 
-  <!-- SEO -->
-  <meta name="description" content="Agentanbud — fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och utforska upphandlingar från Mercell, TED EU och fler källor. Öppet API, MCP för AI-agenter. Infrastruktur för demokrati." />
+  <!-- SEO — canonical/og:url follow the current path so each page is its own
+       document (not a duplicate of the homepage). Pages can override the
+       description/og blocks for richer per-page metadata. -->
+  {% set _path = (request.url.path if request else '/') %}
+  <meta name="description" content="{% block description %}Agentanbud — fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och utforska upphandlingar från Mercell, TED EU och fler källor. Öppet API, MCP för AI-agenter. Infrastruktur för demokrati.{% endblock %}" />
   <meta name="keywords" content="upphandling, offentlig upphandling, Sverige, anbud, offentlig, Mercell, TED, LOU, direktupphandling, ramavtal, CPV, upphandlingsmyndigheten, fri data, öppen data" />
   <meta name="author" content="Agentanbud" />
   <meta name="robots" content="index, follow" />
-  <link rel="canonical" href="https://www.agentanbud.se/" />
+  <link rel="canonical" href="https://www.agentanbud.se{{ _path }}" />
 
   <!-- OpenGraph -->
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="Agentanbud — Svenska upphandlingar, öppna för alla" />
-  <meta property="og:description" content="Fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och bygg ovanpå med öppet API och MCP. Infrastruktur för demokrati." />
-  <meta property="og:url" content="https://www.agentanbud.se/" />
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}" />
+  <meta property="og:title" content="{% block og_title %}Agentanbud — Svenska upphandlingar, öppna för alla{% endblock %}" />
+  <meta property="og:description" content="{% block og_description %}Fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och bygg ovanpå med öppet API och MCP. Infrastruktur för demokrati.{% endblock %}" />
+  <meta property="og:url" content="https://www.agentanbud.se{{ _path }}" />
   <meta property="og:site_name" content="Agentanbud" />
   <meta property="og:locale" content="sv_SE" />
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Agentanbud — Svenska upphandlingar, öppna för alla" />
-  <meta name="twitter:description" content="Fri tillgång till svenska offentliga upphandlingar. Öppet API + MCP för AI-agenter." />
+  <meta name="twitter:title" content="{{ self.og_title() }}" />
+  <meta name="twitter:description" content="{{ self.og_description() }}" />
 
   <!-- AEO (Answer Engine Optimization) — för AI-crawlers -->
   <script type="application/ld+json">
