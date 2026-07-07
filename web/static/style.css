@@ -2740,3 +2740,15 @@ pre code {
   border-radius: var(--radius);
   background: var(--surface-2, #1e1e2e);
 }
+
+/* Compact 30-day variant: many thin bars, sparse labels (analytics) */
+.weekday-chart-30 { gap: 3px; height: 140px; overflow-x: auto; }
+.weekday-chart-30 .weekday-bar { max-width: none; border-radius: 2px 2px 0 0; }
+.weekday-chart-30 .weekday-label {
+  font-size: 0.6rem;
+  white-space: nowrap;
+  transform: rotate(-45deg);
+  transform-origin: center;
+  margin-top: 0.4rem;
+}
+.weekday-chart-30 .weekday-col:not(:nth-child(5n)) .weekday-label { visibility: hidden; }

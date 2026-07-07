@@ -91,3 +91,19 @@ CREATE TABLE IF NOT EXISTS post_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_post_events ON post_events(post_id, kind);
+
+-- Usage log — every search/tool-call, tagged by channel (browser/mcp/api).
+-- Powers /analytics: what's being searched for, and how Agentanbud is used.
+-- Privacy-preserving: no IP, no cookies, no user-agent stored (only a bot
+-- boolean in meta).
+CREATE TABLE IF NOT EXISTS usage_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel TEXT NOT NULL,                 -- 'browser' | 'mcp' | 'api'
+    action TEXT NOT NULL,                  -- 'search' | 'view' | 'tool:search_tenders' | ...
+    query TEXT,                            -- search term (or path for views)
+    meta TEXT,                             -- JSON with extra filters (source, cpv, results, bot, ...)
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_log_time ON usage_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_log_channel ON usage_log(channel);

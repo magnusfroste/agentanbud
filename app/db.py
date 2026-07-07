@@ -155,6 +155,25 @@ def upsert_knowledge(conn: sqlite3.Connection, k: dict) -> None:
     )
 
 
+def log_usage(
+    conn: sqlite3.Connection,
+    channel: str,
+    action: str,
+    query: Optional[str] = None,
+    meta: Optional[dict] = None,
+) -> None:
+    """Record one usage event for the /analytics page.
+
+    Best-effort: callers should not let a logging failure break the
+    request they're instrumenting.
+    """
+    conn.execute(
+        "INSERT INTO usage_log (channel, action, query, meta) VALUES (?, ?, ?, ?)",
+        (channel, action, query, json.dumps(meta, ensure_ascii=False) if meta else None),
+    )
+    conn.commit()
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 

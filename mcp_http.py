@@ -36,7 +36,7 @@ from typing import Any
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
-from app.db import connect
+from app.db import connect, log_usage
 import mcp_server
 
 # Admin key gates the blog write tools on the public /mcp endpoint. Reads stay
@@ -79,10 +79,29 @@ def _format_result(content_list) -> dict:
     }
 
 
+def _extract_query(name: str, arguments: dict) -> str | None:
+    """Pull the human-readable search term out of a tool call, for /analytics."""
+    if name == "search_tenders":
+        return arguments.get("query")
+    if name == "search_knowledge":
+        return arguments.get("q")
+    if name in ("get_authority", "get_winner_history"):
+        return arguments.get("authority") or arguments.get("name")
+    if name == "match_profile":
+        keywords = arguments.get("keywords") or []
+        return ", ".join(keywords) if keywords else None
+    return None
+
+
 async def _dispatch_tool(name: str, arguments: dict) -> list:
     """Call the right tool handler (reuses the stdio version's logic)."""
     conn = connect(mcp_server.DB_PATH)
     try:
+        try:
+            log_usage(conn, "mcp", f"tool:{name}",
+                      query=_extract_query(name, arguments), meta=arguments or None)
+        except Exception:
+            LOG.exception("log_usage failed for MCP tool %s", name)
         if name == "search_tenders":
             return await mcp_server._search_tenders(conn, arguments or {})
         if name == "get_tender":

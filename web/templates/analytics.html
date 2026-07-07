@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Analys — efterfrågan & användning{% endblock %}
+
+{% block content %}
+<h1>Analys</h1>
+<p class="sub">Vad efterfrågas i svensk offentlig upphandling — och hur används Agentanbud? Öppna, datadrivna insikter från vår egen logg.</p>
+
+<!-- PRIVACY -->
+<section class="insight-section">
+  <h2>🔒 Integritet</h2>
+  <p>
+    Inga cookies. Ingen tredjepartsanalys — inget Google Analytics, ingen
+    Mixpanel, inga spårningspixlar. Allt du ser här kommer från vår egen
+    logg, i vår egen SQLite, på vår egen server.
+  </p>
+  <p class="muted">
+    Vi sparar kanal (webbläsare/MCP/API), sökterm, en grov flagga för om
+    besöket är mänskligt eller automatiserat, och tidpunkt — inget mer.
+    Ingen IP-adress, inget besökar-ID, ingen User-Agent-sträng, inget som
+    kopplar en sökning till en person.
+  </p>
+</section>
+
+{% if not total %}
+<section class="insight-section">
+  <p class="muted">Ingen aktivitet loggad än. Så fort någon besöker sidan eller söker — via webben, MCP eller API:t — dyker det upp här.</p>
+</section>
+{% else %}
+
+<!-- HEADLINE KPIs -->
+<section class="insight-kpis">
+  <div class="insight-kpi">
+    <div class="v">{{ "{:,}".format(kpis.views).replace(",", " ") }}</div>
+    <div class="l">Besök totalt</div>
+  </div>
+  <div class="insight-kpi green">
+    <div class="v">{{ kpis.human_pct }}%</div>
+    <div class="l">Mänskliga besök ({{ kpis.human_views }})</div>
+  </div>
+  <div class="insight-kpi">
+    <div class="v">{{ kpis.bot_views }}</div>
+    <div class="l">Botar &amp; agenter (crawlers, AI)</div>
+  </div>
+  <div class="insight-kpi highlight">
+    <div class="v">{{ kpis.searches }}</div>
+    <div class="l">Sökningar på webben</div>
+  </div>
+  <div class="insight-kpi">
+    <div class="v">{{ kpis.agent_calls }}</div>
+    <div class="l">MCP-agentanrop</div>
+  </div>
+</section>
+
+<!-- SPONSOR FRAMING -->
+<section class="insight-section">
+  <h2>💡 För sponsorer &amp; partners</h2>
+  <p>
+    Agentanbud är öppen infrastruktur — men datan om <em>vad marknaden
+    faktiskt letar efter</em> är värdefull. Nedan ser du efterfrågan per
+    bransch, var det finns luckor vi inte kan svara på än, och hur
+    trafiken växer. Vill du synas för dem som söker just inom din bransch?
+    <a href="mailto:magnus.froste@gmail.com?subject=Sponsra%20Agentanbud">Hör av dig →</a>
+  </p>
+</section>
+
+<!-- INDUSTRY DEMAND (HERO) -->
+{% if segments %}
+<section class="insight-section">
+  <h2>Branschefterfrågan</h2>
+  <p class="muted">Sökningar grupperade per bransch — det här är vad en sponsor i respektive segment når.</p>
+  <div class="bar-chart">
+    {% for s in segments %}
+    <div class="bar-row">
+      <span class="bar-label">{{ s.label }}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width: {{ s.bar }}%; background: {{ s.color }};"></div>
+        <span class="bar-value">{{ s.n }} ({{ s.pct }}%)</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- UNMET DEMAND -->
+{% if unmet %}
+<section class="insight-section">
+  <h2>Efterfrågan utan träff</h2>
+  <p class="muted">Sökningar som gav <strong>noll resultat</strong> — luckor i datan. Varje rad är en anledning att lägga till en källa (eller en sponsor som vill fylla den).</p>
+  <div class="bar-chart">
+    {% for u in unmet %}
+    <div class="bar-row">
+      <span class="bar-label">{{ u.term[:40] }}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width: {{ u.pct }}%; background: #ef4444;"></div>
+        <span class="bar-value">{{ u.n }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- MOMENTUM -->
+<section class="insight-section">
+  <h2>Trafik, senaste 30 dagarna</h2>
+  <p class="muted">Besök + sökningar + agentanrop per dag. Tillväxten är själva säljargumentet.</p>
+  <div class="weekday-chart weekday-chart-30">
+    {% for d in daily %}
+    <div class="weekday-col" title="{{ d.day }}: {{ d.n }} ({{ d.views }} besök, {{ d.searches }} sök, {{ d.agents }} agent)">
+      <div class="weekday-bar" style="height: {{ d.pct }}%"></div>
+      <span class="weekday-label">{{ d.day }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- USAGE TYPE SPLIT -->
+{% if usage_types %}
+<section class="insight-section">
+  <h2>Hur används Agentanbud?</h2>
+  <p class="muted">Mänsklig webbläsare, AI-agent via MCP, eller REST API?</p>
+  <div class="donut-chart">
+    <div class="donut" style="background: conic-gradient({% set ns = namespace(cumulative=0) %}{% for u in usage_types %}{{ u.color }} {{ ns.cumulative }}% {{ ns.cumulative + u.pct }}%{% set ns.cumulative = ns.cumulative + u.pct %}{% if not loop.last %}, {% endif %}{% endfor %}{% if ns.cumulative < 100 %}, var(--surface-2) {{ ns.cumulative }}% 100%{% endif %})">
+      <div class="donut-center">
+        <span class="donut-total">{{ "{:,}".format(total).replace(",", " ") }}</span>
+        <span class="donut-label">händelser</span>
+      </div>
+    </div>
+    <div class="donut-legend">
+      {% for u in usage_types %}
+      <div class="legend-item">
+        <span class="legend-dot" style="background: {{ u.color }}"></span>
+        <span class="legend-label">{{ u.label }}</span>
+        <span class="legend-value">{{ u.n }} ({{ u.pct }}%)</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- TOP SEARCH TERMS -->
+{% if top_terms %}
+<section class="insight-section">
+  <h2>Vad söks det på?</h2>
+  <p class="muted">Vanligaste söktermerna, alla kanaler (webb + agenter).</p>
+  <div class="bar-chart">
+    {% for t in top_terms %}
+    <div class="bar-row">
+      <span class="bar-label">{{ t.term[:40] }}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width: {{ t.pct }}%"></div>
+        <span class="bar-value">{{ t.n }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- MCP TOOL BREAKDOWN -->
+{% if top_tools %}
+<section class="insight-section">
+  <h2>MCP-verktyg som anropas</h2>
+  <p class="muted">Vilka verktyg använder AI-agenter mest?</p>
+  <div class="bar-chart">
+    {% for t in top_tools %}
+    <div class="bar-row">
+      <span class="bar-label"><code>{{ t.tool }}</code></span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width: {{ t.pct }}%; background: #10b981;"></div>
+        <span class="bar-value">{{ t.n }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- RECENT ACTIVITY -->
+<section class="insight-section">
+  <h2>Senaste sökningar</h2>
+  <table class="sync-table">
+    <thead>
+      <tr><th>Kanal</th><th>Åtgärd</th><th>Sökterm</th><th>Tid</th></tr>
+    </thead>
+    <tbody>
+      {% for r in recent %}
+      <tr>
+        <td><span class="badge badge-source">{{ r.channel }}</span></td>
+        <td>{{ r.action }}</td>
+        <td class="muted">{{ r.query or '—' }}</td>
+        <td class="muted">{{ r.created_at[:19] if r.created_at else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% endif %}
+{% endblock %}
