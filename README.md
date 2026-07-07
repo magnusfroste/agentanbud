@@ -4,9 +4,12 @@
 > Open by design. Data är dina medborgares rättighet.
 
 Agentanbud samlar in offentlig upphandlingsdata från Mercell och TED EU,
-lagrar allt i en lokal SQLite, och serverar en enkel dashboard + JSON API via
-FastAPI. Allt-i-ett-container, deployas till Easypanel via en
-`docker-compose.yml`. Inga molntjänster, inga API-nycklar, inga paywalls.
+lagrar allt i en lokal SQLite, och serverar den via webb-dashboard, öppet
+JSON-API och en **MCP-server för AI-agenter** — allt från en FastAPI-app.
+Ovanpå datan finns marknadsintelligens (`get_winner_history` — vem brukar
+vinna), en agent-författad blogg och en cookie-fri analytics-sida. Allt-i-ett-
+container, deployas till Easypanel via en `docker-compose.yml`. Inga
+molntjänster, inga API-nycklar för läsning, inga paywalls.
 
 **Varför det här finns:** Svenska myndigheter måste enligt lag publicera
 upphandlingar enligt offentlighetsprincipen, men det finns ingen samlad
@@ -89,6 +92,24 @@ För att köra en synk manuellt (utan att vänta på cron):
 docker compose exec app python -m scraper.orchestrator
 ```
 
+## ⚙️ Konfiguration
+
+Alla inställningar är miljövariabler — se [`.env.example`](.env.example) för
+hela listan. De viktigaste för självhostande:
+
+| Variabel | Standard | Vad |
+|---|---|---|
+| `DB_PATH` | `/data/application.db` | SQLite-sökväg (Docker-volym) |
+| `CRON_SCHEDULE` | `0 6 * * *` | När daglig synk körs |
+| `ADMIN_API_KEY` | *(tom)* | Skydd för skriv-/adminåtgärder — **sätt den i produktion** |
+| `SCRAPE_MERCELL`, `SCRAPE_TED`, … | `true` | Slå av/på enskilda källor |
+| `USER_AGENT` | `agentanbud/0.1 …` | Skickas till Mercell/TED (artig, med kontakt) |
+
+> ⚠️ **Läsning är alltid öppen** (REST GET + `/mcp`). Skrivning (`/api/sync`,
+> blogg m.m.) kräver `X-Admin-Key` **endast när `ADMIN_API_KEY` är satt**. Är
+> den tom är skriv-endpoints öppna — bekvämt lokalt, men sätt alltid nyckeln
+> i produktion.
+
 ---
 
 ## 📊 API
@@ -108,9 +129,29 @@ Alla **läs**-endpoints är öppna — ingen auth, inga tokens.
 | `GET /docs` | Swagger UI (auto-genererad av FastAPI) |
 
 **Skriv-/adminåtgärder** (`POST /api/sync`, `/api/backfill`, `/api/reset-ted`,
-`/api/repair-links`, `/api/admin/query`) kräver headern `X-Admin-Key` när
-`ADMIN_API_KEY` är satt. Datan synkas ändå automatiskt varje dag — du behöver
-normalt aldrig trigga något.
+`/api/repair-links`, `/api/admin/query`, `POST/PUT /api/blog`) kräver headern
+`X-Admin-Key` när `ADMIN_API_KEY` är satt. Datan synkas ändå automatiskt varje
+dag — du behöver normalt aldrig trigga något.
+
+**Upptäckbarhet (SEO/AEO):** `GET /robots.txt` (välkomnar AI-crawlers),
+`GET /llms.txt` (kort beskrivning för LLM:er) och `GET /sitemap.xml` (alla
+sidor + upphandlingar) genereras dynamiskt. Statiska assets cache-bustas med
+en innehålls-hash (`?v=…`) så design-ändringar slår igenom direkt.
+
+### Sidor (webb — vanilla HTML, ingen JS-build)
+
+| Sida | Innehåll |
+|---|---|
+| `/` | Startsida — hero, live-KPI:er, senaste upphandlingar |
+| `/browse` | Sök & filtrera (fritext, källa, upphandlare, CPV, status) |
+| `/tenders/{id}` | Enskild upphandling |
+| `/dashboard` | Insikter — toppköpare, CPV-fördelning, "Vem vinner i Sverige" |
+| `/providers` | Datakällor, metod och policy (transparens) |
+| `/agenter` | Så kopplar du in en agent (MCP + prompt + REST) |
+| `/blogg` | Agent-författad blogg om offentlig upphandling |
+| `/kunskap` | Kunskapsbank (LOU/LOV, hållbarhetskriterier) |
+| `/analytics` | Cookie-fri användningsstatistik (människor / agenter / crawlers) |
+| `/system` | Driftstatus + synk-loggar |
 
 **Exempel:**
 
@@ -228,7 +269,15 @@ CREATE TABLE tenders (
 );
 ```
 
-`sync_log` loggar varje körning per källa (för dashboardens "senaste syncs").
+Övriga tabeller (se [`app/schema.sql`](app/schema.sql)):
+
+- `sync_log` — varje scraper-körning (för dashboardens "senaste syncs").
+- `knowledge` — kunskapsbanken (hållbarhetskriterier + Q&A).
+- `posts` / `post_events` — den agent-författade bloggen och dess
+  läs-statistik (visningar/lästa-hela; ingen IP, inga cookies).
+- `usage_log` — driver `/analytics`. Kanal (webb/MCP/API), sökterm, en
+  bot-flagga och — för MCP — en anonym sessions-hash för att räkna unika
+  agenter. Ingen IP, ingen User-Agent, inget kopplat till en person.
 
 **Inspektera direkt med `sqlite3`-CLI:**
 
