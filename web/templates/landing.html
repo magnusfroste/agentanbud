@@ -21,12 +21,12 @@
   </h1>
 
   <p class="lead">
-    Agentanbud samlar svenska offentliga upphandlingar från Mercell, TED EU och fler källor. Sök direkt här på webben — eller låt din AI-assistent göra det åt dig. Ingen inloggning, inga betalväggar.
+    Låt din AI-agent bevaka affärerna åt dig — eller sök direkt här på webben. Ingen inloggning, inga betalväggar.
   </p>
 
   <div class="hero-cta">
     <a href="/browse" class="btn primary large">Utforska upphandlingar →</a>
-    <a href="#anslut" class="btn accent large">🤖 Anslut din agent</a>
+    <a href="/agenter" class="btn accent large">🤖 Anslut din agent</a>
     <a href="https://github.com/magnusfroste/agentanbud" class="btn ghost large" target="_blank" rel="noopener">Källkod ↗</a>
   </div>
 
@@ -165,21 +165,6 @@
       Öppna data, öppen kod, öppen matchning. Inte för att konkurrera med plattformarna, utan för att hjälpa marknaden fungera bättre.
       <a href="/providers">Se hela ekosystemet vi är en del av →</a>
     </p>
-  </div>
-</section>
-
-<!-- ANSLUT DIN AGENT — USP -->
-<section id="anslut" class="connect-agent">
-  <div class="connect-copy">
-    <h2>Anslut din AI-agent — på 10 sekunder</h2>
-    <p class="connect-clients">Claude, Codex, Antigravity, Cursor och andra MCP-klienter. Inga konton, inga nycklar.</p>
-  </div>
-  <div class="connect-cmd">
-    <div class="cmd-box">
-      <code id="mcp-cmd">claude mcp add --transport http agentanbud https://www.agentanbud.se/mcp</code>
-      <button class="cmd-copy" type="button" onclick="copyMcpCmd(this)" aria-label="Kopiera kommando">📋</button>
-    </div>
-    <a href="/agenter" class="btn primary" style="margin-top: 0.9rem;">Så kopplar du in din agent →</a>
   </div>
 </section>
 
@@ -341,18 +326,6 @@
 </section>
 
 <script>
-  function _copyText(text, btn) {
-    var done = function () { if (btn) { var o = btn.textContent; btn.textContent = "✓"; setTimeout(function () { btn.textContent = o; }, 1500); } };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done).catch(function () {});
-    } else {
-      var ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta);
-      ta.select(); try { document.execCommand("copy"); } catch (e) {} document.body.removeChild(ta); done();
-    }
-  }
-  function copyMcpCmd(btn) { _copyText(document.getElementById("mcp-cmd").textContent, btn); }
-  function copyMcpUrl(btn) { _copyText("https://www.agentanbud.se/mcp", btn); }
-
   document.getElementById("empty-sync")?.addEventListener("click", async () => {
     const btn = document.getElementById("empty-sync");
     btn.disabled = true;
