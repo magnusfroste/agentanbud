@@ -816,11 +816,17 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             agent_calls = conn.execute(
                 "SELECT COUNT(*) FROM usage_log WHERE action LIKE 'tool:%'"
             ).fetchone()[0]
+            # Unique agents = distinct MCP session hashes (one agent = many calls)
+            agent_sessions = conn.execute(
+                "SELECT COUNT(DISTINCT json_extract(meta, '$._sid')) FROM usage_log "
+                "WHERE action LIKE 'tool:%' AND json_extract(meta, '$._sid') IS NOT NULL"
+            ).fetchone()[0]
 
             kpis = {
                 "views": view_total, "human_views": human_views, "bot_views": bot_views,
                 "human_pct": int(human_views / view_total * 100) if view_total else 0,
                 "searches": search_total, "agent_calls": agent_calls,
+                "agent_sessions": agent_sessions,
             }
 
             # Industry demand — bucket every query (browser + api + mcp)

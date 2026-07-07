@@ -15,9 +15,11 @@
   </p>
   <p class="muted">
     Vi sparar kanal (webbläsare/MCP/API), sökterm, en grov flagga för om
-    besöket är mänskligt eller automatiserat, och tidpunkt — inget mer.
-    Ingen IP-adress, inget besökar-ID, ingen User-Agent-sträng, inget som
-    kopplar en sökning till en person.
+    besöket är mänskligt eller automatiserat, och tidpunkt. För MCP-agenter
+    sparar vi också en kortlivad, anonym sessions-hash så vi kan räkna
+    <em>unika agenter</em> — den är slumpmässig, går inte att koppla till en
+    person och kan inte vändas tillbaka till agentens id. Ingen IP-adress,
+    ingen User-Agent-sträng, inget som kopplar en sökning till en person.
   </p>
 </section>
 
@@ -41,8 +43,8 @@
     <div class="l">👤 Människor (webb)</div>
   </div>
   <div class="insight-kpi green">
-    <div class="v">{{ "{:,}".format(kpis.agent_calls).replace(",", " ") }}</div>
-    <div class="l">🤖 Agenter (MCP-anrop)</div>
+    <div class="v">{{ "{:,}".format(kpis.agent_sessions).replace(",", " ") }}</div>
+    <div class="l">🤖 Agenter (unika sessioner · {{ kpis.agent_calls }} anrop)</div>
   </div>
   <div class="insight-kpi highlight">
     <div class="v">{{ "{:,}".format(kpis.searches).replace(",", " ") }}</div>

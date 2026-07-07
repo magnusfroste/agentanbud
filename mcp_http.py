@@ -23,6 +23,7 @@ Mounted from app/main.py via:
 """
 from __future__ import annotations
 
+import hashlib
 import hmac
 import json
 import logging
@@ -93,13 +94,19 @@ def _extract_query(name: str, arguments: dict) -> str | None:
     return None
 
 
-async def _dispatch_tool(name: str, arguments: dict) -> list:
+async def _dispatch_tool(name: str, arguments: dict, session_id: str | None = None) -> list:
     """Call the right tool handler (reuses the stdio version's logic)."""
     conn = connect(mcp_server.DB_PATH)
     try:
         try:
+            # Anonymous, one-way hash of the MCP session id — lets /analytics
+            # count DISTINCT agent sessions (one agent makes many calls) without
+            # storing the raw token or anything tied to a person.
+            meta = dict(arguments or {})
+            if session_id:
+                meta["_sid"] = hashlib.sha256(session_id.encode()).hexdigest()[:12]
             log_usage(conn, "mcp", f"tool:{name}",
-                      query=_extract_query(name, arguments), meta=arguments or None)
+                      query=_extract_query(name, arguments), meta=meta or None)
         except Exception:
             LOG.exception("log_usage failed for MCP tool %s", name)
         if name == "search_tenders":
@@ -465,7 +472,7 @@ async def mcp_post(request: Request):
                     status_code=401,
                     headers={**_cors_headers(), "mcp-session-id": session_id},
                 )
-            content = await _dispatch_tool(name, arguments)
+            content = await _dispatch_tool(name, arguments, session_id)
             result = _format_result(content)
         else:
             return JSONResponse(
