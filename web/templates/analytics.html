@@ -29,17 +29,9 @@
 
 <!-- HEADLINE KPIs -->
 <section class="insight-kpis">
-  <div class="insight-kpi">
-    <div class="v">{{ "{:,}".format(kpis.views).replace(",", " ") }}</div>
-    <div class="l">Besök totalt</div>
-  </div>
   <div class="insight-kpi green">
-    <div class="v">{{ kpis.human_pct }}%</div>
-    <div class="l">Mänskliga besök ({{ kpis.human_views }})</div>
-  </div>
-  <div class="insight-kpi">
-    <div class="v">{{ kpis.bot_views }}</div>
-    <div class="l">Botar &amp; agenter (crawlers, AI)</div>
+    <div class="v">{{ "{:,}".format(kpis.human_views).replace(",", " ") }}</div>
+    <div class="l">Mänskliga besök</div>
   </div>
   <div class="insight-kpi highlight">
     <div class="v">{{ kpis.searches }}</div>
@@ -49,7 +41,15 @@
     <div class="v">{{ kpis.agent_calls }}</div>
     <div class="l">MCP-agentanrop</div>
   </div>
+  <div class="insight-kpi">
+    <div class="v">{{ "{:,}".format(kpis.bot_views).replace(",", " ") }}</div>
+    <div class="l">Crawlers &amp; AI-botar</div>
+  </div>
 </section>
+<p class="muted" style="margin: -0.5rem 0 1.5rem; font-size: 0.85rem;">
+  Botar (sökmotorers crawlers, AI-agenter) räknas separat — de driver
+  upptäckbarhet men är inte mänskliga besök.
+</p>
 
 <!-- SPONSOR FRAMING -->
 <section class="insight-section">
@@ -104,7 +104,7 @@
 <!-- MOMENTUM -->
 <section class="insight-section">
   <h2>Trafik, senaste 30 dagarna</h2>
-  <p class="muted">Besök + sökningar + agentanrop per dag. Tillväxten är själva säljargumentet.</p>
+  <p class="muted">Mänskliga besök + sökningar + agentanrop per dag (crawlers exkluderade). Tillväxten är själva säljargumentet.</p>
   <div class="weekday-chart weekday-chart-30">
     {% for d in daily %}
     <div class="weekday-col" title="{{ d.day }}: {{ d.n }} ({{ d.views }} besök, {{ d.searches }} sök, {{ d.agents }} agent)">

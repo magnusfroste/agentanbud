@@ -892,9 +892,11 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             top_tools = [{"tool": r["action"][5:], "n": r["n"], "pct": int(r["n"] / max_tool * 100)}
                          for r in tool_rows]
 
+            # Momentum chart counts HUMAN pageviews only (exclude crawlers) so
+            # growth reflects real interest, not bot indexing.
             day_rows = conn.execute(
                 "SELECT DATE(created_at) AS day, "
-                "SUM(action = 'view') AS views, "
+                "SUM(action = 'view' AND json_extract(meta, '$.bot') = 0) AS views, "
                 "SUM(action = 'search') AS searches, "
                 "SUM(action LIKE 'tool:%') AS agents "
                 "FROM usage_log WHERE created_at >= DATE('now', '-29 days') GROUP BY day"
