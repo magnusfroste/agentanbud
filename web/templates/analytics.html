@@ -27,29 +27,32 @@
 </section>
 {% else %}
 
-<!-- HEADLINE KPIs -->
+<!-- HEADLINE KPIs — three audiences -->
+<p class="muted" style="margin-bottom: 0.75rem;">
+  Tre sorters publik når Agentanbud: <strong>människor</strong> som surfar,
+  <strong>agenter</strong> som kopplar upp sig via MCP (en användare bakom
+  varje), och <strong>crawlers</strong> som indexerar oss (system, ingen
+  enskild användare — men driver upptäckbarhet). De två första är verklig
+  publik; den sista är räckvidd.
+</p>
 <section class="insight-kpis">
   <div class="insight-kpi green">
     <div class="v">{{ "{:,}".format(kpis.human_views).replace(",", " ") }}</div>
-    <div class="l">Mänskliga besök</div>
+    <div class="l">👤 Människor (webb)</div>
+  </div>
+  <div class="insight-kpi green">
+    <div class="v">{{ "{:,}".format(kpis.agent_calls).replace(",", " ") }}</div>
+    <div class="l">🤖 Agenter (MCP-anrop)</div>
   </div>
   <div class="insight-kpi highlight">
-    <div class="v">{{ kpis.searches }}</div>
-    <div class="l">Sökningar på webben</div>
-  </div>
-  <div class="insight-kpi">
-    <div class="v">{{ kpis.agent_calls }}</div>
-    <div class="l">MCP-agentanrop</div>
+    <div class="v">{{ "{:,}".format(kpis.searches).replace(",", " ") }}</div>
+    <div class="l">🔍 Sökningar på webben</div>
   </div>
   <div class="insight-kpi">
     <div class="v">{{ "{:,}".format(kpis.bot_views).replace(",", " ") }}</div>
-    <div class="l">Crawlers &amp; AI-botar</div>
+    <div class="l">🕷️ Crawlers (indexering)</div>
   </div>
 </section>
-<p class="muted" style="margin: -0.5rem 0 1.5rem; font-size: 0.85rem;">
-  Botar (sökmotorers crawlers, AI-agenter) räknas separat — de driver
-  upptäckbarhet men är inte mänskliga besök.
-</p>
 
 <!-- SPONSOR FRAMING -->
 <section class="insight-section">
