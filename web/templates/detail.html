@@ -18,7 +18,7 @@
       {% if t.days_until is not none %}
         {% if t.days_until < 0 %}
         <span class="status-badge status-closed">🔒 Stängd</span>
-        <span class="status-time">Stängdes för {{ abs(t.days_until) }} dagar sedan</span>
+        <span class="status-time">Stängdes för {{ t.days_until | abs }} dagar sedan</span>
         {% elif t.days_until == 0 %}
         <span class="status-badge status-urgent">⚠️ Stänger idag!</span>
         {% elif t.days_until <= 3 %}

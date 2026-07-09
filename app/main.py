@@ -183,6 +183,8 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
     app = FastAPI(title="Agentanbud", version="0.2.0")
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
     env.filters["format_num"] = _num
+    # Python builtins used in templates (Jinja doesn't expose these by default).
+    env.globals.update(abs=abs, min=min, max=max)
 
     # Cache-busting: a short hash of the static assets, computed once at
     # startup. When style.css / app.js change and are redeployed the hash
