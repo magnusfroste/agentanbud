@@ -23,23 +23,46 @@ from jinja2 import Environment, FileSystemLoader
 
 from .cron import get_schedule, next_run
 from .db import (
-    connect, init_db, log_usage,
+    connect, init_db, log_usage, prune_logs,
     create_post as db_create_post, update_post as db_update_post,
     record_post_event,
 )
 
-# Markdown rendering for blog posts — optional dependency, degrade gracefully.
+# Markdown rendering for blog posts. Output is ALWAYS sanitised (allowlist of
+# safe tags/attributes) before it reaches the template's `| safe`, so even a
+# compromised admin key can't plant <script>/onerror/javascript: XSS in a post.
+try:
+    import nh3 as _nh3
+
+    _ALLOWED_TAGS = {
+        "p", "br", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "b", "i",
+        "ul", "ol", "li", "a", "code", "pre", "blockquote", "hr", "table",
+        "thead", "tbody", "tr", "th", "td",
+    }
+    _ALLOWED_ATTRS = {"a": {"href", "title"}}
+
+    def _sanitize_html(html: str) -> str:
+        # nh3 strips scripts, event handlers and javascript:/data: URLs, and
+        # keeps only allowlisted tags/attributes.
+        return _nh3.clean(html or "", tags=_ALLOWED_TAGS, attributes=_ALLOWED_ATTRS)
+except Exception:  # nh3 missing → be safe: escape everything (no HTML at all)
+    import html as _html
+
+    def _sanitize_html(html: str) -> str:
+        return _html.escape(html or "")
+
 try:
     import markdown as _markdown
 
     def render_markdown(md: str) -> str:
-        return _markdown.markdown(md or "", extensions=["extra", "sane_lists", "nl2br"])
+        html = _markdown.markdown(md or "", extensions=["extra", "sane_lists", "nl2br"])
+        return _sanitize_html(html)
 except Exception:  # pragma: no cover — lib missing in some envs
-    import html as _html
+    import html as _html2
 
     def render_markdown(md: str) -> str:
         # Minimal safe fallback: escape + preserve paragraphs.
-        paras = (_html.escape(md or "")).split("\n\n")
+        paras = (_html2.escape(md or "")).split("\n\n")
         return "".join(f"<p>{p.replace(chr(10), '<br>')}</p>" for p in paras if p.strip())
 
 # MCP-over-HTTP is optional — only loaded if mcp_http module is present
@@ -179,6 +202,13 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
         init_db(db)
     except Exception as exc:
         LOG.warning("init_db failed: %s", exc)
+    # Bound the append-only log tables on every boot (deploys run often).
+    try:
+        _c = connect(db)
+        prune_logs(_c)
+        _c.close()
+    except Exception:
+        LOG.exception("startup prune_logs failed")
 
     app = FastAPI(title="Agentanbud", version="0.2.0")
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
@@ -236,6 +266,38 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                     conn.close()
         except Exception:
             LOG.exception("pageview logging failed")
+        return response
+
+    # ---- Security headers ----
+    # Deliberate CSP: allows our own inline <script>/<style> (copy buttons,
+    # theme toggle, blog beacon) but blocks all external sources, framing
+    # (clickjacking), object/embed, and off-site form posts.
+    _CSP = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+    # Swagger UI (/docs, /redoc) pulls assets from a CDN — skip CSP there.
+    _CSP_SKIP = ("/docs", "/redoc", "/openapi.json")
+
+    @app.middleware("http")
+    async def _security_headers(request: Request, call_next):
+        response = await call_next(request)
+        h = response.headers
+        h.setdefault("X-Content-Type-Options", "nosniff")
+        h.setdefault("X-Frame-Options", "DENY")
+        h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        h.setdefault("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+        h.setdefault("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
+        if not request.url.path.startswith(_CSP_SKIP):
+            h.setdefault("Content-Security-Policy", _CSP)
         return response
 
     # ---- Discovery files: robots.txt, llms.txt, sitemap.xml ----

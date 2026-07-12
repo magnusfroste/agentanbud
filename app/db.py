@@ -174,6 +174,19 @@ def log_usage(
     conn.commit()
 
 
+def prune_logs(conn: sqlite3.Connection, days: int = 120) -> None:
+    """Cap the append-only log tables to a retention window so they can't grow
+    without bound (every pageview writes to usage_log). Best-effort; safe to
+    call on every startup."""
+    try:
+        cutoff = f"-{int(days)} days"
+        conn.execute("DELETE FROM usage_log WHERE created_at < DATE('now', ?)", (cutoff,))
+        conn.execute("DELETE FROM post_events WHERE created_at < DATE('now', ?)", (cutoff,))
+        conn.commit()
+    except Exception:
+        LOG.exception("prune_logs failed")
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 

@@ -6,3 +6,4 @@ croniter==2.0.1
 mcp>=1.0.0
 starlette>=0.37.2,<0.39.0
 markdown>=3.5
+nh3>=0.2
