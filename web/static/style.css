@@ -2756,3 +2756,11 @@ pre code {
   margin-top: 0.4rem;
 }
 .weekday-chart-30 .weekday-col:not(:nth-child(5n)) .weekday-label { visibility: hidden; }
+
+/* Multi-column variant of .cards for info cards (providers ecosystem etc.).
+   Plain .cards stays single-column — landing/dashboard use it for full-width
+   tender rows, where one per row is intentional. */
+.cards.cards-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
