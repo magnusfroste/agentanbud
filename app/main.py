@@ -330,7 +330,10 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
         for bot in ai_bots:
             lines += [f"User-agent: {bot}", *group_rules, ""]
         lines.append(f"Sitemap: {SITE_URL}/sitemap.xml")
-        return PlainTextResponse("\n".join(lines) + "\n")
+        # Explicit TTL so Cloudflare's edge cache (which caches .txt by
+        # default) refreshes predictably within an hour of a deploy.
+        return PlainTextResponse("\n".join(lines) + "\n",
+                                 headers={"Cache-Control": "public, max-age=3600"})
 
     @app.get("/llms.txt", include_in_schema=False)
     def llms_txt():
@@ -382,7 +385,8 @@ samma tillgång för småföretag som för de stora konsultbolagen.
 Kod: MIT ({SITE_URL} — github.com/magnusfroste/agentanbud). Data: respektive
 källas villkor gäller originalet; vi är en spegel som pekar vidare.
 """
-        return PlainTextResponse(body, media_type="text/markdown; charset=utf-8")
+        return PlainTextResponse(body, media_type="text/markdown; charset=utf-8",
+                                 headers={"Cache-Control": "public, max-age=3600"})
 
     @app.get("/sitemap.xml", include_in_schema=False)
     def sitemap_xml():
@@ -411,7 +415,8 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         for r in tenders:
             parts.append(f"<url><loc>{SITE_URL}/tenders/{r['id']}</loc></url>")
         parts.append("</urlset>")
-        return Response("\n".join(parts), media_type="application/xml")
+        return Response("\n".join(parts), media_type="application/xml",
+                        headers={"Cache-Control": "public, max-age=3600"})
 
     # ---- Pages ----
     @app.get("/", include_in_schema=False)
