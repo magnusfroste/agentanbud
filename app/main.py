@@ -312,15 +312,23 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
             "anthropic-ai", "PerplexityBot", "Google-Extended", "CCBot",
             "Applebot-Extended", "cohere-ai",
         ]
+        # /browse?… is a crawler trap: the filter links (authority × source ×
+        # status × cpv) form a combinatorial URL space that crawlers walk
+        # endlessly — wasting crawl budget that should go to /tenders/{id}.
+        # Plain /browse and all real pages stay open. NOTE: a crawler that
+        # matches a specific User-agent group ignores the * group, so the
+        # Disallow must be repeated in every group.
+        group_rules = ["Allow: /", "Disallow: /browse?"]
         lines = [
             "# Agentanbud — öppen upphandlingsdata. AI-agenter och crawlers välkomna.",
+            "# /browse?* (filterkombinationer) undanbedes — indexera /tenders/{id} istället.",
             "User-agent: *",
-            "Allow: /",
+            *group_rules,
             "",
             "# Explicit välkomnande av AI/LLM-crawlers:",
         ]
         for bot in ai_bots:
-            lines += [f"User-agent: {bot}", "Allow: /", ""]
+            lines += [f"User-agent: {bot}", *group_rules, ""]
         lines.append(f"Sitemap: {SITE_URL}/sitemap.xml")
         return PlainTextResponse("\n".join(lines) + "\n")
 
@@ -730,10 +738,14 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 f"SELECT COUNT(*) FROM tenders {where_sql}", args
             ).fetchone()[0]
 
-            if page == 1 and (q or source or authority or cpv):
+            # Log only human searches: crawlers walk every filter link on this
+            # page (authority × source × status …), which used to flood the log
+            # with thousands of query-less "searches" and drown the real signal.
+            if page == 1 and (q or source or authority or cpv) \
+                    and not _looks_like_bot(request.headers.get("user-agent", "")):
                 _log_usage_safe(conn, "browser", "search", query=q or None,
                                 meta={"source": source, "authority": authority,
-                                      "cpv": cpv, "status": status,
+                                      "cpv": cpv, "status": status, "bot": 0,
                                       "segment": _segment_for(q, cpv), "results": total})
 
             sort_map = {
@@ -874,8 +886,14 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 "AND json_extract(meta, '$.bot') = 0"
             ).fetchone()[0]
             bot_views = view_total - human_views
+            # "Real" searches only: rows flagged bot=0 (new logging), plus
+            # historical rows that carry an actual keyword. Excludes the old
+            # crawler filter-walks (query-less, unflagged) that used to make
+            # this KPI ~99% bot noise.
+            _REAL_SEARCH = ("action = 'search' AND (json_extract(meta, '$.bot') = 0 "
+                            "OR (query IS NOT NULL AND TRIM(query) != ''))")
             search_total = conn.execute(
-                "SELECT COUNT(*) FROM usage_log WHERE action = 'search'"
+                f"SELECT COUNT(*) FROM usage_log WHERE {_REAL_SEARCH}"
             ).fetchone()[0]
             agent_calls = conn.execute(
                 "SELECT COUNT(*) FROM usage_log WHERE action LIKE 'tool:%'"
@@ -967,7 +985,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             day_rows = conn.execute(
                 "SELECT DATE(created_at) AS day, "
                 "SUM(action = 'view' AND json_extract(meta, '$.bot') = 0) AS views, "
-                "SUM(action = 'search') AS searches, "
+                f"SUM({_REAL_SEARCH}) AS searches, "
                 "SUM(action LIKE 'tool:%') AS agents "
                 "FROM usage_log WHERE created_at >= DATE('now', '-29 days') GROUP BY day"
             ).fetchall()
@@ -987,7 +1005,8 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
 
             recent = [dict(r) for r in conn.execute(
                 "SELECT channel, action, query, created_at FROM usage_log "
-                "WHERE action != 'view' ORDER BY created_at DESC LIMIT 25"
+                f"WHERE action LIKE 'tool:%' OR ({_REAL_SEARCH}) "
+                "ORDER BY created_at DESC LIMIT 25"
             ).fetchall()]
 
             return HTMLResponse(render("analytics.html",
@@ -1393,8 +1412,10 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
                 f"SELECT COUNT(*) FROM tenders {where_sql}", args
             ).fetchone()[0]
             if page == 1 and (q or source or authority):
+                # API searches are deliberate calls (agents/scripts) — count as
+                # real usage, so flag bot:0 to survive the analytics filter.
                 _log_usage_safe(conn, "api", "search", query=q,
-                                meta={"source": source, "authority": authority,
+                                meta={"source": source, "authority": authority, "bot": 0,
                                       "segment": _segment_for(q, None), "results": total})
             rows = conn.execute(
                 f"""
