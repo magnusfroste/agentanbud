@@ -107,15 +107,3 @@ CREATE TABLE IF NOT EXISTS usage_log (
 
 CREATE INDEX IF NOT EXISTS idx_usage_log_time ON usage_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_usage_log_channel ON usage_log(channel);
-
--- Aggregated counters — one row per (day, kind) instead of one row per event.
--- Crawlers generate ~97% of pageviews; storing each one bloated usage_log
--- (98k rows / 143 MB in three weeks) without adding any information beyond
--- "how many". Bot views are counted here; human/search/agent events stay in
--- usage_log because their detail (query, segment, session) is the signal.
-CREATE TABLE IF NOT EXISTS daily_counters (
-    day TEXT NOT NULL,                     -- YYYY-MM-DD
-    kind TEXT NOT NULL,                    -- 'bot_view'
-    n INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (day, kind)
-);
