@@ -174,15 +174,50 @@ def log_usage(
     conn.commit()
 
 
-def prune_logs(conn: sqlite3.Connection, days: int = 120) -> None:
+def bump_daily_counter(conn: sqlite3.Connection, kind: str, day: Optional[str] = None) -> None:
+    """Increment an aggregated daily counter (one row per day+kind).
+
+    Used for high-volume, low-information events — crawler pageviews — so a
+    bot storm costs one UPDATE per day instead of one INSERT per request.
+    """
+    d = day or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    conn.execute(
+        "INSERT INTO daily_counters (day, kind, n) VALUES (?, ?, 1) "
+        "ON CONFLICT(day, kind) DO UPDATE SET n = n + 1",
+        (d, kind),
+    )
+    conn.commit()
+
+
+def prune_logs(conn: sqlite3.Connection, days: int = 30, counter_days: int = 400) -> None:
     """Cap the append-only log tables to a retention window so they can't grow
-    without bound (every pageview writes to usage_log). Best-effort; safe to
-    call on every startup."""
+    without bound. Reclaims disk with VACUUM when a lot was deleted.
+
+    daily_counters is kept much longer — it's one tiny row per day, so a
+    year-plus of history costs nothing.
+    Best-effort; safe to call on every startup.
+    """
     try:
         cutoff = f"-{int(days)} days"
-        conn.execute("DELETE FROM usage_log WHERE created_at < DATE('now', ?)", (cutoff,))
-        conn.execute("DELETE FROM post_events WHERE created_at < DATE('now', ?)", (cutoff,))
+        deleted = conn.execute(
+            "DELETE FROM usage_log WHERE created_at < DATE('now', ?)", (cutoff,)
+        ).rowcount or 0
+        deleted += conn.execute(
+            "DELETE FROM post_events WHERE created_at < DATE('now', ?)", (cutoff,)
+        ).rowcount or 0
+        conn.execute(
+            "DELETE FROM daily_counters WHERE day < DATE('now', ?)",
+            (f"-{int(counter_days)} days",),
+        )
         conn.commit()
+        if deleted > 1000:
+            # SQLite keeps freed pages unless vacuumed; must run outside a
+            # transaction, so commit above then VACUUM on its own.
+            try:
+                conn.execute("VACUUM")
+                LOG.info("prune_logs: deleted %d rows, vacuumed", deleted)
+            except Exception:
+                LOG.warning("prune_logs: VACUUM skipped", exc_info=True)
     except Exception:
         LOG.exception("prune_logs failed")
 

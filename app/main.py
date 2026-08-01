@@ -23,7 +23,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from .cron import get_schedule, next_run
 from .db import (
-    connect, init_db, log_usage, prune_logs,
+    connect, init_db, log_usage, prune_logs, bump_daily_counter,
     create_post as db_create_post, update_post as db_update_post,
     record_post_event,
 )
@@ -261,7 +261,13 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 is_bot = _looks_like_bot(request.headers.get("user-agent", ""))
                 conn = connect(db)
                 try:
-                    _log_usage_safe(conn, "browser", "view", query=path, meta={"bot": is_bot})
+                    if is_bot:
+                        # Crawlers are ~97% of pageviews and we only ever show
+                        # the total — aggregate instead of one row per hit.
+                        bump_daily_counter(conn, "bot_view")
+                    else:
+                        _log_usage_safe(conn, "browser", "view", query=path,
+                                        meta={"bot": 0})
                 finally:
                     conn.close()
         except Exception:
@@ -883,14 +889,19 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         try:
             total = conn.execute("SELECT COUNT(*) FROM usage_log").fetchone()[0]
 
-            view_total = conn.execute(
-                "SELECT COUNT(*) FROM usage_log WHERE action = 'view'"
-            ).fetchone()[0]
             human_views = conn.execute(
                 "SELECT COUNT(*) FROM usage_log WHERE action = 'view' "
                 "AND json_extract(meta, '$.bot') = 0"
             ).fetchone()[0]
-            bot_views = view_total - human_views
+            # Bot views live in the aggregated counter now; legacy per-hit rows
+            # (logged before the switch) are still counted until they age out.
+            bot_views = (conn.execute(
+                "SELECT COALESCE(SUM(n), 0) FROM daily_counters WHERE kind = 'bot_view'"
+            ).fetchone()[0] or 0) + (conn.execute(
+                "SELECT COUNT(*) FROM usage_log WHERE action = 'view' "
+                "AND json_extract(meta, '$.bot') = 1"
+            ).fetchone()[0] or 0)
+            view_total = human_views + bot_views
             # "Real" searches only: rows flagged bot=0 (new logging), plus
             # historical rows that carry an actual keyword. Excludes the old
             # crawler filter-walks (query-less, unflagged) that used to make
