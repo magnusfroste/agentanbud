@@ -2661,6 +2661,9 @@ pre code {
 /* BLOG */
 .blog-list {
   display: grid;
+  /* Two columns on wide screens: full-width cards left the wide chart
+     thumbnails floating in whitespace. Collapses to one on narrow. */
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
   gap: 1rem;
   margin-top: 1.5rem;
 }
@@ -2788,7 +2791,10 @@ pre code {
   display: block;
 }
 .blog-thumb {
-  height: 160px;
+  /* Match the charts' 12:5 ratio so they fill the card edge to edge instead
+     of being letterboxed; contain keeps any other ratio fully visible. */
+  aspect-ratio: 12 / 5;
+  height: auto;
   /* contain, not cover: these are charts — cover crops the headline and the
      numbers out of the middle of a wide graphic. The background matches our
      chart surface so the letterboxing is invisible for our own images. */

@@ -1,52 +1,48 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" width="1200" height="620" role="img"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" width="1200" height="500" role="img"
      aria-label="Andel tilldelningar där någon av de fem största leverantörerna finns med: Vård och omsorg 61 procent, Miljö och renhållning 31 procent, IT 29 procent, Konsult och juridik 29 procent, Bygg och anläggning 16 procent.">
   <title>Hur koncentrerad är din bransch?</title>
 
-  <!-- The image carries its own light surface: an <img> can't inherit the
-       page theme, so it must read on both light and dark pages. -->
-  <rect width="1200" height="620" rx="16" fill="#fcfcfb"/>
+  <!-- 1200x500 (12:5) — the same ratio as the other blog chart, so the card's
+       image box matches it exactly and nothing is letterboxed or cropped.
+       Carries its own light surface: an <img> can't inherit the page theme. -->
+  <rect width="1200" height="500" rx="16" fill="#fcfcfb"/>
 
-  <text x="72" y="82" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-        font-size="38" font-weight="700" fill="#0b0b0b">Hur koncentrerad är din bransch?</text>
-  <text x="72" y="122" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-        font-size="21" fill="#52514e">Andel tilldelningar där någon av de fem största leverantörerna finns med</text>
+  <text x="72" y="74" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="36" font-weight="700" fill="#0b0b0b">Hur koncentrerad är din bransch?</text>
+  <text x="72" y="108" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="19" fill="#52514e">Andel tilldelningar där någon av de fem största leverantörerna finns med</text>
 
   <!-- ONE measure, ONE scale: share in percent, 0–61 mapped to 0–700px (x 430→1130) -->
-  <!-- Vård & omsorg: 61% -->
-  <text x="72" y="205" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-        font-size="23" font-weight="600" fill="#0b0b0b">Vård &amp; omsorg</text>
-  <rect x="430" y="180" width="700" height="34" rx="4" fill="#2a78d6"/>
-  <text x="1148" y="206" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-        font-size="23" font-weight="700" fill="#0b0b0b" text-anchor="end">61%</text>
+  <text x="72" y="167" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="22" font-weight="600" fill="#0b0b0b">Vård &amp; omsorg</text>
+  <rect x="430" y="145" width="700" height="30" rx="4" fill="#2a78d6"/>
+  <text x="1148" y="167" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="22" font-weight="700" fill="#0b0b0b" text-anchor="end">61%</text>
 
-  <!-- Miljö & renhållning: 31% -->
-  <text x="72" y="285" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-        font-size="23" font-weight="600" fill="#0b0b0b">Miljö &amp; renhållning</text>
-  <rect x="430" y="260" width="356" height="34" rx="4" fill="#2a78d6"/>
-  <text x="814" y="286" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-        font-size="23" font-weight="700" fill="#0b0b0b">31%</text>
+  <text x="72" y="229" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="22" font-weight="600" fill="#0b0b0b">Miljö &amp; renhållning</text>
+  <rect x="430" y="207" width="356" height="30" rx="4" fill="#2a78d6"/>
+  <text x="812" y="229" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="22" font-weight="700" fill="#0b0b0b">31%</text>
 
-  <!-- IT: 29% -->
-  <text x="72" y="365" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-        font-size="23" font-weight="600" fill="#0b0b0b">IT</text>
-  <rect x="430" y="340" width="333" height="34" rx="4" fill="#2a78d6"/>
-  <text x="791" y="366" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-        font-size="23" font-weight="700" fill="#0b0b0b">29%</text>
+  <text x="72" y="291" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="22" font-weight="600" fill="#0b0b0b">IT</text>
+  <rect x="430" y="269" width="333" height="30" rx="4" fill="#2a78d6"/>
+  <text x="789" y="291" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="22" font-weight="700" fill="#0b0b0b">29%</text>
 
-  <!-- Konsult & juridik: 29% -->
-  <text x="72" y="445" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-        font-size="23" font-weight="600" fill="#0b0b0b">Konsult &amp; juridik</text>
-  <rect x="430" y="420" width="333" height="34" rx="4" fill="#2a78d6"/>
-  <text x="791" y="446" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-        font-size="23" font-weight="700" fill="#0b0b0b">29%</text>
+  <text x="72" y="353" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="22" font-weight="600" fill="#0b0b0b">Konsult &amp; juridik</text>
+  <rect x="430" y="331" width="333" height="30" rx="4" fill="#2a78d6"/>
+  <text x="789" y="353" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="22" font-weight="700" fill="#0b0b0b">29%</text>
 
-  <!-- Bygg & anläggning: 16% -->
-  <text x="72" y="525" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-        font-size="23" font-weight="600" fill="#0b0b0b">Bygg &amp; anläggning</text>
-  <rect x="430" y="500" width="184" height="34" rx="4" fill="#2a78d6"/>
-  <text x="642" y="526" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
-        font-size="23" font-weight="700" fill="#0b0b0b">16%</text>
+  <text x="72" y="415" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="22" font-weight="600" fill="#0b0b0b">Bygg &amp; anläggning</text>
+  <rect x="430" y="393" width="184" height="30" rx="4" fill="#2a78d6"/>
+  <text x="640" y="415" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="22" font-weight="700" fill="#0b0b0b">16%</text>
 
-  <text x="72" y="588" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+  <text x="72" y="468" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
         font-size="15" fill="#52514e">Källa: agentanbud.se — 2 297 tilldelningar från TED. Ett ramavtal kan tilldelas flera leverantörer.</text>
 </svg>
