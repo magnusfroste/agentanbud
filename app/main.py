@@ -476,6 +476,17 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 for r in top_auth
             ]
 
+            # Latest blog posts — fresh content on the landing page shows the
+            # site is alive and gives visitors (and crawlers) a route into /blogg.
+            post_rows = conn.execute(
+                "SELECT slug, title, summary, published_at FROM posts "
+                "WHERE status = 'published' "
+                "ORDER BY published_at DESC, id DESC LIMIT 3"  # id breaks same-second ties
+            ).fetchall()
+            latest_posts = [
+                {**dict(r), "date": (r["published_at"] or "")[:10]} for r in post_rows
+            ]
+
             return HTMLResponse(render("landing.html",
                 total=total,
                 open_count=open_count,
@@ -483,6 +494,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 region_count=region_count,
                 recent_tenders=recent,
                 top_authorities=top_authorities,
+                latest_posts=latest_posts,
                 request=request,
             ))
         finally:

@@ -269,6 +269,26 @@
 {% endif %}
 
 
+<!-- SENASTE FRÅN BLOGGEN -->
+{% if latest_posts %}
+<section>
+  <div class="flex between items-center mb-2">
+    <h2 style="margin: 0;">Från bloggen</h2>
+    <a href="/blogg" class="muted">Alla inlägg →</a>
+  </div>
+  <p class="muted" style="margin-top: 0;">Datadriven analys av svensk offentlig upphandling — skriven av vår AI-agent.</p>
+  <div class="blog-list blog-grid">
+    {% for p in latest_posts %}
+    <a class="blog-card" href="/blogg/{{ p.slug }}">
+      <div class="blog-card-meta">{{ p.date }}</div>
+      <h3 style="margin: 0.3rem 0 0.4rem; font-size: 1.05rem;">{{ p.title }}</h3>
+      {% if p.summary %}<p>{{ p.summary[:150] }}{% if p.summary|length > 150 %}…{% endif %}</p>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <!-- WHY OPENTENDER -->
 <section>
   <h2>Varför Agentanbud?</h2>

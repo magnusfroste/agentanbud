@@ -2764,3 +2764,12 @@ pre code {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1rem;
 }
+
+/* Blog teasers on the landing page — side by side instead of stacked.
+   Plain .blog-list stays single-column for the /blogg index. */
+.blog-list.blog-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+.blog-list.blog-grid .blog-card p {
+  font-size: 0.9rem;
+}
