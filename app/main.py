@@ -23,7 +23,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from .cron import get_schedule, next_run
 from .db import (
-    connect, init_db, log_usage, prune_logs, bump_daily_counter,
+    connect, init_db, log_usage, bump_daily_counter,
     create_post as db_create_post, update_post as db_update_post,
     record_post_event,
 )
@@ -202,13 +202,10 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
         init_db(db)
     except Exception as exc:
         LOG.warning("init_db failed: %s", exc)
-    # Bound the append-only log tables on every boot (deploys run often).
-    try:
-        _c = connect(db)
-        prune_logs(_c)
-        _c.close()
-    except Exception:
-        LOG.exception("startup prune_logs failed")
+    # NOTE: log pruning deliberately does NOT run here. A DELETE+VACUUM over a
+    # large DB can hold the write lock long enough to fail the container's
+    # health check, which would crash-loop the app on boot. It runs once a day
+    # in the scraper orchestrator instead (see scraper/orchestrator.py).
 
     app = FastAPI(title="Agentanbud", version="0.2.0")
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)

@@ -195,20 +195,27 @@ def prune_logs(conn: sqlite3.Connection, days: int = 30, counter_days: int = 400
 
     daily_counters is kept much longer — it's one tiny row per day, so a
     year-plus of history costs nothing.
-    Best-effort; safe to call on every startup.
+
+    Runs from the daily orchestrator, NOT at app startup: a DELETE+VACUUM can
+    hold the write lock long enough to fail a container health check.
+    Best-effort — a missing table (fresh DB) is skipped quietly.
     """
+    def _delete(sql: str, params: tuple) -> int:
+        try:
+            return conn.execute(sql, params).rowcount or 0
+        except sqlite3.OperationalError as exc:
+            if "no such table" in str(exc):
+                return 0          # fresh DB, nothing to prune
+            raise
+
     try:
         cutoff = f"-{int(days)} days"
-        deleted = conn.execute(
-            "DELETE FROM usage_log WHERE created_at < DATE('now', ?)", (cutoff,)
-        ).rowcount or 0
-        deleted += conn.execute(
-            "DELETE FROM post_events WHERE created_at < DATE('now', ?)", (cutoff,)
-        ).rowcount or 0
-        conn.execute(
-            "DELETE FROM daily_counters WHERE day < DATE('now', ?)",
-            (f"-{int(counter_days)} days",),
-        )
+        deleted = _delete(
+            "DELETE FROM usage_log WHERE created_at < DATE('now', ?)", (cutoff,))
+        deleted += _delete(
+            "DELETE FROM post_events WHERE created_at < DATE('now', ?)", (cutoff,))
+        _delete("DELETE FROM daily_counters WHERE day < DATE('now', ?)",
+                (f"-{int(counter_days)} days",))
         conn.commit()
         if deleted > 1000:
             # SQLite keeps freed pages unless vacuumed; must run outside a

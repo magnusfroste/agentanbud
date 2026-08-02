@@ -20,6 +20,7 @@ import time
 from typing import Callable
 
 from . import mercell, ted, ted_awards, ted_pin, lov, criteria, questions
+from app.db import connect, prune_logs
 
 LOG = logging.getLogger(__name__)
 
@@ -63,6 +64,19 @@ def run_all(db_path: str) -> dict:
         except Exception as exc:
             LOG.exception("scraper %s crashed", name)
             results[name] = -1
+    # Housekeeping: cap the append-only log tables once a day, here rather
+    # than at app startup — a DELETE+VACUUM can hold the write lock long
+    # enough to fail the container health check and crash-loop the app.
+    # Runs after the scrapers so the write lock is already ours.
+    try:
+        conn = connect(db_path)
+        try:
+            prune_logs(conn)
+        finally:
+            conn.close()
+    except Exception:
+        LOG.exception("prune_logs failed")
+
     results["_elapsed_s"] = int(time.time() - t0)
     LOG.info("scrape complete: %s", results)
     return results
