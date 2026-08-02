@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS posts (
     summary TEXT,                           -- short excerpt (list view + og:description)
     body_md TEXT NOT NULL,                  -- Markdown source
     tags TEXT,                              -- JSON list of tags
+    image_url TEXT,                         -- optional hero image (https URL)
     author TEXT DEFAULT 'Agentanbud AI',
     status TEXT DEFAULT 'published',        -- 'published' | 'draft'
     published_at TEXT DEFAULT CURRENT_TIMESTAMP,

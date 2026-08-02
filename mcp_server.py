@@ -543,7 +543,8 @@ async def list_tools() -> list[types.Tool]:
                     "title": {"type": "string", "description": "Post title."},
                     "body_md": {"type": "string", "description": "Post body in Markdown."},
                     "summary": {"type": "string", "description": "Short excerpt for the list view and social preview."},
-                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags, e.g. ['LOU','IT','tröskelvärden']."}
+                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags, e.g. ['LOU','IT','tröskelvärden']."},
+                    "image_url": {"type": "string", "description": "Optional hero image — a plain https:// URL you have the right to use. Shown at the top of the post and as a thumbnail in listings."}
                 },
                 "required": ["title", "body_md"]
             },
@@ -559,6 +560,7 @@ async def list_tools() -> list[types.Tool]:
                     "summary": {"type": "string"},
                     "body_md": {"type": "string"},
                     "tags": {"type": "array", "items": {"type": "string"}},
+                    "image_url": {"type": "string", "description": "Hero image (https URL); empty string removes it."},
                     "status": {"type": "string", "enum": ["published", "draft"]}
                 },
                 "required": ["slug"]
@@ -1161,6 +1163,7 @@ async def _create_post(conn, args: dict) -> list[types.Content]:
     res = _db_create_post(conn, {
         "title": title, "body_md": body_md,
         "summary": args.get("summary"), "tags": args.get("tags"),
+        "image_url": args.get("image_url"),
     })
     return [types.TextContent(
         type="text",
@@ -1172,7 +1175,7 @@ async def _update_post(conn, args: dict) -> list[types.Content]:
     slug = (args.get("slug") or "").strip()
     if not slug:
         return [types.TextContent(type="text", text="Ange 'slug'.")]
-    fields = {k: args[k] for k in ("title", "summary", "body_md", "tags", "status") if k in args}
+    fields = {k: args[k] for k in ("title", "summary", "body_md", "tags", "image_url", "status") if k in args}
     ok = _db_update_post(conn, slug, fields)
     msg = f"✅ Uppdaterat inlägg '{slug}'." if ok else f"Hittade inget inlägg '{slug}' att uppdatera."
     return [types.TextContent(type="text", text=msg)]

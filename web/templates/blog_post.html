@@ -15,6 +15,9 @@
     {% for t in post.tags %}<span class="blog-tag">{{ t }}</span>{% endfor %}
   </div>
   {% endif %}
+  {% if post.image_url %}
+  <img class="blog-hero" src="{{ post.image_url }}" alt="" loading="lazy" />
+  {% endif %}
   <div class="blog-body">{{ post.body_html | safe }}</div>
   <div id="blog-end" aria-hidden="true"></div>
   <p class="muted" style="margin-top: 2rem; font-size: 0.85rem;">

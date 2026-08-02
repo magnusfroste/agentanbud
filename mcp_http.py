@@ -339,7 +339,8 @@ def _tool_list(include_write: bool = False) -> list[dict]:
                         "title": {"type": "string", "description": "Post title."},
                         "body_md": {"type": "string", "description": "Post body in Markdown."},
                         "summary": {"type": "string", "description": "Short excerpt for the list view and social preview."},
-                        "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags, e.g. ['LOU','IT']."}
+                        "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional tags, e.g. ['LOU','IT']."},
+                        "image_url": {"type": "string", "description": "Optional hero image — a plain https:// URL you have the right to use."}
                     },
                     "required": ["title", "body_md"]
                 }
@@ -355,6 +356,7 @@ def _tool_list(include_write: bool = False) -> list[dict]:
                         "summary": {"type": "string"},
                         "body_md": {"type": "string"},
                         "tags": {"type": "array", "items": {"type": "string"}},
+                        "image_url": {"type": "string", "description": "Hero image (https URL); empty string removes it."},
                         "status": {"type": "string", "enum": ["published", "draft"]}
                     },
                     "required": ["slug"]

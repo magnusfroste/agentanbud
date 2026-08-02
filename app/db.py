@@ -66,10 +66,17 @@ def _migrate(conn: sqlite3.Connection) -> None:
     exists, so new columns are added here via ALTER TABLE guarded by a
     PRAGMA check. Cheap enough to run on every init_db().
     """
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(tenders)")}
-    if "winner_name" not in cols:
-        conn.execute("ALTER TABLE tenders ADD COLUMN winner_name TEXT")
-        LOG.info("migrated: added tenders.winner_name column")
+    for table, column, ddl in (
+        ("tenders", "winner_name", "TEXT"),
+        ("posts", "image_url", "TEXT"),
+    ):
+        try:
+            cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        except sqlite3.OperationalError:
+            continue                      # table not created yet
+        if cols and column not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+            LOG.info("migrated: added %s.%s column", table, column)
 
 
 def upsert_tender(conn: sqlite3.Connection, t: dict) -> None:
@@ -247,6 +254,26 @@ def slugify(text: str) -> str:
     return s[:80] or "inlagg"
 
 
+def safe_image_url(url: Optional[str]) -> Optional[str]:
+    """Accept only plain https:// image URLs.
+
+    The value ends up in an <img src>, so anything else (javascript:, data:,
+    protocol-relative, http://) is rejected rather than sanitised — an agent
+    with the admin key shouldn't be able to inject a scheme-based payload or
+    mixed content. Returns None when unusable, so the post just has no image.
+    """
+    u = (url or "").strip()
+    if not u:
+        return None
+    if not u.lower().startswith("https://"):
+        LOG.info("rejected image_url (not https): %.80s", u)
+        return None
+    if any(c in u for c in ('"', "'", "<", ">", " ")):
+        LOG.info("rejected image_url (unsafe characters): %.80s", u)
+        return None
+    return u[:2000]
+
+
 def unique_slug(conn: sqlite3.Connection, base: str, exclude_id: int | None = None) -> str:
     """Return `base`, or base-2, base-3… if taken by another post."""
     slug = base
@@ -268,8 +295,9 @@ def create_post(conn: sqlite3.Connection, p: dict) -> dict:
     slug = unique_slug(conn, slugify(base))
     cur = conn.execute(
         """
-        INSERT INTO posts (slug, title, summary, body_md, tags, author, status, published_at, updated_at)
-        VALUES (:slug, :title, :summary, :body_md, :tags, :author, :status,
+        INSERT INTO posts (slug, title, summary, body_md, tags, image_url,
+                           author, status, published_at, updated_at)
+        VALUES (:slug, :title, :summary, :body_md, :tags, :image_url, :author, :status,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """,
         {
@@ -278,6 +306,7 @@ def create_post(conn: sqlite3.Connection, p: dict) -> dict:
             "summary": p.get("summary"),
             "body_md": p.get("body_md") or "",
             "tags": tags,
+            "image_url": safe_image_url(p.get("image_url")),
             "author": p.get("author") or "Agentanbud AI",
             "status": p.get("status") or "published",
         },
@@ -297,6 +326,10 @@ def update_post(conn: sqlite3.Connection, slug: str, fields: dict) -> bool:
         if k in fields and fields[k] is not None:
             sets.append(f"{k} = ?")
             params.append(fields[k])
+    if "image_url" in fields:
+        # "" clears the image; anything else must pass the https check
+        sets.append("image_url = ?")
+        params.append(safe_image_url(fields["image_url"]))
     if "tags" in fields and fields["tags"] is not None:
         tags = fields["tags"]
         sets.append("tags = ?")

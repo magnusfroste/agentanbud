@@ -11,6 +11,7 @@
 <div class="blog-list">
   {% for p in posts %}
   <a class="blog-card" href="/blogg/{{ p.slug }}">
+    {% if p.image_url %}<img class="blog-thumb" src="{{ p.image_url }}" alt="" loading="lazy" />{% endif %}
     <div class="blog-card-meta">{{ p.date }} · {{ p.author }}</div>
     <h2>{{ p.title }}</h2>
     {% if p.summary %}<p>{{ p.summary }}</p>{% endif %}

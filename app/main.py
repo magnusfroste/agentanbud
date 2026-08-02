@@ -279,7 +279,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; "
+        "img-src 'self' data: https:; "   # blog hero images may be off-site
         "font-src 'self' data:; "
         "connect-src 'self'; "
         "frame-ancestors 'none'; "
@@ -479,7 +479,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             # Latest blog posts — fresh content on the landing page shows the
             # site is alive and gives visitors (and crawlers) a route into /blogg.
             post_rows = conn.execute(
-                "SELECT slug, title, summary, published_at FROM posts "
+                "SELECT slug, title, summary, image_url, published_at FROM posts "
                 "WHERE status = 'published' "
                 "ORDER BY published_at DESC, id DESC LIMIT 3"  # id breaks same-second ties
             ).fetchall()
@@ -1051,7 +1051,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         conn = connect(db)
         try:
             rows = conn.execute(
-                "SELECT slug, title, summary, tags, author, published_at "
+                "SELECT slug, title, summary, tags, image_url, author, published_at "
                 "FROM posts WHERE status = 'published' "
                 "ORDER BY published_at DESC LIMIT 100"
             ).fetchall()
@@ -1073,7 +1073,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         conn = connect(db)
         try:
             row = conn.execute(
-                "SELECT slug, title, summary, body_md, tags, author, published_at, updated_at "
+                "SELECT slug, title, summary, body_md, tags, image_url, author, published_at, updated_at "
                 "FROM posts WHERE slug = ? AND status = 'published'",
                 (slug,),
             ).fetchone()
@@ -1308,7 +1308,7 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
         conn = connect(db)
         try:
             rows = conn.execute(
-                "SELECT id, slug, title, summary, tags, author, published_at "
+                "SELECT id, slug, title, summary, tags, image_url, author, published_at "
                 "FROM posts WHERE status = 'published' ORDER BY published_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
@@ -1333,7 +1333,7 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
         conn = connect(db)
         try:
             row = conn.execute(
-                "SELECT id, slug, title, summary, body_md, tags, author, published_at, updated_at "
+                "SELECT id, slug, title, summary, body_md, tags, image_url, author, published_at, updated_at "
                 "FROM posts WHERE slug = ? AND status = 'published'",
                 (slug,),
             ).fetchone()
