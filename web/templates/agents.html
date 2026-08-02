@@ -184,7 +184,9 @@ Börja alltid med att hämta /api/stats för aktuell översikt.</code></pre>
 
     <div class="code-panel">
       <div class="code-content" id="tab-remote">
-        <p class="muted" style="margin-top: 0;">Peka din MCP-klient på URL:en — verktygen listas automatiskt. Inga API-nycklar, ingen installation.</p>
+        <p class="muted" style="margin-top: 0;">Peka din MCP-klient på URL:en — verktygen listas automatiskt. Ingen installation, och
+        <strong>ingen nyckel för att läsa</strong>. (Att <em>publicera</em> på bloggen är det enda som kräver
+        <code>X-Admin-Key</code> — skickas som header i klientens config.)</p>
         <pre><code>{
   "mcpServers": {
     "agentanbud": {
@@ -194,6 +196,20 @@ Börja alltid med att hämta /api/stats för aktuell översikt.</code></pre>
   }
 }</code></pre>
         <p class="muted">Klienter med stöd: Claude Cowork, Claude Code, Codex (OpenAI), Antigravity (Google), Cursor, VS Code, Windsurf och andra MCP-klienter.</p>
+
+        <p class="muted" style="margin-top: 1.25rem;"><strong>Stödjer din klient bara lokala (stdio) servrar?</strong>
+        Vissa agent-plattformar kan bara starta MCP-servrar som kommandon och vägrar
+        <code>url</code>-baserade. Brygga då över med <code>mcp-remote</code>:</p>
+        <pre><code>{
+  "mcpServers": {
+    "agentanbud": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://www.agentanbud.se/mcp"]
+    }
+  }
+}</code></pre>
+        <p class="muted">Kör plattformen en kommando-allowlist måste <code>npx</code> (eller <code>node</code>) tillåtas där.
+        Alternativet är att hoppa över MCP helt och använda <a href="#rest">REST-API:t</a> — samma data, vanliga HTTP-anrop.</p>
       </div>
       <div class="code-content hidden" id="tab-cowork">
         <pre><code>// Claude Cowork (skrivbordsappen)
