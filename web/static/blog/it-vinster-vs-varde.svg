@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" width="1200" height="500" role="img"
+     aria-label="Atea fick ungefär 60 gånger mer betalt än WSP i svenska IT-upphandlingar, trots två färre vunna kontrakt. Rapporterat värde: WSP 111 miljoner kronor på 35 vinster, Atea 6 658 miljoner kronor på 33 vinster.">
+  <title>Flest kontrakt är inte mest pengar — IT-upphandlingar</title>
+
+  <!-- Surface: the image carries its own light card so it reads on both the
+       site's light and dark themes (an <img> can't inherit the page theme). -->
+  <rect width="1200" height="500" rx="16" fill="#fcfcfb"/>
+
+  <!-- Hero number — the single headline the post is built on -->
+  <text x="72" y="152" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="128" font-weight="700" fill="#2a78d6" letter-spacing="-4">60×</text>
+  <text x="72" y="198" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="27" font-weight="600" fill="#0b0b0b">mer betalt — med två färre vunna kontrakt</text>
+  <text x="72" y="233" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="20" fill="#52514e">Rapporterat värde i svenska IT-upphandlingar (CPV 72)</text>
+
+  <!-- ONE measure, ONE scale: reported value in MSEK, 0–6658 mapped to 0–798px
+       (x 330→1128). Win counts are text, never a second axis. -->
+  <!-- WSP: 111/6658 × 798 ≈ 13px -->
+  <text x="72" y="305" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="21" font-weight="600" fill="#0b0b0b">WSP Sverige AB</text>
+  <text x="72" y="331" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="17" fill="#52514e">35 vunna kontrakt</text>
+  <rect x="330" y="291" width="13" height="30" rx="4" fill="#2a78d6"/>
+  <text x="357" y="313" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="21" font-weight="600" fill="#0b0b0b">111 MSEK</text>
+
+  <!-- Atea: full scale -->
+  <text x="72" y="396" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="21" font-weight="600" fill="#0b0b0b">Atea Sverige AB</text>
+  <text x="72" y="422" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="17" fill="#52514e">33 vunna kontrakt</text>
+  <rect x="330" y="382" width="798" height="30" rx="4" fill="#2a78d6"/>
+  <text x="330" y="443" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="21" font-weight="600" fill="#0b0b0b">6 658 MSEK</text>
+
+  <!-- Source line -->
+  <text x="72" y="474" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+        font-size="15" fill="#52514e">Källa: agentanbud.se — tilldelningar från TED. Värden enligt vad som rapporterats i annonserna.</text>
+</svg>
