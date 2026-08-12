@@ -92,6 +92,31 @@ För att köra en synk manuellt (utan att vänta på cron):
 docker compose exec app python -m scraper.orchestrator
 ```
 
+## ✅ Rök-test
+
+Kör efter varje deploy — 42 kontroller, inga beroenden utöver Python:
+
+```bash
+python3 scripts/smoke_test.py                 # mot produktion
+python3 scripts/smoke_test.py --wait 180      # vänta in omstarten först
+python3 scripts/smoke_test.py --base http://localhost:8080
+```
+
+Avslutar med kod 0 (allt grönt) eller 1 (något fel), så det kan gate:a en
+deploy. Det kontrollerar bl.a. saker som faktiskt gått sönder i drift:
+
+- **att rätt kodversion är ute** — ett misslyckat bygge kan lämna gamla
+  imagen igång, så sajten ser frisk ut medan fixen saknas
+- **att varje filter faktiskt filtrerar** — ett filter som returnerar
+  *hela totalen* är lika trasigt som ett som ger noll, och inget felar
+- **att detaljsidan för en avslutad upphandling renderar** (den grenen
+  gav 500 i veckor — vanlig klickning når den aldrig)
+- **att skrivendpoints avvisar anrop utan nyckel** — hoppas över med
+  varning om instansen saknar `ADMIN_API_KEY`, eftersom sonderna då
+  skulle utlösa en riktig synk
+- **att MCP-verktygen svarar med innehåll** — för anslutna agenter är
+  det produkten
+
 ## ⚙️ Konfiguration
 
 Alla inställningar är miljövariabler — se [`.env.example`](.env.example) för
