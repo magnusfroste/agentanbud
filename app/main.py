@@ -1416,6 +1416,7 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
         source: Optional[str] = Query(default=None),
         authority: Optional[str] = Query(default=None),
         q: Optional[str] = Query(default=None),
+        cpv: Optional[str] = Query(default=None, description="CPV code prefix, e.g. '72' (IT) or '45' (construction)"),
         page: int = Query(default=1, ge=1),
         page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     ) -> dict:
@@ -1432,16 +1433,22 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             if q:
                 where.append("(title LIKE ? OR description LIKE ?)")
                 args.extend([f"%{q}%", f"%{q}%"])
+            if cpv:
+                # cpv_codes is a JSON array of strings, so match a code that
+                # starts with the given prefix: ["45200000", …] → %"45%
+                where.append("cpv_codes LIKE ?")
+                args.append(f'%"{cpv}%')
             where_sql = ("WHERE " + " AND ".join(where)) if where else ""
             total = conn.execute(
                 f"SELECT COUNT(*) FROM tenders {where_sql}", args
             ).fetchone()[0]
-            if page == 1 and (q or source or authority):
+            if page == 1 and (q or source or authority or cpv):
                 # API searches are deliberate calls (agents/scripts) — count as
                 # real usage, so flag bot:0 to survive the analytics filter.
                 _log_usage_safe(conn, "api", "search", query=q,
-                                meta={"source": source, "authority": authority, "bot": 0,
-                                      "segment": _segment_for(q, None), "results": total})
+                                meta={"source": source, "authority": authority,
+                                      "cpv": cpv, "bot": 0,
+                                      "segment": _segment_for(q, cpv), "results": total})
             rows = conn.execute(
                 f"""
                 SELECT id, source_system, source_id, tender_url, title, authority,
