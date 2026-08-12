@@ -9,7 +9,8 @@
 
     <div class="filter-group">
       <label for="f-q">Sök</label>
-      <input type="text" id="f-q" name="q" value="{{ q }}" placeholder="IT-konsult, solcell, städning..." class="filter-input" autocomplete="off" />
+      <input type="text" id="f-q" name="q" value="{{ q }}" placeholder="IT-konsult, solcell, städning…" class="filter-input" autocomplete="off" />
+      <span class="filter-hint">Tryck <kbd>Enter</kbd> för att söka</span>
     </div>
 
     <div class="filter-group">
@@ -177,7 +178,6 @@
   // === Dynamic filtering ===
   // Selects: submit on change
   // Text inputs (search, authority, cpv): debounce 350ms then submit
-  let debounceTimer = null;
 
   function applyFilters() {
     const params = new URLSearchParams();
@@ -193,6 +193,14 @@
     if (cpv) params.set('cpv', cpv);
     if (status && status !== 'open') params.set('status', status);
     if (sort && sort !== 'deadline') params.set('sort', sort);
+    // Remember which text field was in use, so focus can be restored after
+    // the reload (see restoreFocus below). Text fields only — a select
+    // doesn't need the caret back.
+    const active = document.activeElement;
+    if (active && active.classList && active.classList.contains('filter-input')
+        && active.tagName === 'INPUT' && active.name) {
+      params.set('_f', active.name);
+    }
     const qs = params.toString();
     window.location.href = '/browse' + (qs ? '?' + qs : '');
   }
@@ -202,20 +210,33 @@
     el.addEventListener('change', applyFilters);
   });
 
-  // Text inputs: debounce 350ms
+  // Text inputs: submit on Enter only.
+  // They used to auto-submit 350ms after the last keystroke, but applyFilters
+  // does a full page navigation — so pausing mid-word reloaded the page and
+  // threw away keyboard focus, forcing a click back into the field for every
+  // character. Typing must never navigate.
   document.querySelectorAll('input[type="text"].filter-input').forEach(el => {
-    el.addEventListener('input', () => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(applyFilters, 350);
-    });
-    // Submit on Enter immediately
     el.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        clearTimeout(debounceTimer);
+        e.preventDefault();
         applyFilters();
       }
     });
   });
+
+  // After the navigation, put the cursor back where the user was typing so a
+  // second search doesn't need a click either.
+  (function restoreFocus() {
+    const focusName = new URLSearchParams(location.search).get('_f');
+    if (!focusName) return;
+    const el = document.querySelector('.filter-input[name="' + focusName + '"]');
+    if (el && typeof el.setSelectionRange === 'function') {
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    } else if (el) {
+      el.focus();
+    }
+  })();
 
   // Apply button (fallback)
   document.getElementById('apply-filters').addEventListener('click', applyFilters);

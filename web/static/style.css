@@ -2805,3 +2805,18 @@ pre code {
   margin: -1.25rem -1.5rem 0.85rem;
   width: calc(100% + 3rem);
 }
+
+/* Hint under the search field — typing no longer auto-submits, so say so. */
+.filter-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.filter-hint kbd {
+  font-family: inherit;
+  font-size: 0.72rem;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
