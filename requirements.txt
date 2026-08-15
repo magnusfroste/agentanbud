@@ -3,7 +3,8 @@ uvicorn[standard]==0.32.0
 httpx==0.27.2
 jinja2==3.1.4
 croniter==2.0.1
-# mcp 2.x reworked the low-level Server API (@server.list_tools() is gone),
-# which mcp_server.py builds on. Stay on 1.x until that's ported.
-mcp>=1.0.0,<2
+# mcp_server.py supports both the 1.x decorator API and the 2.x
+# on_list_tools/on_call_tool constructor API (see MCP_V1 there), so this can
+# float. Capped at <3 so a future major can't silently break the build again.
+mcp>=1.0.0,<3
 starlette>=0.37.2,<0.39.0

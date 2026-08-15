@@ -35,6 +35,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
 from app.db import connect, log_usage
+from mcp_tools import tool_dicts
 import mcp_server
 
 LOG = logging.getLogger(__name__)
@@ -112,117 +113,13 @@ async def _dispatch_tool(name: str, arguments: dict) -> list:
 
 
 def _tool_list() -> list[dict]:
-    """Mirror of mcp_server's @server.list_tools() — return tool metadata as dicts.
+    """Public tool metadata — shared with the stdio server via mcp_tools.
 
-    The full Tool objects are defined in mcp_server.py. We rebuild the
-    same shape here as dicts (no need to import pydantic types).
+    `local_only` tools (sync_now) are filtered out: this endpoint is
+    read-only by design. Admin actions go through the keyed REST endpoints.
     """
-    return [
-        {
-            "name": "search_tenders",
-            "description": "Search Swedish public procurement tenders. Examples: query='IT-konsult stockholm', cpv='72' (IT), cpv='45' (construction), source='ted' (EU-thresholds only), open_only=false (include closed). Returns title, buyer, deadline with days-until, value, CPV, and a deep link.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Search keyword. Swedish works best."},
-                    "source": {"type": "string", "enum": ["mercell", "ted", "ted_awards", "ted_pin", "lov"], "description": "Data source filter."},
-                    "authority": {"type": "string", "description": "Filter by buyer/contracting authority (substring match)."},
-                    "cpv": {"type": "string", "description": "CPV code prefix. '72'=IT, '45'=construction."},
-                    "open_only": {"type": "boolean", "default": True, "description": "If true (default), exclude tenders past their deadline."},
-                    "limit": {"type": "integer", "default": 10, "minimum": 1, "maximum": 50}
-                }
-            }
-        },
-        {
-            "name": "get_tender",
-            "description": "Get full details of one tender by id, including description, CPV codes, and the link to the original notice. To fetch documents/attachments, open tender_url: TED notices are fully public (procurement documents linked inside the notice); Mercell shows the notice publicly but downloading attachments requires a logged-in Mercell account.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {"id": {"type": "integer", "description": "Tender id from search_tenders."}},
-                "required": ["id"]
-            }
-        },
-        {
-            "name": "get_stats",
-            "description": "Get overview: total tenders, open count, per-source breakdown, last sync.",
-            "inputSchema": {"type": "object", "properties": {}}
-        },
-        {
-            "name": "list_providers",
-            "description": "List data sources with status and paywall info. Note: data is always free; account is only for submission.",
-            "inputSchema": {"type": "object", "properties": {}}
-        },
-        {
-            "name": "list_regions",
-            "description": "List Swedish regions (län) with tender counts. Use before search_tenders to discover geographic coverage.",
-            "inputSchema": {"type": "object", "properties": {}}
-        },
-        {
-            "name": "list_cpv_top",
-            "description": "Top CPV codes with counts. prefix='72' filters to IT-only, top=5 for top 5.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "prefix": {"type": "string", "description": "Optional CPV prefix filter (e.g. '72' for IT)."},
-                    "top": {"type": "integer", "default": 15, "minimum": 1, "maximum": 50}
-                }
-            }
-        },
-        {
-            "name": "get_authority",
-            "description": "All tenders from one specific buyer. name='Trafikverket' (substring match).",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Buyer name (substring)."},
-                    "open_only": {"type": "boolean", "default": False},
-                    "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 100}
-                },
-                "required": ["name"]
-            }
-        },
-        {
-            "name": "match_profile",
-            "description": "Match tenders against a profile (keywords + CPV prefixes + regions).",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "keywords": {"type": "array", "items": {"type": "string"}},
-                    "cpv_prefixes": {"type": "array", "items": {"type": "string"}},
-                    "regions": {"type": "array", "items": {"type": "string"}},
-                    "open_only": {"type": "boolean", "default": True},
-                    "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 50}
-                }
-            }
-        },
-        {
-            "name": "search_knowledge",
-            "description": "Search the knowledge base — sustainability criteria + Q&A from Upphandlingsmyndigheten. Use for rules/requirements/LOU/LOV questions. NOT for live tenders.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "q": {"type": "string", "description": "Search terms. Swedish preferred."},
-                    "source": {"type": "string", "enum": ["criteria", "questions"]},
-                    "category": {"type": "string"},
-                    "limit": {"type": "integer", "default": 10, "minimum": 1, "maximum": 50}
-                },
-                "required": ["q"]
-            }
-        },
-        {
-            "name": "get_knowledge",
-            "description": "Get full details of one knowledge item by id.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {"id": {"type": "integer"}},
-                "required": ["id"]
-            }
-        },
-        # NOTE: no write/management tools here by design — the public MCP
-        # endpoint is read-only. Admin actions go through the keyed REST
-        # endpoints (X-Admin-Key); the stdio server keeps sync_now since
-        # running it already requires local/container access.
-    ]
+    return tool_dicts(include_local=False)
+
 
 
 # ----- FastAPI router -------------------------------------------------------

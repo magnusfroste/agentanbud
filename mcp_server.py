@@ -35,10 +35,15 @@ from mcp.server import Server
 # Reuse Agentanbud's DB layer
 sys.path.insert(0, str(Path(__file__).parent))
 from app.db import connect  # noqa: E402
+from mcp_tools import tool_dicts  # noqa: E402
 
 DB_PATH = os.environ.get("DB_PATH", "/data/application.db")
 
-server = Server("agentanbud")
+# mcp 1.x registers handlers with @server.list_tools() / @server.call_tool()
+# decorators; 2.x removed those and takes on_list_tools / on_call_tool
+# callbacks on the constructor instead. Detect which we're on and register
+# accordingly — the tool schemas and implementations are shared either way.
+MCP_V1 = hasattr(Server, "list_tools")
 
 
 # ----- Provider metadata (paywall/auth info) -------------------------------
@@ -194,255 +199,17 @@ def _format_tender(t: dict) -> str:
 
 
 # ----- Tool definitions ------------------------------------------------------
+# Schemas live in mcp_tools.py so the stdio server and the HTTP server can't
+# describe the same tool differently. sync_now is included here (local access
+# only); the public HTTP endpoint filters it out.
 
-@server.list_tools()
-async def list_tools() -> list[types.Tool]:
-    return [
-        types.Tool(
-            name="search_tenders",
-            description=(
-                "Search Swedish public procurement tenders. "
-                "Examples: query='IT-konsult stockholm', cpv='72' (IT), cpv='45' (construction), "
-                "source='ted' (EU-thresholds only), open_only=false (include closed). "
-                "Returns title, buyer, deadline with days-until, value, CPV, and a deep link."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Search keyword. Swedish works best. Examples: 'IT-konsult', 'vägbyggnation', 'solcell', 'städning'."
-                    },
-                    "source": {
-                        "type": "string",
-                        "enum": ["mercell", "ted"],
-                        "description": "Data source to filter by. 'mercell' = most Swedish tenders. 'ted' = EU-threshold only."
-                    },
-                    "authority": {
-                        "type": "string",
-                        "description": "Filter by buyer/contracting authority (substring match). Examples: 'Trafikverket', 'Stockholms kommun', 'KTH'."
-                    },
-                    "cpv": {
-                        "type": "string",
-                        "description": "CPV code prefix to filter by. Examples: '72' (IT), '45' (construction), '34' (transport), '33' (medical), '09' (energy)."
-                    },
-                    "open_only": {
-                        "type": "boolean",
-                        "default": True,
-                        "description": "If true (default), exclude tenders past their deadline."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "default": 10,
-                        "minimum": 1,
-                        "maximum": 50,
-                        "description": "Max results (default 10, max 50)."
-                    }
-                }
-            },
-        ),
-        types.Tool(
-            name="get_tender",
-            description=(
-                "Get full details for one tender by its internal id (from search_tenders). "
-                "Includes complete description, deadline and the link to the original notice. "
-                "To fetch documents/attachments: open tender_url. TED notices are fully "
-                "public (procurement documents linked inside the notice); Mercell shows "
-                "the notice publicly but downloading attachments requires a logged-in "
-                "Mercell account."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "id": {"type": "integer", "description": "Internal tender id."}
-                },
-                "required": ["id"]
-            },
-        ),
-        types.Tool(
-            name="get_stats",
-            description=(
-                "Database overview: total tenders, open count, per-source counts, last sync. "
-                "Use this first to understand what's available before searching."
-            ),
-            inputSchema={"type": "object", "properties": {}},
-        ),
-        types.Tool(
-            name="list_providers",
-            description=(
-                "List data sources (Mercell, TED EU, etc.) with status and whether they require "
-                "an account to APPLY. Note: data is always free; the account is only for submission."
-            ),
-            inputSchema={"type": "object", "properties": {}},
-        ),
-        types.Tool(
-            name="list_regions",
-            description=(
-                "List Swedish regions (län) with tender counts. Use before search_tenders to "
-                "discover geographic coverage."
-            ),
-            inputSchema={"type": "object", "properties": {}},
-        ),
-        types.Tool(
-            name="sync_now",
-            description=(
-                "Trigger immediate scrape of all enabled sources. Returns when sync starts; "
-                "check get_stats after 60-90s to see updated counts."
-            ),
-            inputSchema={"type": "object", "properties": {}},
-        ),
-        types.Tool(
-            name="list_cpv_top",
-            description=(
-                "Top CPV (Common Procurement Vocabulary) codes in the database with counts. "
-                "Use this to discover what categories have tenders before searching. "
-                "Examples: prefix='72' for IT-only top categories, top=5 for top 5 overall."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "prefix": {
-                        "type": "string",
-                        "description": "Optional CPV prefix to filter (e.g. '72' for IT, '45' for construction)."
-                    },
-                    "top": {
-                        "type": "integer",
-                        "default": 15,
-                        "minimum": 1,
-                        "maximum": 50,
-                        "description": "How many top categories to return (default 15)."
-                    }
-                }
-            },
-        ),
-        types.Tool(
-            name="search_knowledge",
-            description=(
-                "Search the knowledge base — sustainability criteria (hållbarhetskriterier) "
-                "and Q&A (juridiska frågor) from Upphandlingsmyndigheten. "
-                "Use when the user asks about specific rules, environmental requirements, "
-                "or LOU/LOV interpretations. NOT for live tenders — use search_tenders for that. "
-                "Examples: q='IT-miljö', q='LOU tröskelvärde', source='criteria'."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "q": {
-                        "type": "string",
-                        "description": "Search terms. Searches title, excerpt, and tags. Example: 'IT avfall'."
-                    },
-                    "source": {
-                        "type": "string",
-                        "enum": ["criteria", "questions"],
-                        "description": "Optional: filter to one type. 'criteria' = sustainability, 'questions' = Q&A."
-                    },
-                    "category": {
-                        "type": "string",
-                        "description": "Optional: filter by primary category, e.g. 'IT och telekom'."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "default": 10,
-                        "minimum": 1,
-                        "maximum": 50,
-                        "description": "How many results to return (default 10, max 50)."
-                    }
-                },
-                "required": ["q"]
-            },
-        ),
-        types.Tool(
-            name="get_knowledge",
-            description=(
-                "Get full details of a single knowledge item by id, including all tags and the source URL."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "integer",
-                        "description": "The knowledge item id (from search_knowledge results)."
-                    }
-                },
-                "required": ["id"]
-            },
-        ),
-        types.Tool(
-            name="get_authority",
-            description=(
-                "All tenders from one specific buyer/contracting authority. "
-                "Use search_tenders first to find a buyer name, then get_authority for their full list. "
-                "Examples: name='Trafikverket', name='Stockholms kommun'."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "Buyer/authority name (substring match). Examples: 'Trafikverket', 'KTH', 'Mälarenergi'."
-                    },
-                    "open_only": {
-                        "type": "boolean",
-                        "default": False,
-                        "description": "If true, exclude past-deadline tenders."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "default": 20,
-                        "minimum": 1,
-                        "maximum": 100,
-                        "description": "Max results (default 20, max 100)."
-                    }
-                },
-                "required": ["name"]
-            },
-        ),
-        types.Tool(
-            name="match_profile",
-            description=(
-                "Find tenders matching a profile (keywords + CPV prefixes + regions). "
-                "Use this for monitoring/saved searches. "
-                "Examples: keywords=['IT', 'digitalisering'], cpv_prefixes=['72'], regions=['Stockholms län']."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "keywords": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Keywords to match against title+description. Any-match (OR)."
-                    },
-                    "cpv_prefixes": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "CPV prefixes to match. Examples: ['72', '722']."
-                    },
-                    "regions": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Region names to match. Examples: ['Stockholms län', 'Västra Götalands län']."
-                    },
-                    "open_only": {
-                        "type": "boolean",
-                        "default": True,
-                        "description": "If true (default), only open tenders."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "default": 20,
-                        "minimum": 1,
-                        "maximum": 50,
-                        "description": "Max results."
-                    }
-                }
-            },
-        ),
-    ]
+def _tool_objects() -> list[types.Tool]:
+    return [types.Tool(**t) for t in tool_dicts(include_local=True)]
+
 
 
 # ----- Tool implementations -------------------------------------------------
 
-@server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[types.Content]:
     conn = connect(DB_PATH)
     try:
@@ -833,6 +600,36 @@ async def _get_knowledge(conn, args: dict) -> list[types.Content]:
     k = _row_dict(row)
     return [types.TextContent(type="text", text=_format_knowledge(k))]
 
+
+
+# ----- Server registration (mcp 1.x / 2.x) ----------------------------------
+# Both branches expose the same tools and call the same implementations —
+# only the way handlers are attached to Server changed between versions.
+
+if MCP_V1:
+    server = Server("agentanbud")
+
+    @server.list_tools()
+    async def _list_tools_v1() -> list[types.Tool]:
+        return _tool_objects()
+
+    @server.call_tool()
+    async def _call_tool_v1(name: str, arguments: dict) -> list[types.Content]:
+        return await call_tool(name, arguments)
+
+else:
+    async def _on_list_tools(ctx, params) -> types.ListToolsResult:
+        return types.ListToolsResult(tools=_tool_objects())
+
+    async def _on_call_tool(ctx, params) -> types.CallToolResult:
+        content = await call_tool(params.name, params.arguments or {})
+        return types.CallToolResult(content=list(content))
+
+    server = Server(
+        "agentanbud",
+        on_list_tools=_on_list_tools,
+        on_call_tool=_on_call_tool,
+    )
 
 
 # ----- Entry point ----------------------------------------------------------
