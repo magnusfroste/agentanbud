@@ -82,6 +82,32 @@
 </section>
 {% endif %}
 
+<!-- UNCLASSIFIED (segment tuning) -->
+{% if unclassified %}
+<section class="insight-section">
+  <h2>Oklassificerade sökningar</h2>
+  <p class="muted">
+    {{ other_share }}% av sökningarna hamnar i <strong>Övrigt</strong> — här är
+    termerna som branschindelningen inte känner igen än. Återkommande ord här
+    är kandidater för ett nytt nyckelord (eller ett helt nytt segment).
+  </p>
+  <div class="bar-chart">
+    {% for u in unclassified %}
+    <div class="bar-row">
+      <span class="bar-label">{{ u.term[:40] }}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width: {{ u.pct }}%; background: #64748b;"></div>
+        <span class="bar-value">{{ u.n }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="muted" style="margin-top: 1rem;">
+    Segmenten definieras i <code>SEGMENTS</code> i <code>app/main.py</code>.
+  </p>
+</section>
+{% endif %}
+
 <!-- UNMET DEMAND -->
 {% if unmet %}
 <section class="insight-section">

@@ -26,12 +26,16 @@ from .db import connect, init_db, log_usage
 
 # MCP-over-HTTP is optional — only loaded if mcp_http module is present
 # (it's a separate file so the stdio MCP server stays independent).
+# Catch Exception, not just ImportError: an incompatible mcp release makes
+# mcp_server raise AttributeError at import, and that must not take the whole
+# site down — the /mcp endpoint is meant to be optional.
 try:
     from mcp_http import mcp_router
     MCP_HTTP_AVAILABLE = True
-except ImportError:
+except Exception as exc:
     MCP_HTTP_AVAILABLE = False
-    LOG.info("mcp_http not importable, /mcp endpoint disabled")
+    LOG.warning("mcp_http not importable (%s: %s), /mcp endpoint disabled",
+                type(exc).__name__, exc)
 
 DB_PATH = os.environ.get("DB_PATH", "/data/application.db")
 TEMPLATE_DIR = Path(__file__).parent.parent / "web" / "templates"
@@ -664,6 +668,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 "AND query IS NOT NULL AND TRIM(query) != ''"
             ).fetchall()
             seg_counter: Counter = Counter()
+            other_counter: Counter = Counter()
             for r in demand_rows:
                 cpv = None
                 if r["meta"]:
@@ -671,7 +676,10 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                         cpv = json.loads(r["meta"]).get("cpv") or None
                     except Exception:
                         pass
-                seg_counter[_segment_for(r["query"], cpv)] += 1
+                seg = _segment_for(r["query"], cpv)
+                seg_counter[seg] += 1
+                if seg == SEGMENT_OTHER:
+                    other_counter[r["query"].strip().lower()] += 1
             seg_total = sum(seg_counter.values()) or 1
             seg_colors = ["#2563eb", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444",
                           "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6",
@@ -684,6 +692,16 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                     "bar": int(n / seg_counter.most_common(1)[0][1] * 100),
                     "color": seg_colors[i % len(seg_colors)],
                 })
+
+            # ---- Unclassified: what fell into "Övrigt" -------------------
+            # Tuning aid: these are the terms SEGMENTS doesn't recognise yet.
+            # Frequent ones are candidates for a new keyword — or a new segment.
+            max_other = other_counter.most_common(1)[0][1] if other_counter else 1
+            unclassified = [
+                {"term": term, "n": n, "pct": int(n / max_other * 100)}
+                for term, n in other_counter.most_common(15)
+            ]
+            other_share = int(seg_counter[SEGMENT_OTHER] / seg_total * 100)
 
             # ---- Unmet demand: searches that returned nothing ------------
             gap_rows = conn.execute(
@@ -768,6 +786,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
 
             return HTMLResponse(render("analytics.html",
                 total=total, kpis=kpis, segments=segments, unmet=unmet,
+                unclassified=unclassified, other_share=other_share,
                 top_terms=top_terms, usage_types=usage_types, top_tools=top_tools,
                 daily=daily, recent=recent,
             ))
