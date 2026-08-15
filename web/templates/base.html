@@ -22,11 +22,17 @@
   <meta property="og:url" content="https://www.agentanbud.se{{ _path }}" />
   <meta property="og:site_name" content="Agentanbud" />
   <meta property="og:locale" content="sv_SE" />
+  {# twitter:card below promises a large image — without og:image every share
+     renders an empty card. Blog posts override this with their hero image. #}
+  <meta property="og:image" content="{% block og_image %}https://www.agentanbud.se/static/og-image.png{% endblock %}" />
+  <meta property="og:image:alt" content="{% block og_image_alt %}Agentanbud — svenska upphandlingar, öppna för alla{% endblock %}" />
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="{{ self.og_title() }}" />
   <meta name="twitter:description" content="{{ self.og_description() }}" />
+  <meta name="twitter:image" content="{{ self.og_image() }}" />
+  <meta name="twitter:image:alt" content="{{ self.og_image_alt() }}" />
 
   <!-- AEO (Answer Engine Optimization) — för AI-crawlers -->
   <script type="application/ld+json">

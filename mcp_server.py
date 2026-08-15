@@ -34,6 +34,8 @@ from mcp.server import Server
 
 # Reuse Agentanbud's DB layer
 sys.path.insert(0, str(Path(__file__).parent))
+from mcp_shared import SOURCES, SOURCE_DESCRIPTION  # noqa: E402
+from app.insights import format_usage_markdown, usage_summary  # noqa: E402
 from app.db import (  # noqa: E402
     connect,
     create_post as _db_create_post,
@@ -42,7 +44,12 @@ from app.db import (  # noqa: E402
 
 DB_PATH = os.environ.get("DB_PATH", "/data/application.db")
 
-server = Server("agentanbud")
+# mcp 1.x registers handlers with @server.list_tools() / @server.call_tool()
+# decorators. mcp 2.0 removed those and takes on_list_tools / on_call_tool
+# callbacks on the constructor instead — an unpinned upgrade to 2.x took the
+# site down once (see requirements.txt). Detect which API is present and
+# register accordingly, so the same code runs on both.
+MCP_V1 = hasattr(Server, "list_tools")
 
 
 # ----- Provider metadata (paywall/auth info) -------------------------------
@@ -199,8 +206,8 @@ def _format_tender(t: dict) -> str:
 
 # ----- Tool definitions ------------------------------------------------------
 
-@server.list_tools()
-async def list_tools() -> list[types.Tool]:
+def _tool_objects() -> list[types.Tool]:
+    """The tool list, shared by both registration styles."""
     return [
         types.Tool(
             name="search_tenders",
@@ -219,8 +226,8 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "source": {
                         "type": "string",
-                        "enum": ["mercell", "ted"],
-                        "description": "Data source to filter by. 'mercell' = most Swedish tenders. 'ted' = EU-threshold only."
+                        "enum": SOURCES,
+                        "description": SOURCE_DESCRIPTION,
                     },
                     "authority": {
                         "type": "string",
@@ -369,6 +376,32 @@ async def list_tools() -> list[types.Tool]:
                     }
                 },
                 "required": ["id"]
+            },
+        ),
+        types.Tool(
+            name="get_usage_stats",
+            description=(
+                "Usage figures for Agentanbud itself: visits (human vs crawler), "
+                "searches, MCP agent calls and unique agent sessions, demand per "
+                "industry segment, most-searched terms, searches that returned "
+                "nothing, and a 30-day daily series. Use this to report or write "
+                "about how the site is being used — e.g. a daily post about "
+                "traffic and what people look for. days=1 for the last 24h, "
+                "days=7 for a week, omit for all time. Aggregate only: no cookies, "
+                "no IP addresses, no visitor ids — free to publish and quote. "
+                "NOTE: this is site usage, not procurement data — use get_stats "
+                "for how many tenders are in the database."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "days": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 365,
+                        "description": "Look back this many days. Omit for all time. 1 = daily report, 7 = weekly."
+                    }
+                }
             },
         ),
         types.Tool(
@@ -571,7 +604,6 @@ async def list_tools() -> list[types.Tool]:
 
 # ----- Tool implementations -------------------------------------------------
 
-@server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[types.Content]:
     conn = connect(DB_PATH)
     try:
@@ -597,6 +629,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.Content]:
             return await _search_knowledge(conn, arguments)
         elif name == "get_knowledge":
             return await _get_knowledge(conn, arguments)
+        elif name == "get_usage_stats":
+            return await _get_usage_stats(conn, arguments)
         elif name == "get_winner_history":
             return await _get_winner_history(conn, arguments)
         elif name == "similar_tenders":
@@ -1309,6 +1343,56 @@ async def _get_knowledge(conn, args: dict) -> list[types.Content]:
     k = _row_dict(row)
     return [types.TextContent(type="text", text=_format_knowledge(k))]
 
+
+
+async def _get_usage_stats(conn, args: dict) -> list[types.Content]:
+    """Site-usage figures, formatted for an agent about to write about them.
+    Aggregate only — nothing here identifies a visitor."""
+    days = args.get("days")
+    try:
+        days = int(days) if days is not None else None
+    except (TypeError, ValueError):
+        days = None
+    if days is not None:
+        days = max(1, min(365, days))
+    summary = usage_summary(conn, days=days)
+    if not summary["events_total"]:
+        return [types.TextContent(
+            type="text",
+            text="Ingen användning loggad för den perioden. "
+                 "Prova utan days-parameter för hela perioden.",
+        )]
+    return [types.TextContent(type="text", text=format_usage_markdown(summary))]
+
+
+# ----- Server registration (mcp 1.x / 2.x) ----------------------------------
+# Both branches expose the same tools and call the same implementations —
+# only the way handlers attach to Server changed between major versions.
+
+if MCP_V1:
+    server = Server("agentanbud")
+
+    @server.list_tools()
+    async def _list_tools_v1() -> list[types.Tool]:
+        return _tool_objects()
+
+    @server.call_tool()
+    async def _call_tool_v1(name: str, arguments: dict) -> list[types.Content]:
+        return await call_tool(name, arguments)
+
+else:
+    async def _on_list_tools(ctx, params) -> types.ListToolsResult:
+        return types.ListToolsResult(tools=_tool_objects())
+
+    async def _on_call_tool(ctx, params) -> types.CallToolResult:
+        content = await call_tool(params.name, params.arguments or {})
+        return types.CallToolResult(content=list(content))
+
+    server = Server(
+        "agentanbud",
+        on_list_tools=_on_list_tools,
+        on_call_tool=_on_call_tool,
+    )
 
 
 # ----- Entry point ----------------------------------------------------------

@@ -4,6 +4,9 @@
 {% block og_title %}{{ post.title }}{% endblock %}
 {% block description %}{{ post.summary or "Nyheter och analys om svensk offentlig upphandling från Agentanbud." }}{% endblock %}
 {% block og_description %}{{ post.summary or "Nyheter och analys om svensk offentlig upphandling från Agentanbud." }}{% endblock %}
+{# A post with a hero image shares as that image; otherwise the site default. #}
+{% block og_image %}{{ post.image_url or "https://www.agentanbud.se/static/og-image.png" }}{% endblock %}
+{% block og_image_alt %}{{ post.title if post.image_url else "Agentanbud — svenska upphandlingar, öppna för alla" }}{% endblock %}
 
 {% block content %}
 <article class="blog-article" data-slug="{{ post.slug }}">

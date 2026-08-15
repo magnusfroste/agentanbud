@@ -39,6 +39,7 @@ from fastapi.responses import JSONResponse
 
 from app.db import connect, log_usage
 import mcp_server
+from mcp_shared import SOURCES, SOURCE_DESCRIPTION
 
 # Admin key gates the blog write tools on the public /mcp endpoint. Reads stay
 # open for every visiting agent; writing (create_post/update_post) requires the
@@ -129,6 +130,8 @@ async def _dispatch_tool(name: str, arguments: dict, session_id: str | None = No
             return await mcp_server._search_knowledge(conn, arguments or {})
         if name == "get_knowledge":
             return await mcp_server._get_knowledge(conn, arguments or {})
+        if name == "get_usage_stats":
+            return await mcp_server._get_usage_stats(conn, arguments or {})
         if name == "get_winner_history":
             return await mcp_server._get_winner_history(conn, arguments or {})
         if name == "similar_tenders":
@@ -168,7 +171,7 @@ def _tool_list(include_write: bool = False) -> list[dict]:
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Search keyword. Swedish works best."},
-                    "source": {"type": "string", "enum": ["mercell", "ted", "ted_awards", "ted_pin", "lov"], "description": "Data source filter."},
+                    "source": {"type": "string", "enum": SOURCES, "description": SOURCE_DESCRIPTION},
                     "authority": {"type": "string", "description": "Filter by buyer/contracting authority (substring match)."},
                     "cpv": {"type": "string", "description": "CPV code prefix. '72'=IT, '45'=construction."},
                     "open_only": {"type": "boolean", "default": True, "description": "If true (default), exclude tenders past their deadline."},
@@ -208,6 +211,16 @@ def _tool_list(include_write: bool = False) -> list[dict]:
                 "properties": {
                     "prefix": {"type": "string", "description": "Optional CPV prefix filter (e.g. '72' for IT)."},
                     "top": {"type": "integer", "default": 15, "minimum": 1, "maximum": 50}
+                }
+            }
+        },
+        {
+            "name": "get_usage_stats",
+            "description": "Usage figures for Agentanbud itself: visits (human vs crawler), searches, MCP agent calls, demand per industry segment, top search terms and zero-result searches. For reporting or writing about how the site is used. days=1 for 24h, omit for all time. Aggregate only, no personal data — free to publish.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "minimum": 1, "maximum": 365, "description": "Look back this many days. Omit for all time."}
                 }
             }
         },

@@ -22,6 +22,7 @@ Agentanbud exponerar sina data via [Model Context Protocol](https://modelcontext
 | `list_posts` | Lista publicerade blogginlägg (nyast först) |
 | `get_post` | Hämta ett blogginlägg + engagemangsstatistik |
 | `get_post_stats` | Visningar, läste-hela och läs-grad per inlägg |
+| `get_usage_stats` | Sajtens användning: besök, sökningar, agentanrop, branschefterfrågan — för rapportering/bloggande |
 
 **Nyckel-skyddade skrivverktyg** (kräver `X-Admin-Key`-header, exponeras bara då):
 
@@ -30,7 +31,7 @@ Agentanbud exponerar sina data via [Model Context Protocol](https://modelcontext
 | `create_post` | Publicera ett nytt blogginlägg (Markdown) |
 | `update_post` | Uppdatera/avpublicera ett inlägg |
 
-De 16 läsverktygen är alltid öppna. Skrivverktygen (blogg) kräver nyckeln —
+De 17 läsverktygen är alltid öppna. Skrivverktygen (blogg) kräver nyckeln —
 skickas som `X-Admin-Key`-header i MCP-klientens config. Övriga skriv-/adminåtgärder
 går via REST. (Stdio-servern för lokal körning har även `sync_now`.)
 
@@ -124,6 +125,20 @@ En agent kan alltså köra en daglig loop: `get_post_stats` (vad engagerade) →
 browsa/sök → `create_post`. Läs-graden (hur många som scrollade till slutet)
 blir input till nästa ämnesval.
 
+### "Skriv ett dagligt inlägg om hur sajten används" (operator-agent)
+
+```python
+get_usage_stats(days=1)     # senaste dygnet — days=7 för vecka, utan days = allt
+```
+
+Färdig markdown: besök (mänskliga vs crawlers), sökningar, agentanrop och
+unika agentsessioner, efterfrågan per bransch, mest sökta termer, sökningar
+utan träff och en 7-dagarsserie. Agentens egna `get_usage_stats`-anrop
+räknas separat (`operator_calls`) så en operator som pollar inte rapporterar
+mest om sig själv.
+
+Siffrorna är aggregerade utan personuppgifter — fria att publicera och citera.
+
 ### "Bevaka upphandlingar som matchar vår profil"
 
 ```python
@@ -174,7 +189,7 @@ Agentanbud speglar **publik data** (titlar, beskrivningar, deadlines, CPV-koder)
 
 ### Varför dispatcher-pattern (FlowWink-stil)?
 
-FlowWink har 200+ skills och använder två dispatcher-tools (`search_skills` + `execute_skill`) för att inte slösa context-fönstret på 200 tool-definitioner. Vi har **16 öppna läsverktyg + 2 nyckel-skyddade skrivverktyg**, alla relaterade till samma domän, så vi registrerar dem rakt — enklare för LLM:en att lära sig.
+FlowWink har 200+ skills och använder två dispatcher-tools (`search_skills` + `execute_skill`) för att inte slösa context-fönstret på 200 tool-definitioner. Vi har **17 öppna läsverktyg + 2 nyckel-skyddade skrivverktyg**, alla relaterade till samma domän, så vi registrerar dem rakt — enklare för LLM:en att lära sig.
 
 ### Varför stdio-transport?
 
@@ -188,7 +203,7 @@ När vi behöver fjärråtkomst (t.ex. för hostad version) kan vi lägga till S
 ### Best practices vi följer
 
 1. **Korta descriptions, konkreta exempel** — 1 mening + "Examples: 'IT-konsult', 'vägbyggnation'..."
-2. **Enums med explicita värden** — `["mercell", "ted"]` istället för "data source"
+2. **Enums med explicita värden** — delade via `mcp_shared.SOURCES` så stdio och HTTP inte kan glida isär
 3. **Säkra defaults** — `open_only=true` så agenten inte får stängda upphandlingar som default
 4. **Markdown-formaterad output** — lätt för LLM att extrahera
 5. **Paywall-info i output** — agenten vet om konto krävs
