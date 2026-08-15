@@ -593,7 +593,8 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
             v = s["visits"]
             kpis = {"views": v["total"], "human_views": v["human"], "bot_views": v["bot"],
                     "human_pct": v["human_pct"], "searches": s["searches"],
-                    "agent_calls": s["agent_calls"]}
+                    "agent_calls": s["agent_calls"],
+                    "operator_calls": s["operator_calls"]}
 
             usage_types = [
                 {"label": "Sidvisningar", "n": v["total"], "color": "#2563eb"},

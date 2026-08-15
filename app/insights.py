@@ -49,6 +49,13 @@ SEGMENTS: list[tuple[str, list[str], list[str]]] = [
 ]
 SEGMENT_OTHER = "Övrigt"
 
+# Tools that only read the usage stats themselves. An operator agent polling
+# get_usage_stats to write its daily report would otherwise dominate the tool
+# ranking and inflate the agent-call count it then publishes — it'd be
+# reporting mostly on its own polling. Counted separately as `operator_calls`
+# so the figure is visible rather than silently dropped.
+SELF_REFERENTIAL_TOOLS = ("get_usage_stats",)
+
 
 def segment_for(query: Optional[str], cpv: Optional[str]) -> str:
     """Map a search to a sponsor-relevant industry segment. First match wins."""
@@ -96,11 +103,18 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
             f"SELECT COUNT(*) FROM usage_log {clause}", args + (extra or [])
         ).fetchone()[0]
 
+    # SQL fragment + params excluding the self-referential tools, reused by the
+    # agent-call count and the tool ranking so they always agree.
+    _self_names = [f"tool:{n}" for n in SELF_REFERENTIAL_TOOLS]
+    _not_self = " AND action NOT IN (%s)" % ",".join("?" * len(_self_names))
+
     events_total = scalar("")
     views = scalar("action = 'view'")
     human_views = scalar("action = 'view' AND json_extract(meta, '$.bot') = 0")
     searches = scalar("action = 'search'")
-    agent_calls = scalar("action LIKE 'tool:%'")
+    agent_calls = scalar("action LIKE 'tool:%'" + _not_self, _self_names)
+    operator_calls = scalar(
+        "action IN (%s)" % ",".join("?" * len(_self_names)), _self_names)
 
     # --- industry demand: classify every query, all channels -------------
     demand_rows = conn.execute(
@@ -144,15 +158,17 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     tool_rows = rows(
         f"SELECT action, COUNT(*) AS n FROM usage_log {where}"
         + (" AND" if where else " WHERE")
-        + " action LIKE 'tool:%' GROUP BY action ORDER BY n DESC LIMIT ?", [top])
+        + " action LIKE 'tool:%'" + _not_self
+        + " GROUP BY action ORDER BY n DESC LIMIT ?", _self_names + [top])
 
     # --- daily series (always last 30 days, regardless of `days`) --------
     day_rows = conn.execute(
         "SELECT DATE(created_at) AS day,"
         " SUM(action = 'view') AS views,"
         " SUM(action = 'search') AS searches,"
-        " SUM(action LIKE 'tool:%') AS agents"
-        " FROM usage_log WHERE created_at >= DATE('now', '-29 days') GROUP BY day"
+        " SUM(action LIKE 'tool:%'" + _not_self + ") AS agents"
+        " FROM usage_log WHERE created_at >= DATE('now', '-29 days') GROUP BY day",
+        _self_names,
     ).fetchall()
     by_day = {r["day"]: r for r in day_rows}
     today = datetime.now(timezone.utc).date()
@@ -178,7 +194,10 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
             "human_pct": int(human_views / views * 100) if views else 0,
         },
         "searches": searches,
+        # Excludes the operator's own get_usage_stats polling — see
+        # SELF_REFERENTIAL_TOOLS. That count is reported separately.
         "agent_calls": agent_calls,
+        "operator_calls": operator_calls,
         "segments": [
             {"label": label, "n": n, "pct": int(n / seg_total * 100)}
             for label, n in seg_counter.most_common()
@@ -203,7 +222,9 @@ def format_usage_markdown(s: dict) -> str:
         f"**Besök:** {v['total']} ({v['human']} mänskliga / {v['bot']} botar & agenter, "
         f"{v['human_pct']}% mänskliga)",
         f"**Sökningar på webben:** {s['searches']}",
-        f"**MCP-agentanrop:** {s['agent_calls']}",
+        f"**MCP-agentanrop:** {s['agent_calls']}"
+        + (f" (exkl. {s['operator_calls']} egna get_usage_stats-anrop)"
+           if s.get("operator_calls") else ""),
         f"**Händelser totalt:** {s['events_total']}",
         "",
     ]

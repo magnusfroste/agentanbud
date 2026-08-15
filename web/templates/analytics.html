@@ -51,7 +51,7 @@
   </div>
   <div class="insight-kpi">
     <div class="v">{{ kpis.agent_calls }}</div>
-    <div class="l">MCP-agentanrop</div>
+    <div class="l">MCP-agentanrop{% if kpis.operator_calls %} (exkl. {{ kpis.operator_calls }} operator){% endif %}</div>
   </div>
 </section>
 
