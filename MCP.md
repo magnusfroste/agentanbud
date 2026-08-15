@@ -16,6 +16,7 @@ Agentanbud exponerar sina data via [Model Context Protocol](https://modelcontext
 | `list_cpv_top` | Vanligaste CPV-kategorierna i databasen |
 | `search_knowledge` | Sök i kunskapsbanken (hållbarhetskriterier + Q&A) |
 | `get_knowledge` | Hämta ett kunskapsobjekt i detalj |
+| `get_usage_stats` | Användning av sajten: besök (mänskliga/botar), sökningar, agentanrop, branschefterfrågan — för rapportering/bloggande |
 
 Den publika MCP-endpointen är **read-only** — skriv-/adminåtgärder ligger bakom
 nyckel i REST-API:t. (Stdio-servern för lokal körning har även `sync_now`.)
@@ -85,6 +86,22 @@ match_profile(
 get_authority(name="Trafikverket")
 ```
 
+### "Skriv ett dagligt inlägg om hur sajten används" (operator-agent)
+
+```python
+get_usage_stats(days=1)     # senaste dygnet — days=7 för vecka, utan days = allt
+```
+
+Returnerar färdig markdown: besök (mänskliga vs botar), sökningar,
+agentanrop, efterfrågan per bransch, mest sökta termer, sökningar utan
+träff och en 7-dagarsserie. Tänkt för en agent (Hermes, OpenClaw m.fl.)
+som satts som operator och rapporterar löpande.
+
+Utan MCP: `GET /api/analytics?days=1` ger samma siffror som JSON.
+
+Siffrorna är aggregerade och innehåller inga personuppgifter — inga
+cookies, ingen IP-adress, inget besökar-ID. Fria att publicera och citera.
+
 ### "Vilka organisationer har flest upphandlingar?"
 
 ```
@@ -118,7 +135,7 @@ Agentanbud speglar **publik data** (titlar, beskrivningar, deadlines, CPV-koder)
 
 ### Varför dispatcher-pattern (FlowWink-stil)?
 
-FlowWink har 200+ skills och använder två dispatcher-tools (`search_skills` + `execute_skill`) för att inte slösa context-fönstret på 200 tool-definitioner. Vi har bara **10 verktyg, alla relaterade till samma domän** så vi registrerar dem rakt — enklare för LLM:en att lära sig.
+FlowWink har 200+ skills och använder två dispatcher-tools (`search_skills` + `execute_skill`) för att inte slösa context-fönstret på 200 tool-definitioner. Vi har bara **11 verktyg, alla relaterade till samma domän** så vi registrerar dem rakt — enklare för LLM:en att lära sig.
 
 ### Varför stdio-transport?
 
@@ -132,7 +149,7 @@ När vi behöver fjärråtkomst (t.ex. för hostad version) kan vi lägga till S
 ### Best practices vi följer
 
 1. **Korta descriptions, konkreta exempel** — 1 mening + "Examples: 'IT-konsult', 'vägbyggnation'..."
-2. **Enums med explicita värden** — `["mercell", "ted"]` istället för "data source"
+2. **Enums med explicita värden** — `["mercell", "ted", "ted_awards", "ted_pin", "lov"]` istället för "data source"
 3. **Säkra defaults** — `open_only=true` så agenten inte får stängda upphandlingar som default
 4. **Markdown-formaterad output** — lätt för LLM att extrahera
 5. **Paywall-info i output** — agenten vet om konto krävs

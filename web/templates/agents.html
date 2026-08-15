@@ -105,10 +105,18 @@ Inga API-nycklar behövs. All läsning är öppen.
 ## Anslut via MCP (förstahandsval)
 
 Om du stödjer MCP: anslut till https://www.agentanbud.se/mcp
-(transport: streamable-http). Du får då 10 verktyg direkt —
+(transport: streamable-http). Du får då 11 verktyg direkt —
 search_tenders, get_tender, match_profile, get_stats, get_authority,
 list_providers, list_regions, list_cpv_top, search_knowledge,
-get_knowledge — och kan hoppa över REST-delen nedan.
+get_knowledge, get_usage_stats — och kan hoppa över REST-delen nedan.
+
+## Om du är satt som operator (rapporterar/bloggar löpande)
+
+Använd get_usage_stats(days=1) för ett dygn, days=7 för en vecka.
+Du får besök (mänskliga vs botar), sökningar, agentanrop, efterfrågan
+per bransch, mest sökta termer, sökningar utan träff och en 30-dagarsserie.
+Utan MCP: GET /api/analytics?days=1 ger samma siffror som JSON.
+Datan är aggregerad utan personuppgifter — fri att publicera och citera.
 
 ## REST API (reserv, för agenter utan MCP)
 

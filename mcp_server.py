@@ -35,6 +35,7 @@ from mcp.server import Server
 # Reuse Agentanbud's DB layer
 sys.path.insert(0, str(Path(__file__).parent))
 from app.db import connect  # noqa: E402
+from app.insights import format_usage_markdown, usage_summary  # noqa: E402
 from mcp_tools import tool_dicts  # noqa: E402
 
 DB_PATH = os.environ.get("DB_PATH", "/data/application.db")
@@ -235,6 +236,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.Content]:
             return await _search_knowledge(conn, arguments)
         elif name == "get_knowledge":
             return await _get_knowledge(conn, arguments)
+        elif name == "get_usage_stats":
+            return await _get_usage_stats(conn, arguments)
         else:
             return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
     finally:
@@ -600,6 +603,26 @@ async def _get_knowledge(conn, args: dict) -> list[types.Content]:
     k = _row_dict(row)
     return [types.TextContent(type="text", text=_format_knowledge(k))]
 
+
+
+async def _get_usage_stats(conn, args: dict) -> list[types.Content]:
+    """Site-usage figures, formatted for an agent that's about to write about
+    them. Aggregate only — nothing here identifies a visitor."""
+    days = args.get("days")
+    try:
+        days = int(days) if days is not None else None
+    except (TypeError, ValueError):
+        days = None
+    if days is not None:
+        days = max(1, min(365, days))
+    summary = usage_summary(conn, days=days)
+    if not summary["events_total"]:
+        return [types.TextContent(
+            type="text",
+            text="Ingen användning loggad än för den perioden. "
+                 "Prova utan days-parameter för hela perioden.",
+        )]
+    return [types.TextContent(type="text", text=format_usage_markdown(summary))]
 
 
 # ----- Server registration (mcp 1.x / 2.x) ----------------------------------

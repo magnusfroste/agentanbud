@@ -107,6 +107,8 @@ async def _dispatch_tool(name: str, arguments: dict) -> list:
             return await mcp_server._search_knowledge(conn, arguments or {})
         if name == "get_knowledge":
             return await mcp_server._get_knowledge(conn, arguments or {})
+        if name == "get_usage_stats":
+            return await mcp_server._get_usage_stats(conn, arguments or {})
         raise ValueError(f"Unknown tool: {name}")
     finally:
         conn.close()

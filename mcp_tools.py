@@ -191,6 +191,32 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "get_usage_stats",
+        "description": (
+            "Usage figures for Agentanbud itself: visits (human vs bot), searches, "
+            "MCP agent calls, demand per industry segment, most-searched terms, "
+            "searches that returned nothing, and a 30-day daily series. "
+            "Use this to report on or write about how the site is being used — "
+            "e.g. a daily post about traffic and what people are looking for. "
+            "days=1 for the last 24h, days=7 for a week, omit for all time. "
+            "All figures are aggregate and contain no personal data (no cookies, "
+            "no IP addresses, no visitor ids) — free to publish and quote. "
+            "NOTE: this is about site usage, not procurement data — use get_stats "
+            "for how many tenders are in the database."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365,
+                    "description": "Look back this many days. Omit for all time. Use 1 for a daily report, 7 for weekly.",
+                },
+            },
+        },
+    },
+    {
         "name": "get_authority",
         "description": (
             "All tenders from one specific buyer/contracting authority. "

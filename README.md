@@ -131,7 +131,7 @@ använd det från en Jupyter notebook — your call.
 
 Agentanbud exponerar samma data via [Model Context Protocol](https://modelcontextprotocol.io/)
 på `https://www.agentanbud.se/mcp` — read-only, ingen API-nyckel, inga
-konton. AI-agenter kan ansluta med bara en URL och får **10 verktyg** direkt:
+konton. AI-agenter kan ansluta med bara en URL och får **11 verktyg** direkt:
 
 | Tool | Beskrivning |
 |---|---|
@@ -145,6 +145,7 @@ konton. AI-agenter kan ansluta med bara en URL och får **10 verktyg** direkt:
 | `list_cpv_top` | Vanligaste CPV-kategorierna |
 | `search_knowledge` | Sök i kunskapsbanken (hållbarhetskriterier + Q&A) |
 | `get_knowledge` | Hämta ett kunskapsobjekt i detalj |
+| `get_usage_stats` | Användning av sajten: besök (mänskliga/botar), sökningar, agentanrop, branschefterfrågan — för rapportering/bloggande |
 
 **Anslut från Claude Code** (ett kommando):
 

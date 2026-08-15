@@ -23,6 +23,8 @@ from jinja2 import Environment, FileSystemLoader
 
 from .cron import get_schedule, next_run
 from .db import connect, init_db, log_usage
+from .insights import (SEGMENT_OTHER, looks_like_bot as _looks_like_bot,
+                       segment_for as _segment_for, usage_summary)
 
 # MCP-over-HTTP is optional — only loaded if mcp_http module is present
 # (it's a separate file so the stdio MCP server stays independent).
@@ -72,66 +74,6 @@ def _log_usage_safe(conn, channel: str, action: str, query: Optional[str] = None
         log_usage(conn, channel, action, query=query, meta=meta)
     except Exception:
         LOG.exception("log_usage failed (channel=%s action=%s)", channel, action)
-
-
-# ---- Sponsor-facing demand segments -----------------------------------------
-# Buckets a free-text query / CPV prefix into a broad industry segment. This is
-# what turns raw search logs into "your industry gets N searches/month" — the
-# number a sponsor actually cares about. Coarse on purpose: one keyword hit is
-# enough, first match wins.
-SEGMENTS: list[tuple[str, list[str], list[str]]] = [
-    # (label, keyword substrings, CPV 2-digit prefixes)
-    ("IT & Digitalisering", ["it-", "it ", "digital", "system", "mjukvar", "programvar",
-                             "webb", "app", "moln", "cloud", "data", "cyber", "e-tjänst",
-                             "licens", "server", "nätverk"], ["48", "72", "30", "32"]),
-    ("Bygg & Anläggning", ["bygg", "anläggning", "väg", "entreprenad", "ombyggnad",
-                           "nybyggnad", "renover", "mark", "betong", "asfalt"], ["45", "44", "71"]),
-    ("Vård & Omsorg", ["vård", "omsorg", "sjuk", "hälsa", "medicin", "läkemedel",
-                       "bemanning", "äldre", "hemtjänst", "tandvård", "assistans"], ["85", "33"]),
-    ("Transport & Logistik", ["transport", "logistik", "fordon", "buss", "taxi",
-                              "frakt", "gods", "färdtjänst", "skolskjuts"], ["60", "34", "63"]),
-    ("Livsmedel & Måltid", ["livsmedel", "mat", "måltid", "kost", "catering",
-                            "skolmat", "dryck"], ["15", "55"]),
-    ("Utbildning", ["utbildning", "skola", "förskola", "lärande", "kurs",
-                    "pedagog", "läromedel"], ["80"]),
-    ("Städ & Fastighetsservice", ["städ", "lokalvård", "fastighetsservice",
-                                  "förvaltning", "fastighetsskötsel"], ["90", "70", "77"]),
-    ("Energi & Miljö", ["energi", "elförsörjning", "miljö", "sanering", "avfall",
-                        "återvinning", "solcell", "värme", "vatten", "va-"], ["09", "31", "65", "41"]),
-    ("Juridik & Konsult", ["juridik", "juridisk", "advokat", "rådgivning", "revision",
-                           "konsult", "utredning", "upphandlingsstöd"], ["79", "66", "75"]),
-    ("Möbler & Inredning", ["möbel", "inredning", "kontorsmöbl", "belysning"], ["39"]),
-    ("Säkerhet & Bevakning", ["säkerhet", "bevakning", "larm", "väktare",
-                              "brandskydd"], ["35"]),
-]
-SEGMENT_OTHER = "Övrigt"
-
-
-def _segment_for(query: Optional[str], cpv: Optional[str]) -> str:
-    """Map a search to a sponsor-relevant industry segment. First match wins."""
-    text = (query or "").lower()
-    cpv2 = (cpv or "")[:2]
-    for label, keywords, cpv_prefixes in SEGMENTS:
-        if cpv2 and cpv2 in cpv_prefixes:
-            return label
-        if text and any(kw in text for kw in keywords):
-            return label
-    return SEGMENT_OTHER
-
-
-_BOT_UA_MARKERS = ("bot", "crawler", "spider", "slurp", "bingpreview", "facebookexternalhit",
-                   "gptbot", "claudebot", "ccbot", "perplexity", "python-requests",
-                   "curl", "wget", "headless", "scrapy", "httpx", "go-http", "java/")
-
-
-def _looks_like_bot(user_agent: str) -> bool:
-    """Coarse bot detection from the UA string. We store only this boolean —
-    never the UA itself — so no fingerprinting, but sponsors still get an
-    honest human-vs-automated traffic split."""
-    ua = (user_agent or "").lower()
-    if not ua:
-        return True  # no UA at all → almost certainly automated
-    return any(m in ua for m in _BOT_UA_MARKERS)
 
 
 def _num(n) -> str:
@@ -627,175 +569,78 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
 
     @app.get("/analytics", include_in_schema=False)
     def analytics(request: Request):
-        """Usage insights — doubles as a transparency page and a sponsor deck.
-        What industries are in demand, where the gaps are, how traffic grows,
-        and how it's used (browser / MCP-agent / REST API). Cookie-free: built
-        entirely from our own aggregated usage_log."""
-        from collections import defaultdict, Counter
-        from datetime import timedelta
-
+        """Usage insights — transparency page and sponsor deck in one.
+        The figures come from app.insights so /api/analytics and the MCP
+        get_usage_stats tool report exactly the same numbers."""
         conn = connect(db)
         try:
-            total = conn.execute("SELECT COUNT(*) FROM usage_log").fetchone()[0]
+            s = usage_summary(conn, days=None)
 
-            # ---- Headline KPIs -------------------------------------------
-            view_total = conn.execute(
-                "SELECT COUNT(*) FROM usage_log WHERE action = 'view'"
-            ).fetchone()[0]
-            human_views = conn.execute(
-                "SELECT COUNT(*) FROM usage_log WHERE action = 'view' "
-                "AND json_extract(meta, '$.bot') = 0"
-            ).fetchone()[0]
-            bot_views = view_total - human_views
-            search_total = conn.execute(
-                "SELECT COUNT(*) FROM usage_log WHERE action = 'search'"
-            ).fetchone()[0]
-            agent_calls = conn.execute(
-                "SELECT COUNT(*) FROM usage_log WHERE action LIKE 'tool:%'"
-            ).fetchone()[0]
-
-            kpis = {
-                "views": view_total,
-                "human_views": human_views,
-                "bot_views": bot_views,
-                "human_pct": int(human_views / view_total * 100) if view_total else 0,
-                "searches": search_total,
-                "agent_calls": agent_calls,
-            }
-
-            # ---- Industry demand (the sponsor hero) ----------------------
-            # Bucket every query (browser + api + mcp) into a segment at read
-            # time so all channels are classified uniformly.
-            demand_rows = conn.execute(
-                "SELECT query, meta FROM usage_log "
-                "WHERE (action = 'search' OR action LIKE 'tool:%') "
-                "AND query IS NOT NULL AND TRIM(query) != ''"
-            ).fetchall()
-            seg_counter: Counter = Counter()
-            other_counter: Counter = Counter()
-            for r in demand_rows:
-                cpv = None
-                if r["meta"]:
-                    try:
-                        cpv = json.loads(r["meta"]).get("cpv") or None
-                    except Exception:
-                        pass
-                seg = _segment_for(r["query"], cpv)
-                seg_counter[seg] += 1
-                if seg == SEGMENT_OTHER:
-                    other_counter[r["query"].strip().lower()] += 1
-            seg_total = sum(seg_counter.values()) or 1
-            seg_colors = ["#2563eb", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444",
-                          "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6",
-                          "#a855f7", "#64748b"]
-            segments = []
-            for i, (label, n) in enumerate(seg_counter.most_common()):
-                segments.append({
-                    "label": label, "n": n,
-                    "pct": int(n / seg_total * 100),
-                    "bar": int(n / seg_counter.most_common(1)[0][1] * 100),
-                    "color": seg_colors[i % len(seg_colors)],
-                })
-
-            # ---- Unclassified: what fell into "Övrigt" -------------------
-            # Tuning aid: these are the terms SEGMENTS doesn't recognise yet.
-            # Frequent ones are candidates for a new keyword — or a new segment.
-            max_other = other_counter.most_common(1)[0][1] if other_counter else 1
-            unclassified = [
-                {"term": term, "n": n, "pct": int(n / max_other * 100)}
-                for term, n in other_counter.most_common(15)
-            ]
-            other_share = int(seg_counter[SEGMENT_OTHER] / seg_total * 100)
-
-            # ---- Unmet demand: searches that returned nothing ------------
-            gap_rows = conn.execute(
-                "SELECT LOWER(TRIM(query)) AS term, COUNT(*) AS n FROM usage_log "
-                "WHERE action = 'search' AND json_extract(meta, '$.results') = 0 "
-                "AND query IS NOT NULL AND TRIM(query) != '' "
-                "GROUP BY term ORDER BY n DESC LIMIT 12"
-            ).fetchall()
-            max_gap = gap_rows[0]["n"] if gap_rows else 1
-            unmet = [
-                {"term": r["term"], "n": r["n"], "pct": int(r["n"] / max_gap * 100)}
-                for r in gap_rows
+            # Decorate the raw figures with presentation-only bits.
+            colors = ["#2563eb", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444",
+                      "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6",
+                      "#a855f7", "#64748b"]
+            top_seg = s["segments"][0]["n"] if s["segments"] else 1
+            segments = [
+                {**seg, "bar": int(seg["n"] / top_seg * 100), "color": colors[i % len(colors)]}
+                for i, seg in enumerate(s["segments"])
             ]
 
-            # ---- Top search terms ----------------------------------------
-            term_rows = conn.execute(
-                "SELECT LOWER(TRIM(query)) AS term, COUNT(*) AS n FROM usage_log "
-                "WHERE query IS NOT NULL AND TRIM(query) != '' AND action != 'view' "
-                "GROUP BY term ORDER BY n DESC LIMIT 15"
-            ).fetchall()
-            max_term = term_rows[0]["n"] if term_rows else 1
-            top_terms = [
-                {"term": r["term"], "n": r["n"], "pct": int(r["n"] / max_term * 100)}
-                for r in term_rows
-            ]
+            def bars(items, key="n"):
+                mx = items[0][key] if items else 1
+                return [{**it, "pct": int(it[key] / mx * 100)} for it in items]
 
-            # ---- How it's used: activity-type split ----------------------
+            v = s["visits"]
+            kpis = {"views": v["total"], "human_views": v["human"], "bot_views": v["bot"],
+                    "human_pct": v["human_pct"], "searches": s["searches"],
+                    "agent_calls": s["agent_calls"]}
+
             usage_types = [
-                {"label": "Sidvisningar", "n": view_total, "color": "#2563eb"},
-                {"label": "Webbsökningar", "n": search_total, "color": "#8b5cf6"},
-                {"label": "MCP-agentverktyg", "n": agent_calls, "color": "#10b981"},
-                {"label": "API-anrop", "n": conn.execute(
-                    "SELECT COUNT(*) FROM usage_log WHERE channel = 'api'"
-                ).fetchone()[0], "color": "#f59e0b"},
+                {"label": "Sidvisningar", "n": v["total"], "color": "#2563eb"},
+                {"label": "Webbsökningar", "n": s["searches"], "color": "#8b5cf6"},
+                {"label": "MCP-agentverktyg", "n": s["agent_calls"], "color": "#10b981"},
             ]
             ut_total = sum(u["n"] for u in usage_types) or 1
-            for u in usage_types:
-                u["pct"] = int(u["n"] / ut_total * 100)
-            usage_types = [u for u in usage_types if u["n"] > 0]
+            usage_types = [{**u, "pct": int(u["n"] / ut_total * 100)}
+                           for u in usage_types if u["n"] > 0]
 
-            # ---- MCP tool breakdown --------------------------------------
-            tool_rows = conn.execute(
-                "SELECT action, COUNT(*) AS n FROM usage_log WHERE action LIKE 'tool:%' "
-                "GROUP BY action ORDER BY n DESC LIMIT 12"
-            ).fetchall()
-            max_tool = tool_rows[0]["n"] if tool_rows else 1
-            top_tools = [
-                {"tool": r["action"][5:], "n": r["n"], "pct": int(r["n"] / max_tool * 100)}
-                for r in tool_rows
-            ]
+            max_day = max((d["total"] for d in s["daily_last_30"]), default=0) or 1
+            daily = [{"day": d["date"][8:10] + "/" + d["date"][5:7], "n": d["total"],
+                      "views": d["views"], "searches": d["searches"],
+                      "agents": d["agent_calls"],
+                      "pct": int(d["total"] / max_day * 100)}
+                     for d in s["daily_last_30"]]
 
-            # ---- 30-day momentum: visits vs searches vs agents -----------
-            day_rows = conn.execute(
-                "SELECT DATE(created_at) AS day, "
-                "SUM(action = 'view') AS views, "
-                "SUM(action = 'search') AS searches, "
-                "SUM(action LIKE 'tool:%') AS agents "
-                "FROM usage_log WHERE created_at >= DATE('now', '-29 days') GROUP BY day"
-            ).fetchall()
-            by_day = {r["day"]: r for r in day_rows}
-            today = datetime.now(timezone.utc).date()
-            daily_raw = []
-            for i in range(29, -1, -1):
-                d = today - timedelta(days=i)
-                r = by_day.get(d.isoformat())
-                views = (r["views"] if r else 0) or 0
-                searches = (r["searches"] if r else 0) or 0
-                agents = (r["agents"] if r else 0) or 0
-                daily_raw.append({
-                    "day": d.strftime("%d/%m"),
-                    "n": views + searches + agents,
-                    "views": views, "searches": searches, "agents": agents,
-                })
-            max_day = max((d["n"] for d in daily_raw), default=0) or 1
-            daily = [{**d, "pct": int(d["n"] / max_day * 100)} for d in daily_raw]
-
-            # ---- Recent search/agent activity (skip raw pageviews) -------
             recent = [dict(r) for r in conn.execute(
                 "SELECT channel, action, query, created_at FROM usage_log "
                 "WHERE action != 'view' ORDER BY created_at DESC LIMIT 25"
             ).fetchall()]
 
             return HTMLResponse(render("analytics.html",
-                total=total, kpis=kpis, segments=segments, unmet=unmet,
-                unclassified=unclassified, other_share=other_share,
-                top_terms=top_terms, usage_types=usage_types, top_tools=top_tools,
+                total=s["events_total"], kpis=kpis, segments=segments,
+                unmet=bars(s["unmet_demand"]), unclassified=bars(s["unclassified"]),
+                other_share=s["other_share_pct"], top_terms=bars(s["top_terms"]),
+                usage_types=usage_types,
+                top_tools=bars([{"tool": t["tool"], "n": t["n"]} for t in s["mcp_tools"]]),
                 daily=daily, recent=recent,
             ))
         finally:
             conn.close()
+
+    @app.get("/api/analytics")
+    def api_analytics(days: Optional[int] = Query(default=None, ge=1, le=365)):
+        """Public usage figures as JSON — same numbers as /analytics.
+
+        Exists so an operator agent (or any script) can report on traffic
+        without scraping the HTML page. Aggregate only: no IP addresses,
+        no visitor ids, nothing per-person. Free to republish.
+        """
+        conn = connect(db)
+        try:
+            return usage_summary(conn, days=days)
+        finally:
+            conn.close()
+
 
     @app.get("/agenter", include_in_schema=False)
     def agents(request: Request):
@@ -850,12 +695,21 @@ och AI-agenter.
 
 ## För AI-agenter: använd MCP eller API:t, inte HTML-skrapning
 
-- MCP (rekommenderat): {SITE_URL}/mcp — transport streamable-http, 10 verktyg
+- MCP (rekommenderat): {SITE_URL}/mcp — transport streamable-http, 11 verktyg
   (search_tenders, get_tender, match_profile, get_authority, get_stats,
-  list_providers, list_regions, list_cpv_top, search_knowledge, get_knowledge).
+  list_providers, list_regions, list_cpv_top, search_knowledge, get_knowledge,
+  get_usage_stats).
 - REST API: {SITE_URL}/api/tenders?q=&source=&authority=&cpv=&page=
   Enskild post: {SITE_URL}/api/tenders/{{id}}
   Statistik: {SITE_URL}/api/stats · OpenAPI: {SITE_URL}/openapi.json
+
+## Är du satt som operator och ska rapportera om användningen?
+
+Använd MCP-verktyget get_usage_stats(days=1) för ett dygn (days=7 för en
+vecka), eller GET {SITE_URL}/api/analytics?days=1 utan MCP. Du får besök
+(mänskliga vs botar), sökningar, agentanrop, efterfrågan per bransch, mest
+sökta termer och sökningar utan träff. Siffrorna är aggregerade och
+innehåller inga personuppgifter — fria att publicera och citera.
 
 Alla GET-endpoints är öppna. Skrivåtgärder kräver adminnyckel.
 
