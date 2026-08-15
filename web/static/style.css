@@ -2670,3 +2670,46 @@ pre code {
 @media (max-width: 700px) {
   .agent-cta-steps { grid-template-columns: 1fr; }
 }
+
+/* ---- FAQ (landing) — visible content backing the FAQPage schema ---- */
+.faq-section {
+  max-width: 820px;
+  margin: 3rem auto 1rem;
+  padding: 0 1rem;
+}
+.faq-section h2 {
+  font-size: 1.6rem;
+  margin-bottom: 1.25rem;
+  text-align: center;
+}
+.faq-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.65rem;
+}
+.faq-item > summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.faq-item > summary::-webkit-details-marker { display: none; }
+.faq-item > summary::after {
+  content: "+";
+  font-size: 1.3rem;
+  color: var(--muted);
+  line-height: 1;
+  flex-shrink: 0;
+}
+.faq-item[open] > summary::after { content: "−"; }
+.faq-item > p {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.faq-item a { color: var(--accent); }

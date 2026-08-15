@@ -1,6 +1,44 @@
 {% extends "base.html" %}
 {% block title %}{{ t.title or "Upphandling" }}{% endblock %}
 
+{% block canonical %}/tenders/{{ t.id }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_title %}{{ t.title or "Upphandling" }}{% if t.authority %} — {{ t.authority }}{% endif %}{% endblock %}
+{% block meta_description %}{% if t.authority %}{{ t.authority }} upphandlar: {% endif %}{{ (t.description or t.title or "Offentlig upphandling")|striptags|truncate(150, true, "…") }}{% endblock %}
+
+{% block head_extra %}
+{# schema.org Demand is the correct type for a procurement notice: a public
+   announcement seeking goods or services. Helps search and answer engines
+   read the key facts without parsing the page. #}
+<script type="application/ld+json">
+{{ {
+  "@context": "https://schema.org",
+  "@type": "GovernmentOrganization",
+  "name": t.authority or "Svensk upphandlande myndighet",
+  "seeks": {
+    "@type": "Demand",
+    "name": t.title or "Upphandling",
+    "description": (t.description or t.title or "")|striptags|truncate(300, true, "…"),
+    "url": SITE_URL ~ "/tenders/" ~ t.id,
+    "availabilityEnds": t.deadline,
+    "areaServed": {"@type": "Place", "name": t.region or "Sverige"},
+    "businessFunction": "https://purl.org/goodrelations/v1#ProvideService"
+  }
+} | tojson }}
+</script>
+<script type="application/ld+json">
+{{ {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "Hem", "item": SITE_URL ~ "/"},
+    {"@type": "ListItem", "position": 2, "name": "Upphandlingar", "item": SITE_URL ~ "/browse"},
+    {"@type": "ListItem", "position": 3, "name": t.title or ("Upphandling #" ~ t.id)}
+  ]
+} | tojson }}
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="detail-layout">
   <!-- BREADCRUMB -->

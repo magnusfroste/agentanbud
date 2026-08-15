@@ -5,25 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}Agentanbud{% endblock %} — Svenska upphandlingar</title>
 
-  <!-- SEO -->
-  <meta name="description" content="Agentanbud — fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och utforska upphandlingar från Mercell, TED EU och fler källor. Öppet API, MCP för AI-agenter. Infrastruktur för demokrati." />
+  <!-- SEO — per-page via blocks. Canonical MUST reflect the actual page:
+       a site-wide canonical pointing at "/" tells search engines every page
+       is a duplicate of the homepage and gets them dropped from the index. -->
+  <meta name="description" content="{% block meta_description %}Agentanbud — fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och utforska upphandlingar från Mercell, TED EU och fler källor. Öppet API, MCP för AI-agenter.{% endblock %}" />
   <meta name="keywords" content="upphandling, offentlig upphandling, Sverige, anbud, offentlig, Mercell, TED, LOU, direktupphandling, ramavtal, CPV, upphandlingsmyndigheten, fri data, öppen data" />
   <meta name="author" content="Agentanbud" />
-  <meta name="robots" content="index, follow" />
-  <link rel="canonical" href="https://www.agentanbud.se/" />
+  <meta name="robots" content="{% block robots %}index, follow{% endblock %}" />
+  <link rel="canonical" href="{{ SITE_URL }}{% block canonical %}/{% endblock %}" />
 
   <!-- OpenGraph -->
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="Agentanbud — Svenska upphandlingar, öppna för alla" />
-  <meta property="og:description" content="Fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och bygg ovanpå med öppet API och MCP. Infrastruktur för demokrati." />
-  <meta property="og:url" content="https://www.agentanbud.se/" />
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}" />
+  <meta property="og:title" content="{% block og_title %}Agentanbud — Svenska upphandlingar, öppna för alla{% endblock %}" />
+  <meta property="og:description" content="{{ self.meta_description() }}" />
+  <meta property="og:url" content="{{ SITE_URL }}{{ self.canonical() }}" />
   <meta property="og:site_name" content="Agentanbud" />
   <meta property="og:locale" content="sv_SE" />
+  <meta property="og:image" content="{{ SITE_URL }}/static/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Agentanbud — svenska upphandlingar, öppna för alla" />
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Agentanbud — Svenska upphandlingar, öppna för alla" />
-  <meta name="twitter:description" content="Fri tillgång till svenska offentliga upphandlingar. Öppet API + MCP för AI-agenter." />
+  <meta name="twitter:title" content="{{ self.og_title() }}" />
+  <meta name="twitter:description" content="{{ self.meta_description() }}" />
+  <meta name="twitter:image" content="{{ SITE_URL }}/static/og-image.png" />
+  <meta name="twitter:image:alt" content="Agentanbud — svenska upphandlingar, öppna för alla" />
 
   <!-- AEO (Answer Engine Optimization) — för AI-crawlers -->
   <script type="application/ld+json">
@@ -41,42 +49,14 @@
     "inLanguage": "sv"
   }
   </script>
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    "mainEntity": [
-      {
-        "@type": "Question",
-        "name": "Vad är Agentanbud?",
-        "acceptedAnswer": {"@type": "Answer", "text": "Agentanbud är en öppen spegel av svenska offentliga upphandlingar. Vi samlar data från Mercell, TED EU och andra källor i en SQLite-databas och serverar den via webb, REST API och MCP för AI-agenter."}
-      },
-      {
-        "@type": "Question",
-        "name": "Är Agentanbud gratis?",
-        "acceptedAnswer": {"@type": "Answer", "text": "Ja. Hela API:t är öppet — inga konton, inga API-nycklar, inga betalväggar. Att söka är alltid gratis. För vissa upphandlingar behöver du skapa konto hos plattformen (Mercell, Tendsign, etc.) för att komma åt anbudsformulär och dokument."}
-      },
-      {
-        "@type": "Question",
-        "name": "Vilka datakällor använder Agentanbud?",
-        "acceptedAnswer": {"@type": "Answer", "text": "Mercell (publikt sök-API, ~65-70% av svensk volym) och TED EU (EU-tröskelvärden). Vi respekterar robots.txt — e-Avrop är inte speglad eftersom de blockerar crawling."}
-      },
-      {
-        "@type": "Question",
-        "name": "Kan AI-agenter använda Agentanbud?",
-        "acceptedAnswer": {"@type": "Answer", "text": "Ja. Agentanbud har en MCP-server med 10 läsverktyg (search_tenders, get_tender, get_stats, list_providers, list_regions, list_cpv_top, get_authority, match_profile, search_knowledge, get_knowledge) som låter Claude Code, Cursor och andra MCP-klienter söka och läsa upphandlingar direkt via https://www.agentanbud.se/mcp."}
-      },
-      {
-        "@type": "Question",
-        "name": "Hur ofta uppdateras datan?",
-        "acceptedAnswer": {"@type": "Answer", "text": "Datan synkas automatiskt varje dag kl 06:00 UTC från alla källor."}
-      }
-    ]
-  }
-  </script>
+  {# FAQ schema lives on the landing page only: Google requires FAQPage
+     markup to correspond to FAQ content actually visible on that page. #}
+  {% block faq_jsonld %}{% endblock %}
 
   <!-- Favicon (inline SVG, Swedish flag) -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 12'%3E%3Crect width='16' height='12' fill='%23006aa7'/%3E%3Crect y='4' width='16' height='4' fill='%23fecc00'/%3E%3Crect x='5' width='4' height='12' fill='%23fecc00'/%3E%3C/svg%3E" />
+
+  {% block head_extra %}{% endblock %}
 
   <link rel="stylesheet" href="/static/style.css" />
   <script defer src="/static/app.js"></script>

@@ -1,6 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Svenska upphandlingar — fri tillgång{% endblock %}
 
+{% block faq_jsonld %}
+{# Mirrors the visible FAQ at the bottom of this page — required by Google's
+   structured-data policy, and it's what answer engines quote. #}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "Vad är Agentanbud?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Agentanbud är en öppen spegel av svenska offentliga upphandlingar. Vi samlar data från Mercell, TED EU och Upphandlingsmyndigheten i en databas och serverar den via webb, REST API och MCP för AI-agenter."}},
+    {"@type": "Question", "name": "Är Agentanbud gratis?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Ja. Hela API:t är öppet — inga konton, inga API-nycklar, inga betalväggar. Att söka är alltid gratis. För att lämna anbud behöver du oftast konto hos originalplattformen (Mercell, Tendsign med flera)."}},
+    {"@type": "Question", "name": "Vilka datakällor använder Agentanbud?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Mercell (publikt sök-API, cirka 65-70 procent av svensk volym), TED EU (annonser, tilldelningar och förhandsinformation) samt Upphandlingsmyndigheten (LOV, hållbarhetskriterier och juridisk Q&A). Vi respekterar robots.txt — e-Avrop speglas inte eftersom de blockerar crawling."}},
+    {"@type": "Question", "name": "Kan AI-agenter använda Agentanbud?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Ja. Agentanbud har en MCP-server med 10 läsverktyg som låter Claude, Codex CLI, Cursor och andra MCP-klienter söka och läsa upphandlingar direkt via https://www.agentanbud.se/mcp. Ingen API-nyckel behövs."}},
+    {"@type": "Question", "name": "Hur ofta uppdateras datan?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Datan synkas automatiskt varje dag klockan 06:00 UTC från alla källor."}},
+    {"@type": "Question", "name": "Spårar Agentanbud sina besökare?",
+     "acceptedAnswer": {"@type": "Answer", "text": "Nej. Inga cookies och ingen tredjepartsanalys. Vi loggar bara aggregerad användning — kanal, sökterm och tidpunkt — i vår egen databas, utan IP-adress eller besökar-ID. Statistiken är publik på /analytics."}}
+  ]
+}
+</script>
+{% endblock %}
+
 {% block content %}
 <!-- HERO -->
 <section class="hero">
@@ -323,6 +348,49 @@
   <h2>Börja utforska</h2>
   <p class="muted">{{ total }} upphandlingar från {{ source_count }} källor. Allt gratis.</p>
   <a href="/browse" class="btn primary large">Utforska upphandlingar →</a>
+</section>
+
+<!-- FAQ — visible content backing the FAQPage schema, and prime AEO material -->
+<section class="faq-section">
+  <h2>Vanliga frågor</h2>
+  <details class="faq-item" open>
+    <summary>Vad är Agentanbud?</summary>
+    <p>Agentanbud är en öppen spegel av svenska offentliga upphandlingar. Vi samlar
+    data från Mercell, TED EU och Upphandlingsmyndigheten i en databas och serverar
+    den via webb, REST API och MCP för AI-agenter.</p>
+  </details>
+  <details class="faq-item">
+    <summary>Är Agentanbud gratis?</summary>
+    <p>Ja. Hela API:t är öppet — inga konton, inga API-nycklar, inga betalväggar.
+    Att söka är alltid gratis. För att lämna anbud behöver du oftast konto hos
+    originalplattformen (Mercell, Tendsign med flera).</p>
+  </details>
+  <details class="faq-item">
+    <summary>Vilka datakällor använder Agentanbud?</summary>
+    <p>Mercell (publikt sök-API, cirka 65–70 % av svensk volym), TED EU (annonser,
+    tilldelningar och förhandsinformation) samt Upphandlingsmyndigheten (LOV,
+    hållbarhetskriterier och juridisk Q&amp;A). Vi respekterar <code>robots.txt</code>
+    — e-Avrop speglas inte eftersom de blockerar crawling.
+    <a href="/providers">Se alla källor →</a></p>
+  </details>
+  <details class="faq-item">
+    <summary>Kan AI-agenter använda Agentanbud?</summary>
+    <p>Ja. Agentanbud har en MCP-server med 10 läsverktyg som låter Claude, Codex CLI,
+    Cursor och andra MCP-klienter söka och läsa upphandlingar direkt via
+    <code>https://www.agentanbud.se/mcp</code>. Ingen API-nyckel behövs.
+    <a href="/agenter">Så kopplar du in din agent →</a></p>
+  </details>
+  <details class="faq-item">
+    <summary>Hur ofta uppdateras datan?</summary>
+    <p>Datan synkas automatiskt varje dag kl 06:00 UTC från alla källor.
+    <a href="/system">Se driftstatus →</a></p>
+  </details>
+  <details class="faq-item">
+    <summary>Spårar Agentanbud sina besökare?</summary>
+    <p>Nej. Inga cookies och ingen tredjepartsanalys. Vi loggar bara aggregerad
+    användning — kanal, sökterm och tidpunkt — i vår egen databas, utan IP-adress
+    eller besökar-ID. Statistiken är publik på <a href="/analytics">/analytics</a>.</p>
+  </details>
 </section>
 
 <script>

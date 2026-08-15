@@ -17,7 +17,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 LOG = logging.getLogger(__name__)
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
 
@@ -38,6 +38,9 @@ except Exception as exc:
                 type(exc).__name__, exc)
 
 DB_PATH = os.environ.get("DB_PATH", "/data/application.db")
+# Public origin, used for canonical URLs, OG tags, sitemap and robots.txt.
+# Override when running on another domain so those never point at the wrong host.
+SITE_URL = os.environ.get("SITE_URL", "https://www.agentanbud.se").rstrip("/")
 TEMPLATE_DIR = Path(__file__).parent.parent / "web" / "templates"
 STATIC_DIR = Path(__file__).parent.parent / "web" / "static"
 
@@ -170,6 +173,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
     app = FastAPI(title="Agentanbud", version="0.2.0")
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
     env.filters["format_num"] = _num
+    env.globals["SITE_URL"] = SITE_URL
 
     def render(template: str, **ctx) -> str:
         tpl = env.get_template(template)
@@ -796,6 +800,140 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
     @app.get("/agenter", include_in_schema=False)
     def agents(request: Request):
         return HTMLResponse(render("agents.html"))
+
+    # ---- Crawler / answer-engine entry points --------------------------
+    @app.get("/robots.txt", include_in_schema=False)
+    def robots():
+        """Allow everything (this is open civic data) and point at the sitemap.
+
+        AI crawlers are explicitly welcome: being cited by an answer engine
+        is the whole point of publishing procurement data openly.
+        """
+        body = (
+            "User-agent: *\n"
+            "Allow: /\n"
+            # Search/filter permutations are infinite and low-value to index;
+            # the canonical tender pages carry the content.
+            "Disallow: /api/\n"
+            "Disallow: /mcp\n"
+            "Disallow: /browse?\n"
+            "\n"
+            f"Sitemap: {SITE_URL}/sitemap.xml\n"
+        )
+        return Response(content=body, media_type="text/plain")
+
+    @app.get("/llms.txt", include_in_schema=False)
+    def llms_txt():
+        """llms.txt — a plain-text brief for LLMs and agents that land here.
+
+        Tells an agent what this site is and, crucially, that there's an MCP
+        endpoint and a JSON API so it can stop scraping HTML and use those.
+        """
+        conn = connect(db)
+        try:
+            total = conn.execute("SELECT COUNT(*) FROM tenders").fetchone()[0]
+            knowledge = conn.execute("SELECT COUNT(*) FROM knowledge").fetchone()[0]
+        except Exception:
+            total = knowledge = 0
+        finally:
+            conn.close()
+        body = f"""# Agentanbud
+
+> Öppen spegel av svenska offentliga upphandlingar. Fri att läsa — inga
+> konton, inga API-nycklar, inga betalväggar. {total} upphandlingar och
+> {knowledge} kunskapsobjekt, synkade dagligen.
+
+Agentanbud samlar upphandlingsdata från Mercell, TED EU (annonser,
+tilldelningar och förhandsinformation) och Upphandlingsmyndigheten (LOV,
+hållbarhetskriterier, juridisk Q&A) och gör den sökbar för både människor
+och AI-agenter.
+
+## För AI-agenter: använd MCP eller API:t, inte HTML-skrapning
+
+- MCP (rekommenderat): {SITE_URL}/mcp — transport streamable-http, 10 verktyg
+  (search_tenders, get_tender, match_profile, get_authority, get_stats,
+  list_providers, list_regions, list_cpv_top, search_knowledge, get_knowledge).
+- REST API: {SITE_URL}/api/tenders?q=&source=&authority=&cpv=&page=
+  Enskild post: {SITE_URL}/api/tenders/{{id}}
+  Statistik: {SITE_URL}/api/stats · OpenAPI: {SITE_URL}/openapi.json
+
+Alla GET-endpoints är öppna. Skrivåtgärder kräver adminnyckel.
+
+## Sidor
+
+- {SITE_URL}/browse — sök och filtrera upphandlingar
+- {SITE_URL}/tenders/{{id}} — en upphandling med deadline, värde, CPV och länk till originalannonsen
+- {SITE_URL}/kunskap — hållbarhetskriterier och juridisk Q&A (LOU, LOV, tröskelvärden)
+- {SITE_URL}/dashboard — statistik över svensk upphandling
+- {SITE_URL}/providers — datakällor och hur de hämtas
+- {SITE_URL}/agenter — hur du kopplar in en agent
+- {SITE_URL}/analytics — öppen användningsstatistik (inga cookies)
+
+## Viktigt om data vs ansökan
+
+Vi speglar publik data. Att faktiskt lämna anbud sker hos originalplattformen
+och kräver ofta konto där (t.ex. Mercell). TED-annonser är helt publika.
+Följ alltid tender_url till originalkällan för dokument och inlämning.
+
+## Licens
+
+Kod: MIT ({SITE_URL} · https://github.com/magnusfroste/agentanbud).
+Data: respektive källas villkor gäller; vi länkar alltid till originalet.
+"""
+        return Response(content=body, media_type="text/plain; charset=utf-8")
+
+    @app.get("/sitemap.xml", include_in_schema=False)
+    def sitemap():
+        """Sitemap covering the static pages plus every tender and knowledge
+        item. Without this the thousands of detail pages — the long-tail that
+        actually brings in search traffic — are only reachable by crawling
+        paginated /browse, which engines do slowly and incompletely."""
+        from xml.sax.saxutils import escape
+
+        conn = connect(db)
+        try:
+            static_pages = [
+                ("/", "daily", "1.0"),
+                ("/browse", "daily", "0.9"),
+                ("/dashboard", "daily", "0.7"),
+                ("/kunskap", "weekly", "0.7"),
+                ("/agenter", "monthly", "0.8"),
+                ("/providers", "monthly", "0.6"),
+                ("/analytics", "weekly", "0.5"),
+            ]
+            parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+                     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+            for path, freq, prio in static_pages:
+                parts.append(
+                    f"<url><loc>{escape(SITE_URL + path)}</loc>"
+                    f"<changefreq>{freq}</changefreq><priority>{prio}</priority></url>"
+                )
+
+            # Open tenders first (most valuable), then recent closed ones.
+            now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            rows = conn.execute(
+                """
+                SELECT id, fetched_at,
+                       CASE WHEN deadline IS NULL OR deadline > ? THEN 1 ELSE 0 END AS is_open
+                FROM tenders
+                ORDER BY is_open DESC, published_at DESC NULLS LAST
+                LIMIT 40000
+                """,
+                (now_iso,),
+            ).fetchall()
+            for r in rows:
+                lastmod = (r["fetched_at"] or "")[:10]
+                parts.append(
+                    f"<url><loc>{escape(SITE_URL)}/tenders/{r['id']}</loc>"
+                    + (f"<lastmod>{lastmod}</lastmod>" if lastmod else "")
+                    + f"<changefreq>{'daily' if r['is_open'] else 'monthly'}</changefreq>"
+                    + f"<priority>{'0.8' if r['is_open'] else '0.3'}</priority></url>"
+                )
+
+            parts.append("</urlset>")
+            return Response(content="\n".join(parts), media_type="application/xml")
+        finally:
+            conn.close()
 
     @app.get("/providers", include_in_schema=False)
     def providers(request: Request):
