@@ -28,6 +28,7 @@ from .db import (
     record_post_event,
 )
 from .version import build_info, version_string, started_at
+from .insights import usage_summary, REAL_SEARCH
 from .search import (build_match, match_subquery, like_floor_sql,
                      rank_order_sql)
 
@@ -371,7 +372,16 @@ samma tillgång för småföretag som för de stora konsultbolagen.
 - GET {SITE_URL}/api/winners?authority=&cpv=  — vem brukar vinna
 - GET {SITE_URL}/api/stats
 - GET {SITE_URL}/api/blog  — agent-författad blogg om upphandling
+- GET {SITE_URL}/api/analytics?days=  — hur plattformen används: besök,
+  sökningar, agentanrop, efterfrågan per bransch, sökningar utan träff.
+  Aggregerat, inga personuppgifter. Fritt att publicera och citera.
 - OpenAPI: {SITE_URL}/openapi.json
+
+## Är du satt som operator och ska rapportera om användningen?
+
+Använd MCP-verktyget get_usage_stats(days=1) om du talar MCP, annars
+GET {SITE_URL}/api/analytics?days=1. Skrapa inte /analytics-sidan —
+siffrorna finns strukturerat på båda ställena ovan.
 
 ## Nyckelsidor
 
@@ -929,158 +939,83 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
 
     @app.get("/analytics", include_in_schema=False)
     def analytics(request: Request):
-        """Usage insights — doubles as a transparency page and a sponsor deck.
-        What industries are in demand, where the gaps are, how traffic grows,
-        and how it's used (browser / MCP-agent / REST API). Cookie-free: built
-        entirely from our own aggregated usage_log."""
-        from collections import Counter
-        from datetime import timedelta
+        """Usage insights — transparency page and sponsor deck in one.
 
+        The figures come from app.insights so this page, /api/analytics and
+        the MCP get_usage_stats tool can never disagree; this route only
+        decorates them for display.
+        """
         conn = connect(db)
         try:
-            total = conn.execute("SELECT COUNT(*) FROM usage_log").fetchone()[0]
+            s = usage_summary(conn)
 
-            human_views = conn.execute(
-                "SELECT COUNT(*) FROM usage_log WHERE action = 'view' "
-                "AND json_extract(meta, '$.bot') = 0"
-            ).fetchone()[0]
-            # Bot views live in the aggregated counter now; legacy per-hit rows
-            # (logged before the switch) are still counted until they age out.
-            bot_views = (conn.execute(
-                "SELECT COALESCE(SUM(n), 0) FROM daily_counters WHERE kind = 'bot_view'"
-            ).fetchone()[0] or 0) + (conn.execute(
-                "SELECT COUNT(*) FROM usage_log WHERE action = 'view' "
-                "AND json_extract(meta, '$.bot') = 1"
-            ).fetchone()[0] or 0)
-            view_total = human_views + bot_views
-            # "Real" searches only: rows flagged bot=0 (new logging), plus
-            # historical rows that carry an actual keyword. Excludes the old
-            # crawler filter-walks (query-less, unflagged) that used to make
-            # this KPI ~99% bot noise.
-            _REAL_SEARCH = ("action = 'search' AND (json_extract(meta, '$.bot') = 0 "
-                            "OR (query IS NOT NULL AND TRIM(query) != ''))")
-            search_total = conn.execute(
-                f"SELECT COUNT(*) FROM usage_log WHERE {_REAL_SEARCH}"
-            ).fetchone()[0]
-            agent_calls = conn.execute(
-                "SELECT COUNT(*) FROM usage_log WHERE action LIKE 'tool:%'"
-            ).fetchone()[0]
-            # Unique agents = distinct MCP session hashes (one agent = many calls)
-            agent_sessions = conn.execute(
-                "SELECT COUNT(DISTINCT json_extract(meta, '$._sid')) FROM usage_log "
-                "WHERE action LIKE 'tool:%' AND json_extract(meta, '$._sid') IS NOT NULL"
-            ).fetchone()[0]
+            colors = ["#2563eb", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444",
+                      "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6",
+                      "#a855f7", "#64748b"]
+            top_seg = s["segments"][0]["n"] if s["segments"] else 1
+            segments = [{**seg, "bar": int(seg["n"] / top_seg * 100),
+                         "color": colors[i % len(colors)]}
+                        for i, seg in enumerate(s["segments"])]
 
-            kpis = {
-                "views": view_total, "human_views": human_views, "bot_views": bot_views,
-                "human_pct": int(human_views / view_total * 100) if view_total else 0,
-                "searches": search_total, "agent_calls": agent_calls,
-                "agent_sessions": agent_sessions,
-            }
+            def bars(items, key="n"):
+                mx = items[0][key] if items else 1
+                return [{**it, "pct": int(it[key] / mx * 100)} for it in items]
 
-            # Industry demand — bucket every query (browser + api + mcp)
-            demand_rows = conn.execute(
-                "SELECT query, meta FROM usage_log "
-                "WHERE (action = 'search' OR action LIKE 'tool:%') "
-                "AND query IS NOT NULL AND TRIM(query) != ''"
-            ).fetchall()
-            seg_counter: Counter = Counter()
-            for r in demand_rows:
-                cpv = None
-                if r["meta"]:
-                    try:
-                        cpv = json.loads(r["meta"]).get("cpv") or None
-                    except Exception:
-                        pass
-                seg_counter[_segment_for(r["query"], cpv)] += 1
-            seg_total = sum(seg_counter.values()) or 1
-            seg_colors = ["#2563eb", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444",
-                          "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6",
-                          "#a855f7", "#64748b"]
-            segments = []
-            for i, (label, n) in enumerate(seg_counter.most_common()):
-                segments.append({
-                    "label": label, "n": n, "pct": int(n / seg_total * 100),
-                    "bar": int(n / seg_counter.most_common(1)[0][1] * 100),
-                    "color": seg_colors[i % len(seg_colors)],
-                })
-
-            # Unmet demand — searches that returned nothing
-            gap_rows = conn.execute(
-                "SELECT LOWER(TRIM(query)) AS term, COUNT(*) AS n FROM usage_log "
-                "WHERE action = 'search' AND json_extract(meta, '$.results') = 0 "
-                "AND query IS NOT NULL AND TRIM(query) != '' "
-                "GROUP BY term ORDER BY n DESC LIMIT 12"
-            ).fetchall()
-            max_gap = gap_rows[0]["n"] if gap_rows else 1
-            unmet = [{"term": r["term"], "n": r["n"], "pct": int(r["n"] / max_gap * 100)}
-                     for r in gap_rows]
-
-            # Top search terms
-            term_rows = conn.execute(
-                "SELECT LOWER(TRIM(query)) AS term, COUNT(*) AS n FROM usage_log "
-                "WHERE query IS NOT NULL AND TRIM(query) != '' AND action != 'view' "
-                "GROUP BY term ORDER BY n DESC LIMIT 15"
-            ).fetchall()
-            max_term = term_rows[0]["n"] if term_rows else 1
-            top_terms = [{"term": r["term"], "n": r["n"], "pct": int(r["n"] / max_term * 100)}
-                         for r in term_rows]
+            v = s["visits"]
+            kpis = {"views": v["total"], "human_views": v["human"],
+                    "bot_views": v["bot"], "human_pct": v["human_pct"],
+                    "searches": s["searches"], "agent_calls": s["agent_calls"],
+                    "agent_sessions": s["agent_sessions"],
+                    "operator_calls": s["operator_calls"]}
 
             usage_types = [
-                {"label": "Sidvisningar", "n": view_total, "color": "#2563eb"},
-                {"label": "Webbsökningar", "n": search_total, "color": "#8b5cf6"},
-                {"label": "MCP-agentverktyg", "n": agent_calls, "color": "#10b981"},
-                {"label": "API-anrop", "n": conn.execute(
-                    "SELECT COUNT(*) FROM usage_log WHERE channel = 'api'"
-                ).fetchone()[0], "color": "#f59e0b"},
+                {"label": "Sidvisningar", "n": v["total"], "color": "#2563eb"},
+                {"label": "Webbsökningar", "n": s["searches"], "color": "#8b5cf6"},
+                {"label": "MCP-agentverktyg", "n": s["agent_calls"], "color": "#10b981"},
+                {"label": "API-anrop", "n": s["api_calls"], "color": "#f59e0b"},
             ]
             ut_total = sum(u["n"] for u in usage_types) or 1
-            for u in usage_types:
-                u["pct"] = int(u["n"] / ut_total * 100)
-            usage_types = [u for u in usage_types if u["n"] > 0]
+            usage_types = [{**u, "pct": int(u["n"] / ut_total * 100)}
+                           for u in usage_types if u["n"] > 0]
 
-            tool_rows = conn.execute(
-                "SELECT action, COUNT(*) AS n FROM usage_log WHERE action LIKE 'tool:%' "
-                "GROUP BY action ORDER BY n DESC LIMIT 12"
-            ).fetchall()
-            max_tool = tool_rows[0]["n"] if tool_rows else 1
-            top_tools = [{"tool": r["action"][5:], "n": r["n"], "pct": int(r["n"] / max_tool * 100)}
-                         for r in tool_rows]
-
-            # Momentum chart counts HUMAN pageviews only (exclude crawlers) so
-            # growth reflects real interest, not bot indexing.
-            day_rows = conn.execute(
-                "SELECT DATE(created_at) AS day, "
-                "SUM(action = 'view' AND json_extract(meta, '$.bot') = 0) AS views, "
-                f"SUM({_REAL_SEARCH}) AS searches, "
-                "SUM(action LIKE 'tool:%') AS agents "
-                "FROM usage_log WHERE created_at >= DATE('now', '-29 days') GROUP BY day"
-            ).fetchall()
-            by_day = {r["day"]: r for r in day_rows}
-            today = datetime.now(timezone.utc).date()
-            daily_raw = []
-            for i in range(29, -1, -1):
-                d = today - timedelta(days=i)
-                r = by_day.get(d.isoformat())
-                views = (r["views"] if r else 0) or 0
-                searches = (r["searches"] if r else 0) or 0
-                agents = (r["agents"] if r else 0) or 0
-                daily_raw.append({"day": d.strftime("%d/%m"), "n": views + searches + agents,
-                                  "views": views, "searches": searches, "agents": agents})
-            max_day = max((d["n"] for d in daily_raw), default=0) or 1
-            daily = [{**d, "pct": int(d["n"] / max_day * 100)} for d in daily_raw]
+            max_day = max((d["total"] for d in s["daily_last_30"]), default=0) or 1
+            daily = [{"day": d["date"][8:10] + "/" + d["date"][5:7], "n": d["total"],
+                      "views": d["views"], "searches": d["searches"],
+                      "agents": d["agent_calls"],
+                      "pct": int(d["total"] / max_day * 100)}
+                     for d in s["daily_last_30"]]
 
             recent = [dict(r) for r in conn.execute(
                 "SELECT channel, action, query, created_at FROM usage_log "
-                f"WHERE action LIKE 'tool:%' OR ({_REAL_SEARCH}) "
+                f"WHERE action LIKE 'tool:%' OR ({REAL_SEARCH}) "
                 "ORDER BY created_at DESC LIMIT 25"
             ).fetchall()]
 
             return HTMLResponse(render("analytics.html",
-                total=total, kpis=kpis, segments=segments, unmet=unmet,
-                top_terms=top_terms, usage_types=usage_types, top_tools=top_tools,
+                total=s["events_total"], kpis=kpis, segments=segments,
+                unmet=bars(s["unmet_demand"]), top_terms=bars(s["top_terms"]),
+                usage_types=usage_types,
+                top_tools=bars([{"tool": t["tool"], "n": t["n"]} for t in s["mcp_tools"]]),
                 daily=daily, recent=recent, request=request,
             ))
+        finally:
+            conn.close()
+
+    @app.get("/api/analytics")
+    def api_analytics(days: Optional[int] = Query(default=None, ge=1, le=365)):
+        """Public usage figures as JSON — the same numbers as /analytics.
+
+        Exists so an operator agent without MCP (or any script) can report on
+        traffic without scraping the HTML page, which llms.txt tells agents
+        not to do. Aggregate only: no IP addresses, no visitor ids, nothing
+        per-person. Free to republish.
+
+        `days` limits the window: 1 for the last 24h, 7 for a week, omitted
+        for all time. The daily series always covers the last 30 days.
+        """
+        conn = connect(db)
+        try:
+            return usage_summary(conn, days=days)
         finally:
             conn.close()
 
