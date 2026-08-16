@@ -27,7 +27,8 @@ from .db import (
     create_post as db_create_post, update_post as db_update_post,
     record_post_event,
 )
-from .search import build_match, match_subquery
+from .search import (build_match, match_subquery, like_floor_sql,
+                     rank_order_sql)
 
 # Markdown rendering for blog posts. Output is ALWAYS sanitised (allowlist of
 # safe tags/attributes) before it reaches the template's `| safe`, so even a
@@ -742,8 +743,11 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             join_sql = ""
             match = build_match(conn, q) if q else None
             if match:
-                join_sql = f"JOIN ({match_subquery()}) m ON m.id = tenders.id"
+                # LEFT JOIN + LIKE floor: FTS ranks, LIKE guarantees recall.
+                join_sql = f"LEFT JOIN ({match_subquery()}) m ON m.id = tenders.id"
+                where.append(like_floor_sql())
                 args.insert(0, match)
+                args.extend([f"%{q}%", f"%{q}%"])
             elif q:
                 where.append("(title LIKE ? OR description LIKE ?)")
                 args.extend([f"%{q}%", f"%{q}%"])
@@ -801,9 +805,9 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             # keyword hits by deadline buries the ones that actually match.
             # An explicit ?sort= still wins.
             if match and sort not in sort_map:
-                order_by = "m.r"
+                order_by = rank_order_sql()
             else:
-                order_by = sort_map.get(sort, "m.r" if match else sort_map["deadline"])
+                order_by = sort_map.get(sort, rank_order_sql() if match else sort_map["deadline"])
 
             page_size = 20
             pages = max(1, (total + page_size - 1) // page_size)
@@ -1469,9 +1473,11 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             join_sql, order_sql = "", "ORDER BY published_at DESC NULLS LAST, id DESC"
             match = build_match(conn, q) if q else None
             if match:
-                join_sql = f"JOIN ({match_subquery()}) m ON m.id = tenders.id"
-                order_sql = "ORDER BY m.r"
+                join_sql = f"LEFT JOIN ({match_subquery()}) m ON m.id = tenders.id"
+                order_sql = f"ORDER BY {rank_order_sql()}"
+                where.append(like_floor_sql())
                 args.insert(0, match)
+                args.extend([f"%{q}%", f"%{q}%"])
             elif q:
                 where.append("(title LIKE ? OR description LIKE ?)")
                 args.extend([f"%{q}%", f"%{q}%"])
