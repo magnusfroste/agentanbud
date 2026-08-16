@@ -36,6 +36,7 @@ from mcp.server import Server
 sys.path.insert(0, str(Path(__file__).parent))
 from mcp_shared import SOURCES, SOURCE_DESCRIPTION  # noqa: E402
 from app.insights import format_usage_markdown, usage_summary  # noqa: E402
+from app.search import build_match, match_subquery  # noqa: E402
 from app.db import (  # noqa: E402
     connect,
     create_post as _db_create_post,
@@ -657,7 +658,15 @@ async def _search_tenders(conn, args: dict) -> list[types.Content]:
     where = []
     params: list = []
 
-    if args.get("query"):
+    # Full-text with relevance ranking when the index is usable; the old
+    # LIKE stays as the fallback so this works on an un-migrated database.
+    join_sql, rank_order = "", ""
+    match = build_match(conn, args.get("query") or "")
+    if match:
+        join_sql = f"JOIN ({match_subquery()}) m ON m.id = tenders.id"
+        rank_order = "m.r,"
+        params.append(match)
+    elif args.get("query"):
         where.append("(title LIKE ? OR description LIKE ?)")
         params.extend([f"%{args['query']}%", f"%{args['query']}%"])
     if args.get("source"):
@@ -679,10 +688,11 @@ async def _search_tenders(conn, args: dict) -> list[types.Content]:
 
     rows = conn.execute(
         f"""
-        SELECT id, source_system, source_id, tender_url, title, authority,
+        SELECT tenders.id, source_system, source_id, tender_url, title, authority,
                cpv_codes, deadline, published_at, value, procedure, region
-        FROM tenders {where_sql}
+        FROM tenders {join_sql} {where_sql}
         ORDER BY
+            {rank_order}
             CASE WHEN deadline IS NULL THEN 1 ELSE 0 END,
             deadline ASC NULLS LAST,
             published_at DESC

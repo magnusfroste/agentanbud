@@ -27,6 +27,7 @@ from .db import (
     create_post as db_create_post, update_post as db_update_post,
     record_post_event,
 )
+from .search import build_match, match_subquery
 
 # Markdown rendering for blog posts. Output is ALWAYS sanitised (allowlist of
 # safe tags/attributes) before it reaches the template's `| safe`, so even a
@@ -737,9 +738,19 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             if cpv:
                 where.append("cpv_codes LIKE ?")
                 args.append(f'%"{cpv}%')
-            if q:
+            # Full-text when the index is usable, LIKE otherwise.
+            join_sql = ""
+            match = build_match(conn, q) if q else None
+            if match:
+                join_sql = f"JOIN ({match_subquery()}) m ON m.id = tenders.id"
+                args.insert(0, match)
+            elif q:
                 where.append("(title LIKE ? OR description LIKE ?)")
                 args.extend([f"%{q}%", f"%{q}%"])
+
+            # The status filter is kept separate from the content filters so a
+            # zero-result search can be re-counted without it (see below).
+            content_where, content_args = list(where), list(args)
 
             now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
             if status == "open":
@@ -753,10 +764,22 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 where.append("deadline <= ?")
                 args.append(soon)
 
+            def _count(clauses, params):
+                sql = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+                return conn.execute(
+                    f"SELECT COUNT(*) FROM tenders {join_sql} {sql}", params
+                ).fetchone()[0]
+
             where_sql = ("WHERE " + " AND ".join(where)) if where else ""
-            total = conn.execute(
-                f"SELECT COUNT(*) FROM tenders {where_sql}", args
-            ).fetchone()[0]
+            total = _count(where, args)
+
+            # "0 träffar" was misleading when matches existed but were all
+            # past their deadline: the search worked, the status filter hid
+            # everything. Count those so the page can offer them instead of
+            # sending the visitor away empty-handed.
+            closed_available = 0
+            if total == 0 and status != "all" and (q or source or authority or cpv):
+                closed_available = _count(content_where, content_args)
 
             # Log only human searches: crawlers walk every filter link on this
             # page (authority × source × status …), which used to flood the log
@@ -774,7 +797,13 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 "value": "value DESC NULLS LAST",
                 "title": "title ASC",
             }
-            order_by = sort_map.get(sort, sort_map["deadline"])
+            # With a text query, relevance is the useful default — sorting 400
+            # keyword hits by deadline buries the ones that actually match.
+            # An explicit ?sort= still wins.
+            if match and sort not in sort_map:
+                order_by = "m.r"
+            else:
+                order_by = sort_map.get(sort, "m.r" if match else sort_map["deadline"])
 
             page_size = 20
             pages = max(1, (total + page_size - 1) // page_size)
@@ -782,10 +811,10 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
 
             rows = conn.execute(
                 f"""
-                SELECT id, source_system, title, authority, region, deadline,
+                SELECT tenders.id, source_system, title, authority, region, deadline,
                        published_at, value, cpv_codes, procedure, tender_url,
                        document_type
-                FROM tenders {where_sql}
+                FROM tenders {join_sql} {where_sql}
                 ORDER BY {order_by}
                 LIMIT ? OFFSET ?
                 """,
@@ -810,12 +839,17 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                                         "cpv": cpv, "status": status, "sort": sort}.items() if v}
             qs_prev = urlencode({**qs_base, "page": page - 1})
             qs_next = urlencode({**qs_base, "page": page + 1})
+            # Same filters, status dropped — the "show closed too" link.
+            qs_all = urlencode({**{k: v for k, v in qs_base.items() if k != "status"},
+                                "status": "all"})
 
-            return HTMLResponse(render("browse.html", q=q, source=source,
+            return HTMLResponse(render("browse.html", closed_available=closed_available,
+                                       q=q, source=source,
                                        authority=authority, cpv=cpv, status=status, sort=sort,
                                        total=total, tenders=items, page=page, pages=pages,
                                        sources=[dict(r) for r in sources],
-                                       qs_prev=qs_prev, qs_next=qs_next, request=request))
+                                       qs_prev=qs_prev, qs_next=qs_next, qs_all=qs_all,
+                                       request=request))
         finally:
             conn.close()
 
@@ -1430,7 +1464,15 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             if authority:
                 where.append("authority LIKE ?")
                 args.append(f"%{authority}%")
-            if q:
+            # Full-text when the index is usable, LIKE otherwise. `join_sql`
+            # stays empty in the fallback so the rest of the query is unchanged.
+            join_sql, order_sql = "", "ORDER BY published_at DESC NULLS LAST, id DESC"
+            match = build_match(conn, q) if q else None
+            if match:
+                join_sql = f"JOIN ({match_subquery()}) m ON m.id = tenders.id"
+                order_sql = "ORDER BY m.r"
+                args.insert(0, match)
+            elif q:
                 where.append("(title LIKE ? OR description LIKE ?)")
                 args.extend([f"%{q}%", f"%{q}%"])
             if cpv:
@@ -1440,7 +1482,7 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
                 args.append(f'%"{cpv}%')
             where_sql = ("WHERE " + " AND ".join(where)) if where else ""
             total = conn.execute(
-                f"SELECT COUNT(*) FROM tenders {where_sql}", args
+                f"SELECT COUNT(*) FROM tenders {join_sql} {where_sql}", args
             ).fetchone()[0]
             if page == 1 and (q or source or authority or cpv):
                 # API searches are deliberate calls (agents/scripts) — count as
@@ -1451,10 +1493,10 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
                                       "segment": _segment_for(q, cpv), "results": total})
             rows = conn.execute(
                 f"""
-                SELECT id, source_system, source_id, tender_url, title, authority,
+                SELECT tenders.id, source_system, source_id, tender_url, title, authority,
                        cpv_codes, deadline, published_at, value, procedure, region
-                FROM tenders {where_sql}
-                ORDER BY published_at DESC NULLS LAST, id DESC
+                FROM tenders {join_sql} {where_sql}
+                {order_sql}
                 LIMIT ? OFFSET ?
                 """,
                 args + [page_size, (page - 1) * page_size],

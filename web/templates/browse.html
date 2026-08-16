@@ -154,9 +154,23 @@
     {% else %}
     <div class="empty">
       <div class="icon">🔍</div>
+      {% if closed_available %}
+      {# The search did match — everything it found has passed its deadline.
+         Saying "inga träffar" here sends people away from data we have. #}
+      <h3>Inga öppna träffar</h3>
+      <p class="muted">
+        Men {{ closed_available }} avslutad{{ "e" if closed_available != 1 else "" }}
+        upphandling{{ "ar" if closed_available != 1 else "" }} matchar
+        {% if q %}"{{ q }}"{% else %}dina filter{% endif %}.
+        Avslutade visar vem som vann och till vilket värde — bra underlag inför nästa gång.
+      </p>
+      <a href="/browse?{{ qs_all }}" class="btn primary">Visa {{ closed_available }} avslutade →</a>
+      <a href="/browse" class="btn ghost">Återställ filter</a>
+      {% else %}
       <h3>Inga träffar</h3>
       <p class="muted">Prova bredare sökning eller andra filter.</p>
       <a href="/browse" class="btn ghost">Återställ filter</a>
+      {% endif %}
     </div>
     {% endif %}
   

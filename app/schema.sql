@@ -120,3 +120,38 @@ CREATE TABLE IF NOT EXISTS daily_counters (
     n INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (day, kind)
 );
+
+-- Full-text index over tenders. External-content table: the rows live in
+-- `tenders`, this stores only the inverted index. unicode61 with
+-- remove_diacritics=2 folds case for non-ASCII too, so UNDERHÅLLSPLANERING
+-- and underhallsplanering both match underhållsplanering — plain LIKE folds
+-- ASCII only and missed both.
+CREATE VIRTUAL TABLE IF NOT EXISTS tenders_fts USING fts5(
+    title,
+    description,
+    authority,
+    content='tenders',
+    content_rowid='id',
+    tokenize="unicode61 remove_diacritics 2"
+);
+
+-- Keep the index in step with the table. upsert_tender() uses INSERT ... ON
+-- CONFLICT DO UPDATE, which fires the update trigger, so both paths are
+-- covered. External-content tables need the 'delete' row written with the
+-- OLD values before the new one is inserted.
+CREATE TRIGGER IF NOT EXISTS tenders_fts_ai AFTER INSERT ON tenders BEGIN
+    INSERT INTO tenders_fts(rowid, title, description, authority)
+    VALUES (new.id, new.title, new.description, new.authority);
+END;
+
+CREATE TRIGGER IF NOT EXISTS tenders_fts_ad AFTER DELETE ON tenders BEGIN
+    INSERT INTO tenders_fts(tenders_fts, rowid, title, description, authority)
+    VALUES ('delete', old.id, old.title, old.description, old.authority);
+END;
+
+CREATE TRIGGER IF NOT EXISTS tenders_fts_au AFTER UPDATE ON tenders BEGIN
+    INSERT INTO tenders_fts(tenders_fts, rowid, title, description, authority)
+    VALUES ('delete', old.id, old.title, old.description, old.authority);
+    INSERT INTO tenders_fts(rowid, title, description, authority)
+    VALUES (new.id, new.title, new.description, new.authority);
+END;
