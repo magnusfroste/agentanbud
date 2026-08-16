@@ -137,6 +137,8 @@ utan träff och en 7-dagarsserie. Agentens egna `get_usage_stats`-anrop
 räknas separat (`operator_calls`) så en operator som pollar inte rapporterar
 mest om sig själv.
 
+Utan MCP: `GET /api/analytics?days=1` ger samma siffror som JSON.
+
 Siffrorna är aggregerade utan personuppgifter — fria att publicera och citera.
 
 ### "Bevaka upphandlingar som matchar vår profil"
