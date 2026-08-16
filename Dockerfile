@@ -1,3 +1,15 @@
+# Stamp the image with the commit it was built from, so /api/health, /mcp and
+# the footer can report a version you can actually verify against the repo.
+# Resolves .git from the build context (Easypanel clones the repo, so it is
+# there); GIT_SHA is an override for builds without .git, e.g. from a tarball.
+FROM python:3.12-slim AS meta
+ARG GIT_SHA=""
+ARG BUILD_TIME=""
+WORKDIR /meta
+COPY . /meta/
+RUN python scripts/stamp_build.py /meta/build_info.json "$GIT_SHA" "$BUILD_TIME"
+
+
 FROM python:3.12-slim
 
 # cron for scheduled scraper runs
@@ -18,6 +30,8 @@ COPY web/ /app/web/
 # where mcp_http failed to import, which silently disabled /mcp (the endpoint
 # is optional, so the site stayed up and only 404'd on /mcp).
 COPY mcp_*.py /app/
+COPY scripts/ /app/scripts/
+COPY --from=meta /meta/build_info.json /app/build_info.json
 
 # Cron entry — runs the orchestrator once daily.
 # Time is interpreted in the container's local timezone.

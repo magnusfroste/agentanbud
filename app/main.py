@@ -27,6 +27,7 @@ from .db import (
     create_post as db_create_post, update_post as db_update_post,
     record_post_event,
 )
+from .version import build_info, version_string, started_at
 from .search import (build_match, match_subquery, like_floor_sql,
                      rank_order_sql)
 
@@ -209,11 +210,14 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
     # health check, which would crash-loop the app on boot. It runs once a day
     # in the scraper orchestrator instead (see scraper/orchestrator.py).
 
-    app = FastAPI(title="Agentanbud", version="0.2.0")
+    app = FastAPI(title="Agentanbud", version=version_string())
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
     env.filters["format_num"] = _num
     # Python builtins used in templates (Jinja doesn't expose these by default).
     env.globals.update(abs=abs, min=min, max=max)
+    # Build stamp for the footer — lets anyone (including us) see which commit
+    # a page was served by without shell access.
+    env.globals["BUILD"] = build_info()
 
     # Cache-busting: a short hash of the static assets, computed once at
     # startup. When style.css / app.js change and are redeployed the hash
@@ -1230,6 +1234,12 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             ).fetchone()
             return {
                 "ok": True,
+                # `build` identifies the running code. Compare `build.commit`
+                # with the SHA you deployed to confirm a deploy actually landed
+                # — counting exposed features to guess the version is not a
+                # deploy check.
+                "build": build_info(),
+                "started_at": started_at(),
                 "tenders_total": n,
                 "last_sync": dict(last) if last else None,
                 "cron_schedule": get_schedule(),
