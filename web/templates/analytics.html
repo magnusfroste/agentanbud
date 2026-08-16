@@ -18,8 +18,11 @@
     besöket är mänskligt eller automatiserat, och tidpunkt. För MCP-agenter
     sparar vi också en kortlivad, anonym sessions-hash så vi kan räkna
     <em>unika agenter</em> — den är slumpmässig, går inte att koppla till en
-    person och kan inte vändas tillbaka till agentens id. Ingen IP-adress,
-    ingen User-Agent-sträng, inget som kopplar en sökning till en person.
+    person och kan inte vändas tillbaka till agentens id. Vid anslutning
+    sparar vi dessutom det <em>klientnamn och den version</em> agenten själv
+    uppger (t.ex. "claude-code 1.2.0") — det beskriver programvaran, inte
+    användaren. Ingen IP-adress, ingen User-Agent-sträng, inget som kopplar
+    en sökning eller en anslutning till en person.
   </p>
 </section>
 
@@ -157,6 +160,28 @@
       <div class="bar-track">
         <div class="bar-fill" style="width: {{ t.pct }}%"></div>
         <span class="bar-value">{{ t.n }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- WHICH AGENTS CONNECT -->
+{% if mcp_clients %}
+<section class="insight-section">
+  <h2>Vilka AI-agenter ansluter?</h2>
+  <p class="muted">
+    Varje MCP-klient uppger sitt namn vid anslutning. {{ mcp_connects }} anslutningar
+    hittills — det här är vad folk faktiskt kopplar in, inte vad de säger att de använder.
+  </p>
+  <div class="bar-chart">
+    {% for c in mcp_clients %}
+    <div class="bar-row">
+      <span class="bar-label">{{ c.client[:34] }}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width: {{ c.pct }}%; background: #10b981;"></div>
+        <span class="bar-value">{{ c.sessions }} sess.</span>
       </div>
     </div>
     {% endfor %}

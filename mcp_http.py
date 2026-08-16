@@ -96,6 +96,31 @@ def _extract_query(name: str, arguments: dict) -> str | None:
     return None
 
 
+def _log_connect(client_info: dict, protocol: str | None, session_id: str | None) -> None:
+    """Record an MCP handshake: which client connected, and on what protocol.
+
+    Aggregate only — the client's self-reported name/version plus the same
+    anonymous session hash the tool calls use. No IP, no token, nothing tied
+    to a person. Best-effort: a logging failure must not break a handshake.
+    """
+    try:
+        name = (client_info.get("name") or "okänd")[:64]
+        version = (client_info.get("version") or "")[:32]
+        conn = connect(mcp_server.DB_PATH)
+        try:
+            meta = {"client": name, "client_version": version,
+                    "protocol": (protocol or "")[:24]}
+            if session_id:
+                meta["_sid"] = hashlib.sha256(session_id.encode()).hexdigest()[:12]
+            # query stays None: it feeds the "most searched terms" stats, and
+            # a client name is not a search term.
+            log_usage(conn, "mcp", "mcp:connect", query=None, meta=meta)
+        finally:
+            conn.close()
+    except Exception:
+        LOG.exception("failed to log MCP connect")
+
+
 async def _dispatch_tool(name: str, arguments: dict, session_id: str | None = None) -> list:
     """Call the right tool handler (reuses the stdio version's logic)."""
     conn = connect(mcp_server.DB_PATH)
@@ -464,6 +489,13 @@ async def mcp_post(request: Request):
     # Route
     try:
         if method == "initialize":
+            # Every MCP client identifies itself here. We were discarding it,
+            # which meant we could count agent sessions but not say what they
+            # were — Claude Code, Cursor, Codex, Cline, a homegrown script.
+            # That is the interesting question about agent adoption, so record
+            # it: client name + version only, no per-user identifier.
+            _log_connect(params.get("clientInfo") or {},
+                         params.get("protocolVersion"), session_id)
             result = {
                 "protocolVersion": "2024-11-05",
                 "serverInfo": {"name": "agentanbud", "version": version_string()},

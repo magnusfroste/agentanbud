@@ -107,6 +107,9 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     self_names = [f"tool:{n}" for n in SELF_REFERENTIAL_TOOLS]
     not_self = " AND action NOT IN (%s)" % ",".join("?" * len(self_names))
 
+    def rows_(c, sql, params):
+        return c.execute(sql, params).fetchall()
+
     human_views = scalar("action = 'view' AND json_extract(meta, '$.bot') = 0")
     # Bot views live in the aggregated daily counter; legacy per-hit rows are
     # still counted until they age out of usage_log.
@@ -131,6 +134,21 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         args + self_names,
     ).fetchone()[0] or 0
     api_calls = scalar("channel = 'api'")
+
+    # --- MCP adoption: who is connecting, not just how much ---------------
+    # Every MCP client self-identifies in the initialize handshake. Counting
+    # distinct sessions per client name answers "which agents are people
+    # actually wiring up?" — the question the raw call count cannot.
+    connects = scalar("action = 'mcp:connect'")
+    client_rows = rows_(
+        conn,
+        "SELECT json_extract(meta, '$.client') AS client, "
+        "COUNT(*) AS handshakes, "
+        "COUNT(DISTINCT json_extract(meta, '$._sid')) AS sessions "
+        "FROM usage_log " + _and("action = 'mcp:connect'")
+        + " GROUP BY client ORDER BY sessions DESC, handshakes DESC LIMIT ?",
+        args + [top],
+    )
     events_total = scalar("1 = 1")
 
     # --- industry demand ------------------------------------------------
@@ -213,6 +231,12 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         "unclassified": [{"term": t, "n": n} for t, n in other_counter.most_common(top)],
         "other_share_pct": int(seg_counter[SEGMENT_OTHER] / seg_total * 100),
         "mcp_tools": [{"tool": r["action"][5:], "n": r["n"]} for r in tool_rows],
+        "mcp_connects": connects,
+        "mcp_clients": [
+            {"client": r["client"] or "okänd", "sessions": r["sessions"],
+             "handshakes": r["handshakes"]}
+            for r in client_rows
+        ],
         "daily_last_30": daily,
     }
 
@@ -226,7 +250,9 @@ def format_usage_markdown(s: dict) -> str:
            f"**Besök:** {v['total']} ({v['human']} mänskliga / {v['bot']} botar & crawlers, "
            f"{v['human_pct']}% mänskliga)",
            f"**Sökningar på webben:** {s['searches']}",
-           f"**MCP-agentanrop:** {s['agent_calls']}"
+           f"**MCP-anslutningar:** {s.get('mcp_connects', 0)}"
+        + (f" från {len(s.get('mcp_clients') or [])} olika klienter" if s.get("mcp_clients") else ""),
+        f"**MCP-agentanrop:** {s['agent_calls']}"
            + (f" från {s['agent_sessions']} unika agentsessioner" if s["agent_sessions"] else "")
            + (f" (exkl. {s['operator_calls']} egna get_usage_stats-anrop)"
               if s["operator_calls"] else ""), ""]
@@ -241,6 +267,11 @@ def format_usage_markdown(s: dict) -> str:
     if s["unmet_demand"]:
         out.append("## Sökningar utan träff (luckor i datan)")
         out += [f"- {x['term']}: {x['n']}" for x in s["unmet_demand"][:10]]
+        out.append("")
+    if s.get("mcp_clients"):
+        out.append("## Vilka AI-agenter ansluter")
+        out += [f"- {c['client']}: {c['sessions']} sessioner ({c['handshakes']} anslutningar)"
+                for c in s["mcp_clients"][:10]]
         out.append("")
     if s["mcp_tools"]:
         out.append("## Mest använda MCP-verktyg")
