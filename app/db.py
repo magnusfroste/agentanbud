@@ -78,6 +78,32 @@ def _migrate(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
             LOG.info("migrated: added %s.%s column", table, column)
 
+    _backfill_fts(conn)
+
+
+def _backfill_fts(conn: sqlite3.Connection) -> None:
+    """Populate tenders_fts for a database that already had rows.
+
+    The triggers only index rows written after they exist, so an existing
+    install would otherwise have an empty index and every search would fall
+    back to LIKE. Runs once: after the first backfill the counts match and
+    this is a single cheap COUNT on later startups.
+    """
+    try:
+        total = conn.execute("SELECT COUNT(*) FROM tenders").fetchone()[0]
+        # NOT `COUNT(*) FROM tenders_fts` — an external-content FTS table
+        # reports its content table's row count, so that number looks correct
+        # even when nothing is indexed. The docsize shadow table holds one row
+        # per genuinely indexed document, which is what we need to compare.
+        indexed = conn.execute("SELECT COUNT(*) FROM tenders_fts_docsize").fetchone()[0]
+    except sqlite3.Error as exc:
+        LOG.warning("FTS unavailable, search falls back to LIKE: %s", exc)
+        return
+    if total and indexed < total:
+        conn.execute("INSERT INTO tenders_fts(tenders_fts) VALUES ('rebuild')")
+        LOG.info("migrated: built tenders_fts index over %d tenders "
+                 "(was %d indexed)", total, indexed)
+
 
 def upsert_tender(conn: sqlite3.Connection, t: dict) -> None:
     """Insert or replace a tender keyed on (source_system, source_id)."""
