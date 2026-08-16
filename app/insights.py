@@ -85,6 +85,13 @@ REAL_SEARCH = ("action = 'search' AND (json_extract(meta, '$.bot') = 0 "
 # publishes. Counted separately as `operator_calls` rather than hidden.
 SELF_REFERENTIAL_TOOLS = ("get_usage_stats",)
 
+# Our own monitoring, for the same reason. scripts/smoke_test.py performs a
+# real MCP handshake on every deploy, so left in it would climb the client
+# ranking and eventually top it — making "which agents connect?" mostly a
+# picture of our own CI. Counted separately as `monitoring_connects` rather
+# than dropped, so the exclusion stays visible.
+SELF_REFERENTIAL_CLIENTS = ("smoke",)
+
 
 def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     """Aggregate usage figures, optionally limited to the last `days` days.
@@ -107,6 +114,16 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     self_names = [f"tool:{n}" for n in SELF_REFERENTIAL_TOOLS]
     not_self = " AND action NOT IN (%s)" % ",".join("?" * len(self_names))
 
+    # The smoke test does a full handshake AND several tool calls on every
+    # deploy. Filtering only its handshake would leave its calls inflating
+    # agent_calls, so exclude its whole session: the connect event carries
+    # both the client name and the session hash, which links the two.
+    self_clients = list(SELF_REFERENTIAL_CLIENTS)
+    _mon_sids = ("SELECT json_extract(meta, '$._sid') FROM usage_log "
+                 "WHERE action = 'mcp:connect' AND json_extract(meta, '$.client') IN (%s)"
+                 % ",".join("?" * len(self_clients)))
+    not_monitoring = (" AND COALESCE(json_extract(meta, '$._sid'), '') NOT IN (%s)" % _mon_sids)
+
     def rows_(c, sql, params):
         return c.execute(sql, params).fetchall()
 
@@ -123,15 +140,16 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     view_total = human_views + bot_views
 
     searches = scalar(REAL_SEARCH)
-    agent_calls = scalar("action LIKE 'tool:%'" + not_self, self_names)
+    agent_calls = scalar("action LIKE 'tool:%'" + not_self + not_monitoring,
+                         self_names + self_clients)
     operator_calls = scalar("action IN (%s)" % ",".join("?" * len(self_names)), self_names)
     # Excludes the operator's own polling for the same reason agent_calls does —
     # otherwise the reporter counts itself as one of the "unique agents".
     agent_sessions = conn.execute(
         "SELECT COUNT(DISTINCT json_extract(meta, '$._sid')) FROM usage_log "
         + _and("action LIKE 'tool:%' AND json_extract(meta, '$._sid') IS NOT NULL")
-        + not_self,
-        args + self_names,
+        + not_self + not_monitoring,
+        args + self_names + self_clients,
     ).fetchone()[0] or 0
     api_calls = scalar("channel = 'api'")
 
@@ -139,15 +157,20 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     # Every MCP client self-identifies in the initialize handshake. Counting
     # distinct sessions per client name answers "which agents are people
     # actually wiring up?" — the question the raw call count cannot.
-    connects = scalar("action = 'mcp:connect'")
+    not_self_client = (" AND COALESCE(json_extract(meta, '$.client'), '') NOT IN (%s)"
+                       % ",".join("?" * len(self_clients)))
+    connects = scalar("action = 'mcp:connect'" + not_self_client, self_clients)
+    monitoring_connects = scalar(
+        "action = 'mcp:connect' AND json_extract(meta, '$.client') IN (%s)"
+        % ",".join("?" * len(self_clients)), self_clients)
     client_rows = rows_(
         conn,
         "SELECT json_extract(meta, '$.client') AS client, "
         "COUNT(*) AS handshakes, "
         "COUNT(DISTINCT json_extract(meta, '$._sid')) AS sessions "
-        "FROM usage_log " + _and("action = 'mcp:connect'")
+        "FROM usage_log " + _and("action = 'mcp:connect'") + not_self_client
         + " GROUP BY client ORDER BY sessions DESC, handshakes DESC LIMIT ?",
-        args + [top],
+        args + self_clients + [top],
     )
     events_total = scalar("1 = 1")
 
@@ -189,8 +212,8 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
 
     tool_rows = rows(
         "SELECT action, COUNT(*) AS n FROM usage_log "
-        + _and("action LIKE 'tool:%'") + not_self
-        + " GROUP BY action ORDER BY n DESC LIMIT ?", self_names + [top])
+        + _and("action LIKE 'tool:%'") + not_self + not_monitoring
+        + " GROUP BY action ORDER BY n DESC LIMIT ?", self_names + self_clients + [top])
 
     # --- 30-day series: human pageviews only, so growth means real interest
     day_rows = conn.execute(
@@ -232,6 +255,7 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         "other_share_pct": int(seg_counter[SEGMENT_OTHER] / seg_total * 100),
         "mcp_tools": [{"tool": r["action"][5:], "n": r["n"]} for r in tool_rows],
         "mcp_connects": connects,
+        "monitoring_connects": monitoring_connects,
         "mcp_clients": [
             {"client": r["client"] or "okänd", "sessions": r["sessions"],
              "handshakes": r["handshakes"]}
@@ -251,6 +275,8 @@ def format_usage_markdown(s: dict) -> str:
            f"{v['human_pct']}% mänskliga)",
            f"**Sökningar på webben:** {s['searches']}",
            f"**MCP-anslutningar:** {s.get('mcp_connects', 0)}"
+        + (f" (exkl. {s['monitoring_connects']} från vår egen driftövervakning)"
+           if s.get("monitoring_connects") else "")
         + (f" från {len(s.get('mcp_clients') or [])} olika klienter" if s.get("mcp_clients") else ""),
         f"**MCP-agentanrop:** {s['agent_calls']}"
            + (f" från {s['agent_sessions']} unika agentsessioner" if s["agent_sessions"] else "")
