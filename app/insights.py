@@ -85,12 +85,15 @@ REAL_SEARCH = ("action = 'search' AND (json_extract(meta, '$.bot') = 0 "
 # publishes. Counted separately as `operator_calls` rather than hidden.
 SELF_REFERENTIAL_TOOLS = ("get_usage_stats",)
 
-# Our own monitoring, for the same reason. scripts/smoke_test.py performs a
-# real MCP handshake on every deploy, so left in it would climb the client
-# ranking and eventually top it — making "which agents connect?" mostly a
-# picture of our own CI. Counted separately as `monitoring_connects` rather
-# than dropped, so the exclusion stays visible.
-SELF_REFERENTIAL_CLIENTS = ("smoke",)
+# Monitoring, not agents. These clients connect on a schedule regardless of
+# whether anyone is using the site, so left in they would climb the client
+# ranking and eventually top it — turning "which agents do people connect?"
+# into a picture of our own infrastructure.
+#   smoke        — scripts/smoke_test.py, a full handshake on every deploy
+#   status-check — Easypanel's health check
+# Counted separately as `monitoring_connects` rather than dropped, so the
+# exclusion stays visible on the page and in the tool output.
+SELF_REFERENTIAL_CLIENTS = ("smoke", "status-check")
 
 
 def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
