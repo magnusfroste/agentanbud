@@ -114,6 +114,8 @@ def main() -> int:
     ap.add_argument("--base", default=DEFAULT_BASE, help="base URL to test")
     ap.add_argument("--wait", type=int, default=0,
                     help="seconds to poll /api/health before testing (post-deploy)")
+    ap.add_argument("--expect-sha", default=None,
+                    help="commit you just deployed; fails if another build is serving")
     ap.add_argument("--key", default=None,
                     help="admin key; only used to confirm write endpoints reject requests without it")
     args = ap.parse_args()
@@ -141,6 +143,21 @@ def main() -> int:
     # ---- 2. Rätt kodversion är ute -----------------------------------------
     # A failed build can leave the old image running while the site looks fine.
     print("\n2. Deployad kodversion")
+    # The image is stamped with the commit it was built from, so this is a
+    # fact rather than an inference. Without it a failed build leaves the old
+    # image serving happily and every other check still passes.
+    build = health.get("build") or {}
+    running = build.get("commit") or ""
+    if check("bygget rapporterar en commit", bool(running) and running != "unknown",
+             f"build={build or 'saknas'}"):
+        print(f"        kör {build.get('version')}+{build.get('commit_short')} "
+              f"(byggd {build.get('built_at')})")
+    if args.expect_sha:
+        want = args.expect_sha.strip()
+        check("den deployade committen är den som kör",
+              running.startswith(want) or want.startswith(running[:7]),
+              f"väntade {want[:7]}, kör {running[:7] or '?'}")
+
     status, spec = get_json(base, "/openapi.json")
     if check("openapi.json tillgänglig", status == 200 and spec is not None, f"fick {status}"):
         try:

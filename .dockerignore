@@ -1,0 +1,17 @@
+# Keep the build context small — it is sent to the daemon on every build.
+# NOTE: .git is deliberately NOT excluded. The `meta` stage in the Dockerfile
+# reads it to stamp the image with the commit it was built from, which is how
+# /api/health and /mcp report a verifiable version.
+data/
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.env.local
+docs/
+.pytest_cache/
+.ruff_cache/

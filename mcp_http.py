@@ -40,6 +40,7 @@ from fastapi.responses import JSONResponse
 from app.db import connect, log_usage
 import mcp_server
 from mcp_shared import SOURCES, SOURCE_DESCRIPTION
+from app.version import build_info, version_string
 
 # Admin key gates the blog write tools on the public /mcp endpoint. Reads stay
 # open for every visiting agent; writing (create_post/update_post) requires the
@@ -406,7 +407,8 @@ async def mcp_get(request: Request):
     _evict_expired_sessions()
     return JSONResponse({
         "name": "agentanbud",
-        "version": "0.2.0",
+        "version": version_string(),
+        "build": build_info(),
         "description": "Swedish public procurement — open data for AI agents. REST + MCP at https://www.agentanbud.se",
         "transport": "streamable-http",
         "endpoint": "/mcp",
@@ -464,7 +466,7 @@ async def mcp_post(request: Request):
         if method == "initialize":
             result = {
                 "protocolVersion": "2024-11-05",
-                "serverInfo": {"name": "agentanbud", "version": "0.2.0"},
+                "serverInfo": {"name": "agentanbud", "version": version_string()},
                 "capabilities": {"tools": {"listChanged": False}}
             }
         elif method == "notifications/initialized":

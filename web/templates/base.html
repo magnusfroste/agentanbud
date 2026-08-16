@@ -116,7 +116,13 @@
   </main>
   <footer class="site-footer">
     <div class="inner">
-      <span class="muted">Agentanbud — öppen data för svensk upphandling.</span>
+      <span class="muted">Agentanbud — öppen data för svensk upphandling.
+        {%- if BUILD and BUILD.commit_short != "unknown" %}
+        <a href="https://github.com/magnusfroste/agentanbud/commit/{{ BUILD.commit }}"
+           target="_blank" rel="noopener" class="muted" title="Byggd {{ BUILD.built_at }}"
+           >v{{ BUILD.version }}+{{ BUILD.commit_short }}</a>
+        {%- endif %}
+      </span>
       <span class="footer-links">
         <a href="https://github.com/magnusfroste/agentanbud" target="_blank" rel="noopener">GitHub</a>
         <a href="https://github.com/magnusfroste/agentanbud/blob/main/MCP.md" target="_blank" rel="noopener">MCP</a>
