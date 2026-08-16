@@ -36,7 +36,8 @@ from mcp.server import Server
 sys.path.insert(0, str(Path(__file__).parent))
 from mcp_shared import SOURCES, SOURCE_DESCRIPTION  # noqa: E402
 from app.insights import format_usage_markdown, usage_summary  # noqa: E402
-from app.search import build_match, match_subquery  # noqa: E402
+from app.search import (build_match, match_subquery, like_floor_sql,  # noqa: E402
+                        rank_order_sql)
 from app.db import (  # noqa: E402
     connect,
     create_post as _db_create_post,
@@ -663,9 +664,11 @@ async def _search_tenders(conn, args: dict) -> list[types.Content]:
     join_sql, rank_order = "", ""
     match = build_match(conn, args.get("query") or "")
     if match:
-        join_sql = f"JOIN ({match_subquery()}) m ON m.id = tenders.id"
-        rank_order = "m.r,"
+        join_sql = f"LEFT JOIN ({match_subquery()}) m ON m.id = tenders.id"
+        rank_order = f"{rank_order_sql()},"
+        where.append(like_floor_sql())
         params.append(match)
+        params.extend([f"%{args['query']}%", f"%{args['query']}%"])
     elif args.get("query"):
         where.append("(title LIKE ? OR description LIKE ?)")
         params.extend([f"%{args['query']}%", f"%{args['query']}%"])

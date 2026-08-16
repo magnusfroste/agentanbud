@@ -115,11 +115,16 @@ def build_match(conn: sqlite3.Connection, query: str) -> Optional[str]:
         both = _expr(tokens, "AND")
         if _count(conn, both) > 0:
             return both
-        loose = _expr(tokens, "OR")
-        if _count(conn, loose) > 0:
-            return loose
-        # Every token unknown — fall through and back off the longest one,
-        # which is the word carrying the meaning in a Swedish query.
+        # No document has all the words. Rather than OR everything — which
+        # matched a third of the database for "system för underhållsplanering"
+        # and made the result count meaningless — keep only the most selective
+        # token. That is the word that actually narrows the search: for that
+        # query it is "underhållsplanering", giving the four right tenders.
+        counted = [(c, t) for t in tokens for c in (_count(conn, _expr([t])),) if c > 0]
+        if counted:
+            return _expr([min(counted)[1]])
+        # Every token unknown — back off the longest one, which carries the
+        # meaning in a Swedish compound query.
         tokens = [max(tokens, key=len)]
 
     word = tokens[0]
@@ -144,10 +149,28 @@ def build_match(conn: sqlite3.Connection, query: str) -> Optional[str]:
 def match_subquery() -> str:
     """SQL fragment yielding (id, r) for a MATCH expression, ranked by bm25.
 
-    Joined by callers so the existing source/authority/cpv/status filters and
-    pagination keep working unchanged:
+    LEFT JOINed by callers, with the old LIKE kept as an OR in the WHERE, so
+    the result set is the union of both and recall can only go up:
 
-        FROM tenders t JOIN (<this>) m ON m.id = t.id WHERE ... ORDER BY m.r
+        FROM tenders LEFT JOIN (<this>) m ON m.id = tenders.id
+        WHERE (m.id IS NOT NULL OR title LIKE ? OR description LIKE ?)
+        ORDER BY (m.r IS NULL), m.r
+
+    The union matters because FTS5 prefix terms match from the start of a
+    token: searching `underhåll` finds `underhållsavtal` but not
+    `fastighetsunderhåll`, where the word is the tail of a compound. Plain
+    LIKE finds those, and dropping to FTS alone silently lost 60 tenders for
+    that one query. FTS decides the order, LIKE guarantees the floor.
     """
     return (f"SELECT rowid AS id, bm25({FTS_TABLE}) AS r "
             f"FROM {FTS_TABLE} WHERE {FTS_TABLE} MATCH ?")
+
+
+def like_floor_sql(column_a: str = "title", column_b: str = "description") -> str:
+    """WHERE fragment pairing the FTS join with the LIKE recall floor."""
+    return f"(m.id IS NOT NULL OR {column_a} LIKE ? OR {column_b} LIKE ?)"
+
+
+def rank_order_sql() -> str:
+    """ORDER BY fragment: FTS hits in relevance order, LIKE-only hits after."""
+    return "(m.r IS NULL), m.r"
