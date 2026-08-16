@@ -994,6 +994,8 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             return HTMLResponse(render("analytics.html",
                 total=s["events_total"], kpis=kpis, segments=segments,
                 unmet=bars(s["unmet_demand"]), top_terms=bars(s["top_terms"]),
+                mcp_clients=bars([{**c, "n": c["sessions"]} for c in s["mcp_clients"]]),
+                mcp_connects=s["mcp_connects"],
                 usage_types=usage_types,
                 top_tools=bars([{"tool": t["tool"], "n": t["n"]} for t in s["mcp_tools"]]),
                 daily=daily, recent=recent, request=request,
