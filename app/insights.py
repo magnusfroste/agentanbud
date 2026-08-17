@@ -89,11 +89,14 @@ SELF_REFERENTIAL_TOOLS = ("get_usage_stats",)
 # whether anyone is using the site, so left in they would climb the client
 # ranking and eventually top it — turning "which agents do people connect?"
 # into a picture of our own infrastructure.
-#   smoke        — scripts/smoke_test.py, a full handshake on every deploy
-#   status-check — Easypanel's health check
+#   smoke — scripts/smoke_test.py, a full handshake on every deploy
 # Counted separately as `monitoring_connects` rather than dropped, so the
 # exclusion stays visible on the page and in the tool output.
-SELF_REFERENTIAL_CLIENTS = ("smoke", "status-check")
+#
+# Keep this list to clients we control. Anything else is a name a real agent
+# could also send, and filtering it silently removes that agent from the very
+# figures this module exists to report.
+SELF_REFERENTIAL_CLIENTS = ("smoke",)
 
 
 def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
