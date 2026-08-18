@@ -23,7 +23,13 @@
     </div>
   </div>
   
-  <div class="sync-actions">
+  <!-- Hidden until an admin key is present. The server already refuses these
+       without one — /api/sync answers 401, and the smoke test asserts it on
+       every deploy — so this is not the access control. It is so a visitor is
+       never shown a button that appears to run something and then asks for a
+       password. The page itself stays public: sync history, schedule and build
+       are the transparency, the actions are not. -->
+  <div class="sync-actions" id="sync-actions" hidden>
     <button id="sync-btn" class="btn primary">Kör sync nu</button>
     <button id="backfill-btn" class="btn ghost">Backfill TED (90 dagar)</button>
   </div>
@@ -88,6 +94,12 @@
     } catch (e) {
       result.innerHTML = `❌ ${e}`;
     }
+  }
+
+  // Same key adminFetch uses, so the buttons appear exactly for whoever can
+  // actually use them — no separate notion of "logged in".
+  if (localStorage.getItem('ot-admin-key')) {
+    document.getElementById('sync-actions')?.removeAttribute('hidden');
   }
 
   document.getElementById('sync-btn')?.addEventListener('click', () => triggerSync('/api/sync', 'Sync'));
