@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 import urllib.error
@@ -373,8 +374,50 @@ def main() -> int:
     except Exception as e:
         check("MCP-anrop", False, f"{type(e).__name__}: {e}")
 
-    # ---- 7. Säkerhetsheaders ------------------------------------------------
-    print("\n7. Säkerhetsheaders")
+    # ---- 7. Bloggen lovar inget vi inte har ---------------------------------
+    # A post once told readers to "skapa en profil på Agentanbud så matchas du
+    # mot öppna upphandlingar" — there is no profile and no login; not needing
+    # one is the point. An agent had written what most procurement services
+    # offer, and it contradicted the product rather than merely being wrong.
+    # These patterns are imperatives aimed at the reader. Describing what OTHER
+    # platforms require ("flera kräver konto hos upphandlingsverktyget") is
+    # accurate and must not trip this, which is why "kräver konto" is absent
+    # and the create/register verbs carry their object.
+    print("\n7. Bloggen lovar inget vi inte har")
+    FORBIDDEN = [
+        (r"skapa\s+(?:ett\s+|en\s+)?(?:konto|profil|inloggning)", "uppmanar till konto/profil"),
+        (r"registrera\s+dig\b", "uppmanar till registrering"),
+        (r"prenumerera\b", "lovar prenumeration"),
+        (r"logga\s+in\s+(?:på|hos)\s+(?:agentanbud|oss)", "lovar inloggning"),
+        (r"mejlbevakning|e-postbevakning|bevakningstjänst", "lovar bevakningstjänst"),
+    ]
+    status, body, _ = get(base, "/blogg")
+    slugs = sorted(set(re.findall(r'href="/blogg/([^"/]+)"', body.decode("utf-8", "replace"))))
+    if check("bloggen listar inlägg", bool(slugs), f"{len(slugs)} st"):
+        offenders = []
+        for slug in slugs:
+            st, pb, _ = get(base, f"/blogg/{slug}")
+            if st != 200:
+                offenders.append(f"{slug[:28]}: HTTP {st}")
+                continue
+            # Only the post's own text. The page chrome legitimately says
+            # "behöver du skapa konto hos plattformen (Mercell, Tendsign)",
+            # which is true of those platforms and not a promise about us —
+            # scoping to <article> is what separates the two.
+            html = pb.decode("utf-8", "replace")
+            art = re.search(r"<article[^>]*class=\"blog-article\".*?</article>", html, re.S)
+            if not art:
+                offenders.append(f"{slug[:28]}: hittade ingen artikeltext")
+                continue
+            text = re.sub(r"<[^>]+>", " ", art.group(0)).lower()
+            for pat, label in FORBIDDEN:
+                if re.search(pat, text):
+                    offenders.append(f"{slug[:28]}: {label}")
+        check("inga påhittade funktioner i publicerade inlägg",
+              not offenders, "; ".join(offenders) if offenders else f"{len(slugs)} inlägg rena")
+
+    # ---- 8. Säkerhetsheaders ------------------------------------------------
+    print("\n8. Säkerhetsheaders")
     _, _, headers = get(base, "/")
     lower = {k.lower(): v for k, v in headers.items()}
     for h in ["content-security-policy", "x-frame-options",
