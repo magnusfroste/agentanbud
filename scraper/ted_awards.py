@@ -43,6 +43,7 @@ CAN_NOTICE_TYPES = ["can-standard", "can-social"]
 
 # Fields we want from award notices (all verified working against the API)
 TED_AWARD_FIELDS = [
+    "buyer-city",
     "publication-number",
     "publication-date",
     "notice-title",
@@ -114,6 +115,37 @@ def _extract_deadline(val) -> Optional[str]:
     return val
 
 
+
+def _extract_city(rec: dict) -> Optional[str]:
+    """Buyer's registered city, title-cased.
+
+    TED returns it as a list, sometimes as a language dict, and with
+    inconsistent casing — STOCKHOLM and Stockholm are the same place and must
+    not become two rows in any per-city aggregate. Title-casing normalises
+    that without touching the characters themselves.
+
+    This is where the *buyer* sits, which is not where the work happens: a
+    national agency procures nationwide from one head office, so Trafikverket
+    makes Borlänge look like Sweden's third-largest procurement town. Anything
+    built on this field has to say whose location it is showing.
+    """
+    val = rec.get("buyer-city")
+    # TED nests these arbitrarily: a city comes back as {"mul": ["GÄLLIVARE"]},
+    # a dict whose value is a list. Unwrapping list-then-dict once left the
+    # inner list in place and silently produced None for every notice, so keep
+    # unwrapping until a string falls out.
+    for _ in range(6):
+        if isinstance(val, list):
+            val = val[0] if val else None
+        elif isinstance(val, dict):
+            val = val.get("swe") or val.get("eng") or next(iter(val.values()), None)
+        else:
+            break
+    if not isinstance(val, str) or not val.strip():
+        return None
+    return val.strip().title()
+
+
 def _map_record(rec: dict) -> dict:
     """Translate one TED Award notice to a tenders row."""
     pub_no = str(rec.get("publication-number", ""))
@@ -151,6 +183,7 @@ def _map_record(rec: dict) -> dict:
         "procedure": rec.get("procedure-type"),
         "contract_type": _extract_swedish(rec.get("cvd-contract-type-lot")),
         "document_type": "Contract Award Notice",
+        "buyer_city": _extract_city(rec),
         "region": "Sverige",
         "winner_name": winner,  # deduped list; upsert serialises to JSON
         "raw_json": json.dumps(rec, ensure_ascii=False),
