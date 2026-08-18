@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" width="1200" height="500" role="img"
+     aria-label="Genomsnittligt antal leverantorer per tilldelad upphandling: vard och omsorg 7,6, konsult 3,6, transport 3,4, avfall och miljo 3,0, bygg 2,2 och IT 2,2.">
+  <title>Vad betyder det att vinna?</title>
+  <rect width="1200" height="500" rx="16" fill="#fcfcfb"/>
+<text x="72" y="58" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="27" font-weight="600" fill="#0b0b0b" text-anchor="start">Vad betyder det att ”vinna”?</text>
+<text x="72" y="90" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="19" font-weight="400" fill="#52514e" text-anchor="start">Antal leverantörer per tilldelad upphandling, snitt</text>
+<text x="72" y="212" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="120" font-weight="700" fill="#2a78d6" text-anchor="start" letter-spacing="-4">7,6</text>
+<text x="72" y="258" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="600" fill="#0b0b0b" text-anchor="start">leverantörer delar på en</text>
+<text x="72" y="286" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="600" fill="#0b0b0b" text-anchor="start">vårdupphandling</text>
+<text x="72" y="320" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="400" fill="#52514e" text-anchor="start">I IT är siffran 2,2. Nästan hälften</text>
+<text x="72" y="344" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="400" fill="#52514e" text-anchor="start">av vårdkontrakten har flera vinnare</text>
+<text x="72" y="368" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="400" fill="#52514e" text-anchor="start">— i IT bara 13 procent.</text>
+<text x="540" y="170" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="500" fill="#0b0b0b" text-anchor="start">Vård &amp; omsorg</text>
+  <rect x="750" y="152" width="250" height="25" rx="4" fill="#2a78d6"/>
+<text x="1014" y="171" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="700" fill="#0b0b0b" text-anchor="start">7,6</text>
+<text x="540" y="212" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="500" fill="#0b0b0b" text-anchor="start">Konsult &amp; juridik</text>
+  <rect x="750" y="194" width="118" height="25" rx="4" fill="#2a78d6"/>
+<text x="882" y="213" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="700" fill="#0b0b0b" text-anchor="start">3,6</text>
+<text x="540" y="254" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="500" fill="#0b0b0b" text-anchor="start">Transport</text>
+  <rect x="750" y="236" width="112" height="25" rx="4" fill="#2a78d6"/>
+<text x="876" y="255" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="700" fill="#0b0b0b" text-anchor="start">3,4</text>
+<text x="540" y="296" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="500" fill="#0b0b0b" text-anchor="start">Avfall &amp; miljö</text>
+  <rect x="750" y="278" width="99" height="25" rx="4" fill="#2a78d6"/>
+<text x="863" y="297" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="700" fill="#0b0b0b" text-anchor="start">3,0</text>
+<text x="540" y="338" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="500" fill="#0b0b0b" text-anchor="start">Bygg &amp; anläggning</text>
+  <rect x="750" y="320" width="72" height="25" rx="4" fill="#2a78d6"/>
+<text x="836" y="339" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="700" fill="#0b0b0b" text-anchor="start">2,2</text>
+<text x="540" y="380" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="500" fill="#0b0b0b" text-anchor="start">IT-tjänster</text>
+  <rect x="750" y="362" width="72" height="25" rx="4" fill="#2a78d6"/>
+<text x="836" y="381" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="700" fill="#0b0b0b" text-anchor="start">2,2</text>
+  <rect x="72" y="400" width="1056" height="1" fill="#e6e5e2"/>
+<text x="72" y="438" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="21" font-weight="400" fill="#0b0b0b" text-anchor="start">Ett ramavtal med många vinnare betyder att du kommer in — men tävlar igen</text>
+<text x="72" y="464" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="21" font-weight="400" fill="#0b0b0b" text-anchor="start">vid varje avrop. Ett kontrakt med en vinnare avgörs på en gång.</text>
+<text x="72" y="490" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="400" fill="#52514e" text-anchor="start">Källa: agentanbud.se — tilldelningar från TED. Samma tilldelning räknas en gång.</text>
+</svg>
