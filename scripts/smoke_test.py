@@ -155,6 +155,33 @@ def wait_for_health(base: str, seconds: int, expect_sha: str | None = None) -> b
         time.sleep(10)
 
 
+# The SHA comparison is the check that decides whether we are testing the build
+# we think we are — every other check is scoped by its verdict. It shipped once
+# with `want.startswith(running[:7])`, which is true for an empty commit because
+# every string starts with "", so a build reporting no version data satisfied any
+# --expect-sha. These cases pin that behaviour: an unknown build must fail closed.
+SHA_CASES = [
+    ("98678e4ccf4dd50f965a271a34d2bdcff3c6a8b2", "98678e4",      True,  "full commit vs kort --expect-sha"),
+    ("98678e4",                                  "98678e4ccf4d", True,  "kort commit vs full --expect-sha"),
+    ("98678E4CCF4D",                             "98678e4",      True,  "versaler"),
+    ("5ee70b1ccf4d",                             "98678e4",      False, "ett annat bygge"),
+    ("",                                         "98678e4",      False, "bygget rapporterar ingen commit"),
+    ("unknown",                                  "98678e4",      False, "commit = unknown"),
+    ("98678e4",                                  "",             False, "tom --expect-sha"),
+    ("98678e4",                                  "986",          False, "för kort --expect-sha"),
+]
+
+
+def self_test() -> bool:
+    """Check the instrument before trusting its readings. Runs offline, so it
+    goes first: if this is broken there is no point waiting for a deploy."""
+    bad = [label for running, want, expected, label in SHA_CASES
+           if sha_matches(running, want) != expected]
+    return check("SHA-jämförelsen är korrekt",
+                 not bad,
+                 "; ".join(bad) if bad else f"{len(SHA_CASES)} fall")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Post-deploy smoke test for agentanbud")
     ap.add_argument("--base", default=DEFAULT_BASE, help="base URL to test")
@@ -169,6 +196,12 @@ def main() -> int:
     base = args.base.rstrip("/")
 
     print(f"Rökt-test mot {base}\n")
+
+    print("0. Testet självt")
+    if not self_test():
+        print("  (avbryter — testets egen SHA-jämförelse är trasig)")
+        return 1
+    print()
 
     if args.wait:
         if args.expect_sha:
