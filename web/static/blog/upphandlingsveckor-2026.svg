@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" width="1200" height="500" role="img"
+     aria-label="Antal nya svenska upphandlingar per vecka under 2026. Omkring 300 per vecka under varen, en topp pa 474 veckan fore midsommar, en botten pa 66 under vecka 29 i juli, och 376 forsta hela veckan efter semestern.">
+  <title>Upphandlingsaret 2026 - veckotakt genom sommaren</title>
+
+  <!-- Bar sin egen ljusa yta: en img kan inte arva sidans tema. -->
+  <rect width="1200" height="500" rx="16" fill="#fcfcfb"/>
+
+  <text x="96" y="62" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="27" font-weight="600" fill="#0b0b0b">Sverige tog tre veckors upphandlingssemester</text>
+  <text x="96" y="92" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="19" fill="#52514e">Nya upphandlingar per vecka, 2026 &#8212; endast hela veckor</text>
+
+  <rect x="980.0" y="214.0" width="104.0" height="214.0" fill="#2a78d6" opacity="0.07"/>
+  <text x="1032.0" y="204.0" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="15" fill="#8a8884">v28&#8211;v30</text>
+
+  <line x1="96.0" y1="385.2" x2="1136.0" y2="385.2" stroke="#e6e5e2" stroke-width="1"/>
+  <text x="84.0" y="390.2" text-anchor="end" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" fill="#8a8884">100</text>
+  <line x1="96.0" y1="342.4" x2="1136.0" y2="342.4" stroke="#e6e5e2" stroke-width="1"/>
+  <text x="84.0" y="347.4" text-anchor="end" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" fill="#8a8884">200</text>
+  <line x1="96.0" y1="299.6" x2="1136.0" y2="299.6" stroke="#e6e5e2" stroke-width="1"/>
+  <text x="84.0" y="304.6" text-anchor="end" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" fill="#8a8884">300</text>
+  <line x1="96.0" y1="256.8" x2="1136.0" y2="256.8" stroke="#e6e5e2" stroke-width="1"/>
+  <text x="84.0" y="261.8" text-anchor="end" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" fill="#8a8884">400</text>
+  <line x1="96.0" y1="214.0" x2="1136.0" y2="214.0" stroke="#e6e5e2" stroke-width="1"/>
+  <text x="84.0" y="219.0" text-anchor="end" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" fill="#8a8884">500</text>
+
+  <polygon points="96.0,428.0 96.0,306.4 130.7,293.6 165.3,318.4 200.0,296.6 234.7,302.2 269.3,305.2 304.0,300.9 338.7,298.7 373.3,297.0 408.0,288.0 442.7,275.6 477.3,253.8 512.0,340.7 546.7,286.8 581.3,292.8 616.0,291.0 650.7,270.1 685.3,289.8 720.0,295.3 754.7,309.0 789.3,313.3 824.0,331.7 858.7,321.4 893.3,321.9 928.0,225.1 962.7,288.0 997.3,358.2 1032.0,399.8 1066.7,397.2 1101.3,356.5 1136.0,267.1 1136.0,428.0" fill="#2a78d6" opacity="0.13"/>
+  <polyline points="96.0,306.4 130.7,293.6 165.3,318.4 200.0,296.6 234.7,302.2 269.3,305.2 304.0,300.9 338.7,298.7 373.3,297.0 408.0,288.0 442.7,275.6 477.3,253.8 512.0,340.7 546.7,286.8 581.3,292.8 616.0,291.0 650.7,270.1 685.3,289.8 720.0,295.3 754.7,309.0 789.3,313.3 824.0,331.7 858.7,321.4 893.3,321.9 928.0,225.1 962.7,288.0 997.3,358.2 1032.0,399.8 1066.7,397.2 1101.3,356.5 1136.0,267.1" fill="none" stroke="#2a78d6" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+
+  <circle cx="928.0" cy="225.1" r="6" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+  <text x="928.0" y="207.1" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="17" font-weight="600" fill="#0b0b0b">474</text>
+  <circle cx="1032.0" cy="399.8" r="6" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+  <text x="1032.0" y="431.8" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="17" font-weight="600" fill="#0b0b0b">66</text>
+  <circle cx="1136.0" cy="267.1" r="6" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+  <text x="1154.0" y="249.1" text-anchor="end" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="17" font-weight="600" fill="#0b0b0b">376</text>
+
+  <text x="96.0" y="454.0" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" fill="#8a8884">jan</text>
+  <text x="234.7" y="454.0" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" fill="#8a8884">feb</text>
+  <text x="373.3" y="454.0" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" fill="#8a8884">mar</text>
+  <text x="546.7" y="454.0" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" fill="#8a8884">apr</text>
+  <text x="685.3" y="454.0" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" fill="#8a8884">maj</text>
+  <text x="824.0" y="454.0" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" fill="#8a8884">jun</text>
+  <text x="962.7" y="454.0" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" fill="#8a8884">jul</text>
+  <text x="1101.3" y="454.0" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" fill="#8a8884">aug</text>
+
+  <text x="96" y="478" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="15" fill="#52514e">K&#228;lla: agentanbud.se &#8212; TED, Mercell och Upphandlingsmyndighetens LOV-annonser. Vecka 33 utel&#228;mnad: &#228;nnu inte hel.</text>
+</svg>
