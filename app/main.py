@@ -574,32 +574,12 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             # JSON list (framework agreements have several winners), so we
             # aggregate in Python across all awards — not via the row-capped
             # admin query. TED's 1-SEK placeholder is treated as unreported.
-            from collections import Counter as _Counter
-            award_rows = conn.execute(
-                "SELECT winner_name, value FROM tenders "
-                "WHERE source_system = 'ted_awards' "
-                "AND winner_name IS NOT NULL AND winner_name != ''"
-            ).fetchall()
-            win_counter: _Counter = _Counter()
-            win_value: dict = {}
-            awards_total = 0
-            awarded_value_total = 0.0
-            for r in award_rows:
-                try:
-                    ws = json.loads(r["winner_name"])
-                except Exception:
-                    continue
-                if not ws:
-                    continue
-                awards_total += 1
-                v = r["value"] if (r["value"] and r["value"] > 1) else None
-                if v:
-                    awarded_value_total += float(v)
-                for w in ws:
-                    win_counter[w] += 1
-                    if v:
-                        win_value[w] = win_value.get(w, 0.0) + float(v)
-            max_win = win_counter.most_common(1)[0][1] if win_counter else 1
+            from mcp_shared import aggregate_winners
+            _agg = aggregate_winners(conn)
+            win_counter, win_value = _agg["wins"], _agg["value_by_winner"]
+            awards_total = _agg["contracts"]
+            awarded_value_total = sum(win_value.values())
+            max_win = max(win_counter.values()) if win_counter else 1
             top_winners = [
                 {"winner": w, "n": n, "pct": int(n / max_win * 100),
                  "value": win_value.get(w, 0.0)}
@@ -1227,38 +1207,12 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             raise HTTPException(status_code=400, detail="provide authority and/or cpv")
         conn = connect(db)
         try:
-            where = ["source_system = 'ted_awards'", "winner_name IS NOT NULL", "winner_name != ''"]
-            args: list = []
-            if authority:
-                where.append("authority LIKE ?")
-                args.append(f"%{authority}%")
-            if cpv:
-                where.append("cpv_codes LIKE ?")
-                args.append(f'%"{cpv}%')
-            rows = conn.execute(
-                f"SELECT winner_name, value FROM tenders WHERE {' AND '.join(where)}", args
-            ).fetchall()
-
-            from collections import Counter
-            wins: Counter = Counter()
-            value_by_winner: dict = {}
-            contracts = 0
-            for r in rows:
-                try:
-                    ws = json.loads(r[0])
-                except Exception:
-                    continue
-                if not ws:
-                    continue
-                contracts += 1
-                # TED uses a placeholder value of 1 (or 0) SEK when the real
-                # award value isn't published — treat as unreported so totals
-                # aren't distorted by phantom 1-SEK contracts.
-                val = r[1] if (r[1] and r[1] > 1) else None
-                for w in ws:
-                    wins[w] += 1
-                    if val:
-                        value_by_winner[w] = value_by_winner.get(w, 0.0) + float(val)
+            # Same aggregation the MCP tool and the dashboard use, so all three
+            # report identical figures — including collapsing TED's duplicate
+            # republications, which would otherwise inflate a supplier's wins.
+            from mcp_shared import aggregate_winners
+            agg = aggregate_winners(conn, authority, cpv)
+            wins, value_by_winner, contracts = agg["wins"], agg["value_by_winner"], agg["contracts"]
             ranked = [
                 {"winner": w, "wins": n, "total_value": round(value_by_winner.get(w, 0.0))}
                 for w, n in wins.most_common(top)
