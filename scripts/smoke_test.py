@@ -103,6 +103,22 @@ def post_json(base: str, path: str, payload: dict, key: str | None = None):
         return 0, str(e).encode()
 
 
+def sha_matches(running: str, want: str) -> bool:
+    """True when both strings name the same commit.
+
+    Either side may be abbreviated, so we compare over the shorter length.
+    An empty or too-short commit matches nothing: the earlier form used
+    `want.startswith(running[:7])`, and every string starts with "", so a
+    build reporting no commit at all satisfied every --expect-sha — passing
+    the one check whose whole job is to catch a deploy that did not land.
+    """
+    a, b = (running or "").strip().lower(), (want or "").strip().lower()
+    if len(a) < 7 or len(b) < 7:
+        return False
+    n = min(len(a), len(b))
+    return a[:n] == b[:n]
+
+
 def wait_for_health(base: str, seconds: int, expect_sha: str | None = None) -> bool:
     """Poll /api/health until the build we are testing is the one serving.
 
@@ -127,7 +143,7 @@ def wait_for_health(base: str, seconds: int, expect_sha: str | None = None) -> b
                     print(f"  (uppe efter {attempt} försök)")
                 return True
             running = ((health or {}).get("build") or {}).get("commit") or ""
-            if running.startswith(expect_sha) or expect_sha.startswith(running[:7]):
+            if sha_matches(running, expect_sha):
                 if attempt > 1:
                     print(f"  (rätt bygge live efter {attempt} försök)")
                 return True
@@ -192,8 +208,8 @@ def main() -> int:
     if args.expect_sha:
         want = args.expect_sha.strip()
         check("den deployade committen är den som kör",
-              running.startswith(want) or want.startswith(running[:7]),
-              f"väntade {want[:7]}, kör {running[:7] or '?'}")
+              sha_matches(running, want),
+              f"väntade {want[:7]}, kör {running[:7] or 'ingen commit alls'}")
 
     status, spec = get_json(base, "/openapi.json")
     if check("openapi.json tillgänglig", status == 200 and spec is not None, f"fick {status}"):
