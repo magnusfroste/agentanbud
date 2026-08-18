@@ -353,8 +353,9 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
 > bygg ovanpå — via webb, REST API och MCP för AI-agenter. Data speglas från
 > Mercell och TED EU. Ingen inloggning, inga nycklar för läsning.
 
-Agentanbud finns för att minska informationsasymmetrin i offentlig upphandling:
-samma tillgång för småföretag som för de stora konsultbolagen.
+Agentanbuds syfte: göra det enklare för svenska företag — särskilt småföretag — att
+hitta och offerera offentliga upphandlingar. Öppna data, öppen kod, öppen matchning.
+Inte för att konkurrera med plattformarna, utan för att hjälpa marknaden fungera bättre.
 
 ## För AI-agenter (MCP)
 
