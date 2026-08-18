@@ -3,9 +3,9 @@
 
 Run it after every deploy:
 
-    python3 scripts/smoke_test.py                 # against production
-    python3 scripts/smoke_test.py --base http://localhost:8080
-    python3 scripts/smoke_test.py --wait 180      # poll until the container is up
+    python3 scripts/smoke_test.py --expect-sha $(git rev-parse --short HEAD)
+    python3 scripts/smoke_test.py --base http://localhost:8080 --wait 0
+    python3 scripts/smoke_test.py                 # against production, as-is
 
 Exit code 0 = everything passed, 1 = something is wrong.
 
@@ -56,7 +56,14 @@ def check(name: str, ok: bool, detail: str = "") -> bool:
 
 
 def get(base: str, path: str, timeout: int = 30, headers: dict | None = None):
-    """GET -> (status, body_bytes). Never raises for HTTP errors."""
+    """GET -> (status, body_bytes, headers). Never raises.
+
+    A 4xx/5xx is a normal answer here — several checks assert on one. Status 0
+    means we never got an answer at all (refused, DNS, TLS, timeout): that is
+    the case this script exists for, so it has to report it rather than crash.
+    Only HTTPError was caught before, and a refused connection raises URLError,
+    so pointing the test at a host that was actually down ended in a traceback.
+    """
     req = urllib.request.Request(base + path)
     req.add_header("User-Agent", UA)
     for k, v in (headers or {}).items():
@@ -66,6 +73,8 @@ def get(base: str, path: str, timeout: int = 30, headers: dict | None = None):
         return r.status, r.read(), dict(r.headers)
     except urllib.error.HTTPError as e:
         return e.code, e.read(), dict(e.headers)
+    except Exception as e:  # URLError, socket.timeout, ssl errors, …
+        return 0, str(e).encode(), {}
 
 
 def get_json(base: str, path: str, timeout: int = 30):
@@ -94,26 +103,64 @@ def post_json(base: str, path: str, payload: dict, key: str | None = None):
         return 0, str(e).encode()
 
 
-def wait_for_health(base: str, seconds: int) -> bool:
-    """Poll /api/health until it answers 200 — the container may be restarting."""
+def sha_matches(running: str, want: str) -> bool:
+    """True when both strings name the same commit.
+
+    Either side may be abbreviated, so we compare over the shorter length.
+    An empty or too-short commit matches nothing: the earlier form used
+    `want.startswith(running[:7])`, and every string starts with "", so a
+    build reporting no commit at all satisfied every --expect-sha — passing
+    the one check whose whole job is to catch a deploy that did not land.
+    """
+    a, b = (running or "").strip().lower(), (want or "").strip().lower()
+    if len(a) < 7 or len(b) < 7:
+        return False
+    n = min(len(a), len(b))
+    return a[:n] == b[:n]
+
+
+def wait_for_health(base: str, seconds: int, expect_sha: str | None = None) -> bool:
+    """Poll /api/health until the build we are testing is the one serving.
+
+    Waiting for a 200 is not enough during a deploy: the *previous* container
+    keeps answering 200 the whole time the new image builds, so health alone
+    is satisfied on the first attempt and every later check then runs against
+    the old code. With --expect-sha we wait for that commit to actually be
+    live, which is the condition the caller means by "wait for the deploy".
+
+    Without --expect-sha there is nothing to compare against, so we fall back
+    to plain reachability and the caller accepts that weaker guarantee.
+    """
     deadline = time.time() + seconds
     attempt = 0
-    while time.time() < deadline:
+    last_seen = None
+    while True:
         attempt += 1
-        status, _ = get_json(base, "/api/health", timeout=15)
+        status, health = get_json(base, "/api/health", timeout=15)
         if status == 200:
-            if attempt > 1:
-                print(f"  (uppe efter {attempt} försök)")
-            return True
+            if not expect_sha:
+                if attempt > 1:
+                    print(f"  (uppe efter {attempt} försök)")
+                return True
+            running = ((health or {}).get("build") or {}).get("commit") or ""
+            if sha_matches(running, expect_sha):
+                if attempt > 1:
+                    print(f"  (rätt bygge live efter {attempt} försök)")
+                return True
+            if running[:7] != last_seen:
+                last_seen = running[:7]
+                print(f"  …uppe, men kör {last_seen or '?'} — väntar på {expect_sha[:7]}")
+        if time.time() >= deadline:
+            return False
         time.sleep(10)
-    return False
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Post-deploy smoke test for agentanbud")
     ap.add_argument("--base", default=DEFAULT_BASE, help="base URL to test")
-    ap.add_argument("--wait", type=int, default=0,
-                    help="seconds to poll /api/health before testing (post-deploy)")
+    ap.add_argument("--wait", type=int, default=420,
+                    help="seconds to wait for the deploy before testing; 0 to test immediately. "
+                         "With --expect-sha it waits for that build to be live, not just for a 200")
     ap.add_argument("--expect-sha", default=None,
                     help="commit you just deployed; fails if another build is serving")
     ap.add_argument("--key", default=None,
@@ -124,15 +171,21 @@ def main() -> int:
     print(f"Rökt-test mot {base}\n")
 
     if args.wait:
-        print(f"Väntar upp till {args.wait}s på att appen svarar…")
-        if not wait_for_health(base, args.wait):
-            print("  FAIL  appen kom aldrig upp")
-            return 1
+        if args.expect_sha:
+            print(f"Väntar upp till {args.wait}s på att {args.expect_sha[:7]} går live…")
+        else:
+            print(f"Väntar upp till {args.wait}s på att appen svarar…")
+        if not wait_for_health(base, args.wait, args.expect_sha):
+            # Not fatal on its own: the checks below say *what* is wrong with
+            # whatever is serving, and the SHA check names the build. Bailing
+            # here would report a timeout and hide a broken deploy behind it.
+            print("  (tidsgränsen nåddes — testar det som faktiskt kör)")
 
     # ---- 1. Drift -----------------------------------------------------------
     print("1. Drift")
     status, health = get_json(base, "/api/health")
-    if not check("hälsokontroll svarar 200", status == 200, f"fick {status}"):
+    if not check("hälsokontroll svarar 200", status == 200,
+                 f"{base} svarar inte alls" if status == 0 else f"fick {status}"):
         return 1  # nothing else can be trusted
     total_db = health.get("tenders_total", 0)
     check("databasen har data", total_db > 1000, f"{total_db} upphandlingar")
@@ -155,8 +208,8 @@ def main() -> int:
     if args.expect_sha:
         want = args.expect_sha.strip()
         check("den deployade committen är den som kör",
-              running.startswith(want) or want.startswith(running[:7]),
-              f"väntade {want[:7]}, kör {running[:7] or '?'}")
+              sha_matches(running, want),
+              f"väntade {want[:7]}, kör {running[:7] or 'ingen commit alls'}")
 
     status, spec = get_json(base, "/openapi.json")
     if check("openapi.json tillgänglig", status == 200 and spec is not None, f"fick {status}"):
