@@ -19,11 +19,13 @@ samma tillgång som de stora konsultbolagen.
 
 ---
 
-## 🇸🇪 Vårt uppdrag
+## 🇸🇪 Agentanbuds syfte
 
 Svenska myndigheter måste enligt lag publicera upphandlingar enligt **offentlighetsprincipen** — men det finns ingen samlad öppen plats där datan är lätt att hitta, jämföra och bevaka. Stora konsultbolag har råd att betala plattformar, byta källa, skriva anbud. Småföretag gör det inte.
 
-Agentanbud finns för att **minska informationsasymmetrin**. Vi speglar publik upphandlingsdata, gör den sökbar, och ger AI-agenter direktåtkomst via MCP. Målet är inte att konkurrera med Mercell, Tendsign, e-Avrop eller Clira — utan att ge svenska småföretag samma möjlighet att **hitta** anbud som de stora har.
+**Agentanbuds syfte:** göra det enklare för svenska företag — särskilt småföretag — att hitta och offerera offentliga upphandlingar. Öppna data, öppen kod, öppen matchning. Inte för att konkurrera med plattformarna, utan för att hjälpa marknaden fungera bättre.
+
+Konkret: vi speglar publik upphandlingsdata, gör den sökbar, och ger AI-agenter direktåtkomst via MCP — så att småföretag har samma möjlighet att **hitta** anbud som de stora har.
 
 > "Sharing is caring" — men vi tar det längre: vi delar **hela ekosystemet** (kod, data, utbildning) så att fler kan bygga bättre verktyg ovanpå.
 
