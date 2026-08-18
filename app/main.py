@@ -1482,7 +1482,13 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
         TED has ~6500 SWE notices per 90 days."""
         _require_admin(request)
         env = dict(os.environ)
+        # The orchestrator reads a separate variable per TED source. Setting
+        # only TED_LOOKBACK_DAYS left awards and prior-information notices on
+        # their 90-day default, so "backfill 240 days" silently covered one of
+        # the three — 100% of tenders but 40% of awards.
         env["TED_LOOKBACK_DAYS"] = str(days)
+        env["TED_AWARDS_LOOKBACK_DAYS"] = str(days)
+        env["TED_PIN_LOOKBACK_DAYS"] = str(days)
         try:
             proc = subprocess.Popen(
                 ["python", "-m", "scraper.orchestrator"],
@@ -1493,7 +1499,7 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             )
             return JSONResponse(
                 {"ok": True, "days": days, "started_at": datetime.now(timezone.utc).isoformat(),
-                 "note": f"backfilling {days}d of TED EU — check /api/stats in 2-5 min"},
+                 "note": f"backfilling {days}d of TED tenders, awards and PIN — check /api/stats in 2-5 min"},
                 status_code=202,
             )
         except FileNotFoundError:
