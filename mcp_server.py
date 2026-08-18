@@ -900,8 +900,10 @@ async def _get_authority(conn, args: dict) -> list[types.Content]:
 async def _get_winner_history(conn, args: dict) -> list[types.Content]:
     """Aggregate award notices to show who wins in a given area.
 
-    winner_name is a JSON list (framework agreements have several winners),
-    so we parse each row and count per supplier, summing awarded value.
+    Counting lives in mcp_shared.aggregate_winners so the REST endpoint and the
+    dashboard panel report the same thing: winner_name is a JSON list (framework
+    agreements name several winners), and TED's duplicate republications are
+    collapsed so they don't inflate a supplier's win count.
     """
     from collections import Counter
 
@@ -913,21 +915,11 @@ async def _get_winner_history(conn, args: dict) -> list[types.Content]:
             text="Ange minst en filter: authority (upphandlare) och/eller cpv (kategori-prefix).",
         )]
 
-    where = ["source_system = 'ted_awards'", "winner_name IS NOT NULL", "winner_name != ''"]
-    params: list = []
-    if authority:
-        where.append("authority LIKE ?")
-        params.append(f"%{authority}%")
-    if cpv:
-        where.append("cpv_codes LIKE ?")
-        params.append(f'%"{cpv}%')
+    from mcp_shared import aggregate_winners
+    agg = aggregate_winners(conn, authority, cpv)
+    wins, value_by_winner, contracts = agg["wins"], agg["value_by_winner"], agg["contracts"]
 
-    rows = conn.execute(
-        f"SELECT winner_name, value FROM tenders WHERE {' AND '.join(where)}",
-        params,
-    ).fetchall()
-
-    if not rows:
+    if not contracts and not wins:
         scope = " och ".join(filter(None, [
             f"upphandlare '{authority}'" if authority else "",
             f"CPV '{cpv}'" if cpv else "",
@@ -936,26 +928,6 @@ async def _get_winner_history(conn, args: dict) -> list[types.Content]:
             type="text",
             text=f"Inga tilldelningar hittades för {scope}. Prova bredare filter eller kortare namn.",
         )]
-
-    wins: Counter = Counter()
-    value_by_winner: dict = {}
-    contracts = 0
-    for r in rows:
-        try:
-            winners = json.loads(r[0])
-        except Exception:
-            continue
-        if not winners:
-            continue
-        contracts += 1
-        # TED often carries a placeholder value of 1 (or 0) SEK when the real
-        # award value isn't published — treat those as "unreported" so summed
-        # totals stay honest instead of showing e.g. "8 vinster — 1 SEK totalt".
-        val = r[1] if (r[1] and r[1] > 1) else None
-        for w in winners:
-            wins[w] += 1
-            if val:
-                value_by_winner[w] = value_by_winner.get(w, 0.0) + float(val)
 
     if not wins:
         return [types.TextContent(type="text", text="Tilldelningar hittades men utan namngivna vinnare.")]
