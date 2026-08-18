@@ -68,6 +68,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     """
     for table, column, ddl in (
         ("tenders", "winner_name", "TEXT"),
+        ("tenders", "buyer_city", "TEXT"),
         ("posts", "image_url", "TEXT"),
     ):
         try:
@@ -114,17 +115,19 @@ def upsert_tender(conn: sqlite3.Connection, t: dict) -> None:
     wn = t.get("winner_name")
     if wn is not None and not isinstance(wn, str):
         wn = json.dumps(wn, ensure_ascii=False)
-    t = {**t, "winner_name": wn}
+    # Only the TED scrapers set buyer_city; default it so the other sources
+    # keep working without knowing about the column.
+    t = {**t, "winner_name": wn, "buyer_city": t.get("buyer_city") or None}
     conn.execute(
         """
         INSERT INTO tenders (
             source_system, source_id, tender_url, title, authority,
             cpv_codes, deadline, published_at, description, value,
-            procedure, contract_type, document_type, region, winner_name, raw_json
+            procedure, contract_type, document_type, region, winner_name, buyer_city, raw_json
         ) VALUES (
             :source_system, :source_id, :tender_url, :title, :authority,
             :cpv_codes, :deadline, :published_at, :description, :value,
-            :procedure, :contract_type, :document_type, :region, :winner_name, :raw_json
+            :procedure, :contract_type, :document_type, :region, :winner_name, :buyer_city, :raw_json
         )
         ON CONFLICT(source_system, source_id) DO UPDATE SET
             tender_url=excluded.tender_url,
@@ -140,6 +143,7 @@ def upsert_tender(conn: sqlite3.Connection, t: dict) -> None:
             document_type=excluded.document_type,
             region=excluded.region,
             winner_name=excluded.winner_name,
+            buyer_city=excluded.buyer_city,
             raw_json=excluded.raw_json,
             fetched_at=CURRENT_TIMESTAMP
         """,
