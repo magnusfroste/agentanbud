@@ -41,6 +41,27 @@ SOURCE_DESCRIPTION = (
 AWARD_DEDUP_KEY = "GROUP BY title, authority, winner_name, value"
 
 
+def canonical_supplier(name: str) -> str:
+    """Key for grouping supplier names that differ only in spelling.
+
+    TED records the same company several ways. "SWECO Sverige AB" and "Sweco
+    Sverige AB" are 145 and 60 wins of one supplier — case alone split the
+    country's second-largest consultancy in two and pushed it down the
+    ranking this module exists to produce.
+
+    Deliberately conservative: case, the Aktiebolag/AB spelling, punctuation
+    and whitespace only. Names differing by a real word are left apart —
+    "Ramboll" and "Ramboll Sweden AB" may well be one company, but that is a
+    guess about legal entities, and merging on a guess is how a ranking starts
+    reporting something nobody can check.
+    """
+    import re
+    n = (name or "").strip().lower()
+    n = re.sub(r"\baktiebolag\b", "ab", n)
+    n = re.sub(r"[.,()]", " ", n)
+    return re.sub(r"\s+", " ", n).strip()
+
+
 def aggregate_winners(conn, authority: str = "", cpv: str = "") -> dict:
     """Count wins per supplier across award notices.
 
@@ -51,7 +72,7 @@ def aggregate_winners(conn, authority: str = "", cpv: str = "") -> dict:
     Returns {wins: Counter, value_by_winner: dict, contracts: int}.
     """
     import json
-    from collections import Counter
+    from collections import Counter, defaultdict
 
     where = ["source_system = 'ted_awards'", "winner_name IS NOT NULL", "winner_name != ''"]
     params: list = []
@@ -69,6 +90,7 @@ def aggregate_winners(conn, authority: str = "", cpv: str = "") -> dict:
 
     wins: Counter = Counter()
     value_by_winner: dict = {}
+    seen: dict = defaultdict(Counter)   # kanonisk nyckel → stavningar
     contracts = 0
     for r in rows:
         try:
@@ -90,7 +112,16 @@ def aggregate_winners(conn, authority: str = "", cpv: str = "") -> dict:
         # which crediting in full never can. Callers say "estimated share".
         share = val / len(winners) if val else None
         for w in winners:
-            wins[w] += 1
+            key = canonical_supplier(w)
+            if not key:
+                continue
+            # Report the spelling seen most often, so the label stays a real
+            # name rather than the normalised key.
+            seen[key][w] += 1
+            wins[key] += 1
             if share:
-                value_by_winner[w] = value_by_winner.get(w, 0.0) + float(share)
-    return {"wins": wins, "value_by_winner": value_by_winner, "contracts": contracts}
+                value_by_winner[key] = value_by_winner.get(key, 0.0) + float(share)
+    label = {k: c.most_common(1)[0][0] for k, c in seen.items()}
+    return {"wins": Counter({label[k]: v for k, v in wins.items()}),
+            "value_by_winner": {label[k]: v for k, v in value_by_winner.items()},
+            "contracts": contracts}
