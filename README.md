@@ -129,13 +129,16 @@ hela listan. De viktigaste för självhostande:
 | `DB_PATH` | `/data/application.db` | SQLite-sökväg (Docker-volym) |
 | `CRON_SCHEDULE` | `0 6 * * *` | När daglig synk körs |
 | `ADMIN_API_KEY` | *(tom)* | Skydd för skriv-/adminåtgärder — **sätt den i produktion** |
+| `ALLOW_OPEN_ADMIN` | *(tom)* | Öppnar skrivning utan nyckel — **endast lokal dev** |
 | `SCRAPE_MERCELL`, `SCRAPE_TED`, … | `true` | Slå av/på enskilda källor |
 | `USER_AGENT` | `agentanbud/0.1 …` | Skickas till Mercell/TED (artig, med kontakt) |
 
 > ⚠️ **Läsning är alltid öppen** (REST GET + `/mcp`). Skrivning (`/api/sync`,
-> blogg m.m.) kräver `X-Admin-Key` **endast när `ADMIN_API_KEY` är satt**. Är
-> den tom är skriv-endpoints öppna — bekvämt lokalt, men sätt alltid nyckeln
-> i produktion.
+> blogg m.m.) kräver `X-Admin-Key`. Saknas `ADMIN_API_KEY` **stängs
+> skriv-endpoints helt** (403) i stället för att stå öppna — så en glömd
+> eller felstavad nyckel i produktion märks direkt i stället för att tyst
+> lämna dem obevakade. Vill du ha dem öppna lokalt utan nyckel: sätt
+> `ALLOW_OPEN_ADMIN=true`.
 
 ---
 

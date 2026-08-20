@@ -44,15 +44,24 @@ from app.version import build_info, version_string
 
 # Admin key gates the blog write tools on the public /mcp endpoint. Reads stay
 # open for every visiting agent; writing (create_post/update_post) requires the
-# same X-Admin-Key as the REST admin endpoints. When unset (local dev), writes
-# are open — matching the REST _require_admin behaviour.
+# same X-Admin-Key as the REST admin endpoints. With no key configured the
+# write tools are hidden and refused — set ALLOW_OPEN_ADMIN=true to open them
+# for local development.
 ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "")
+ALLOW_OPEN_ADMIN = os.environ.get("ALLOW_OPEN_ADMIN", "").lower() in ("1", "true", "yes")
 WRITE_TOOLS = {"create_post", "update_post"}
 
 
 def _is_authed(request: Request) -> bool:
+    """Whether the caller may use the blog write tools.
+
+    Fails CLOSED when no key is configured, matching _require_admin: an unset
+    ADMIN_API_KEY used to expose create_post/update_post to every visiting
+    agent, so a mistyped env var in production silently handed the blog to
+    anyone who found /mcp.
+    """
     if not ADMIN_API_KEY:
-        return True
+        return ALLOW_OPEN_ADMIN
     return hmac.compare_digest(request.headers.get("x-admin-key", ""), ADMIN_API_KEY)
 
 LOG = logging.getLogger(__name__)

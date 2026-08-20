@@ -89,6 +89,11 @@ MAX_PAGE_SIZE = 200
 # and /api/admin/query becomes available. When unset (local dev), mutating
 # endpoints stay open and the query endpoint is disabled.
 ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "")
+# Escape hatch for local development: without a key, writes stay closed unless
+# this is set explicitly. Deliberately a separate variable — the dangerous
+# state should be something you can grep for in a deployment, not the default
+# you fall into by forgetting one.
+ALLOW_OPEN_ADMIN = os.environ.get("ALLOW_OPEN_ADMIN", "").lower() in ("1", "true", "yes")
 ADMIN_QUERY_MAX_ROWS = 500
 
 # Sync state — single concurrent run only
@@ -97,8 +102,22 @@ _sync_running = False
 
 
 def _require_admin(request: Request) -> None:
+    """Gate a mutating endpoint. Fails CLOSED when no key is configured.
+
+    Previously an unset ADMIN_API_KEY meant "let everyone through", so a
+    missing or mistyped env var in production silently opened /api/sync,
+    /api/reset-ted and the blog writes instead of failing loudly. Deployments
+    break in visible ways now; the convenience of open local writes is opt-in
+    via ALLOW_OPEN_ADMIN.
+    """
     if not ADMIN_API_KEY:
-        return
+        if ALLOW_OPEN_ADMIN:
+            return
+        raise HTTPException(
+            status_code=403,
+            detail="ADMIN_API_KEY not configured — write endpoints are closed. "
+                   "Set ADMIN_API_KEY, or ALLOW_OPEN_ADMIN=true for local development.",
+        )
     supplied = request.headers.get("x-admin-key", "")
     if not hmac.compare_digest(supplied, ADMIN_API_KEY):
         raise HTTPException(status_code=401, detail="missing or invalid X-Admin-Key")
@@ -198,6 +217,12 @@ def _parse_days_until(deadline: str | None, now: datetime) -> int | None:
         return (d - now.replace(tzinfo=None)).days
     except Exception:
         return None
+
+
+if ALLOW_OPEN_ADMIN and not ADMIN_API_KEY:
+    LOG.warning("ALLOW_OPEN_ADMIN is set and ADMIN_API_KEY is empty — write "
+                "endpoints and the blog MCP tools are OPEN. Intended for local "
+                "development only; never set this in production.")
 
 
 def create_app(db_path: Optional[str] = None) -> FastAPI:
