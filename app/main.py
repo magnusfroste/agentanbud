@@ -1385,6 +1385,11 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
         authority: Optional[str] = Query(default=None),
         q: Optional[str] = Query(default=None),
         cpv: Optional[str] = Query(default=None, description="CPV code prefix, e.g. '72' (IT) or '45' (construction)"),
+        buyer_type: Optional[str] = Query(
+            default=None,
+            description="Buyer kind: 'municipal', 'regional', 'state' or 'unknown'. "
+                        "Derived from the buyer's name and registered town; 'unknown' "
+                        "is roughly a tenth of rows and includes private companies."),
         page: int = Query(default=1, ge=1),
         page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     ) -> dict:
@@ -1416,11 +1421,19 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
                 # starts with the given prefix: ["45200000", …] → %"45%
                 where.append("cpv_codes LIKE ?")
                 args.append(f'%"{cpv}%')
+            if buyer_type:
+                from mcp_shared import BUYER_TYPES
+                if buyer_type not in BUYER_TYPES:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"buyer_type must be one of {sorted(BUYER_TYPES)}")
+                where.append("buyer_type = ?")
+                args.append(buyer_type)
             where_sql = ("WHERE " + " AND ".join(where)) if where else ""
             total = conn.execute(
                 f"SELECT COUNT(*) FROM tenders {join_sql} {where_sql}", args
             ).fetchone()[0]
-            if page == 1 and (q or source or authority or cpv):
+            if page == 1 and (q or source or authority or cpv or buyer_type):
                 # API searches are deliberate calls (agents/scripts) — count as
                 # real usage, so flag bot:0 to survive the analytics filter.
                 _log_usage_safe(conn, "api", "search", query=q,
@@ -1534,6 +1547,31 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
                 {"ok": False, "error": "not running in Docker — run manually"},
                 status_code=500,
             )
+
+    @app.post("/api/reclassify-buyers")
+    def reclassify_buyers(request: Request):
+        """Recompute buyer_type for every row.
+
+        New and updated rows get it in upsert_tender, but the column was added
+        to a table with 16 000 rows already in it. This fills those without a
+        resync — the classification is derived from columns we already hold,
+        so it needs no network call.
+        """
+        _require_admin(request)
+        from app.buyer_class import classify
+        conn = connect(db)
+        try:
+            rows = conn.execute(
+                "SELECT id, authority, buyer_city FROM tenders").fetchall()
+            updates = [(classify(r["authority"] or "", r["buyer_city"]), r["id"])
+                       for r in rows]
+            conn.executemany("UPDATE tenders SET buyer_type = ? WHERE id = ?", updates)
+            conn.commit()
+            counts = {r[0]: r[1] for r in conn.execute(
+                "SELECT buyer_type, COUNT(*) FROM tenders GROUP BY buyer_type")}
+            return {"ok": True, "rows": len(updates), "counts": counts}
+        finally:
+            conn.close()
 
     @app.post("/api/repair-links")
     def repair_links(request: Request):

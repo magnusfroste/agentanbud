@@ -15,6 +15,17 @@ from __future__ import annotations
 # scraper/orchestrator.py's registry.
 SOURCES = ["mercell", "ted", "ted_awards", "ted_pin", "lov"]
 
+BUYER_TYPES = ["municipal", "regional", "state", "unknown"]
+
+BUYER_TYPE_DESCRIPTION = (
+    "Buyer kind: 'municipal' (a municipality, its administrations or a company "
+    "it owns), 'regional' (a region/landsting or its companies), 'state' "
+    "(national agencies and universities), 'unknown' (~11%, includes private "
+    "companies). Derived from the buyer's name and registered town — use it to "
+    "search only local procurement, since a national agency's town is a head "
+    "office and says nothing about where the work is."
+)
+
 SOURCE_DESCRIPTION = (
     "Data source filter. 'mercell' = most Swedish tenders, 'ted' = EU-threshold "
     "notices, 'ted_awards' = awarded contracts, 'ted_pin' = planned procurements, "

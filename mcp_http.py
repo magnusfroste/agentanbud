@@ -38,6 +38,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
 from app.db import connect, log_usage
+import mcp_shared
 import mcp_server
 from mcp_shared import SOURCES, SOURCE_DESCRIPTION
 from app.version import build_info, version_string
@@ -205,6 +206,11 @@ def _tool_list(include_write: bool = False) -> list[dict]:
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "buyer_type": {
+                        "type": "string",
+                        "enum": mcp_shared.BUYER_TYPES,
+                        "description": mcp_shared.BUYER_TYPE_DESCRIPTION,
+                    },
                     "query": {"type": "string", "description": "Search keyword. Swedish works best."},
                     "source": {"type": "string", "enum": SOURCES, "description": SOURCE_DESCRIPTION},
                     "authority": {"type": "string", "description": "Filter by buyer/contracting authority (substring match)."},
