@@ -1214,7 +1214,9 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
             agg = aggregate_winners(conn, authority, cpv)
             wins, value_by_winner, contracts = agg["wins"], agg["value_by_winner"], agg["contracts"]
             ranked = [
-                {"winner": w, "wins": n, "total_value": round(value_by_winner.get(w, 0.0))}
+                # Equal share of each framework, not the framework's full value —
+                # see mcp_shared.aggregate_winners.
+                {"winner": w, "wins": n, "estimated_value": round(value_by_winner.get(w, 0.0))}
                 for w, n in wins.most_common(top)
             ]
             return {

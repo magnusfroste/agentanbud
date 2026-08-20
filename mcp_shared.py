@@ -81,8 +81,16 @@ def aggregate_winners(conn, authority: str = "", cpv: str = "") -> dict:
         # TED carries a placeholder value of 1 (or 0) SEK when the real award
         # value isn't published; treating it as real would report "8 wins — 8 SEK".
         val = r[1] if (r[1] and r[1] > 1) else None
+        # A framework's value is the whole framework, not each supplier's take.
+        # Crediting every named winner the full amount overstated IT awards by
+        # 9.7x — 96.6bn reported against 9.98bn actually put out to tender,
+        # because one contract names 99 winners and each was given all of it.
+        # An equal split is an assumption: real call-offs are not even. But it
+        # is bounded, and it makes the shares sum back to the money that exists,
+        # which crediting in full never can. Callers say "estimated share".
+        share = val / len(winners) if val else None
         for w in winners:
             wins[w] += 1
-            if val:
-                value_by_winner[w] = value_by_winner.get(w, 0.0) + float(val)
+            if share:
+                value_by_winner[w] = value_by_winner.get(w, 0.0) + float(share)
     return {"wins": wins, "value_by_winner": value_by_winner, "contracts": contracts}
