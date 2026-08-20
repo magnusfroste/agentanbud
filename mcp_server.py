@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import mcp_shared
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -222,6 +223,11 @@ def _tool_objects() -> list[types.Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
+                        "buyer_type": {
+                            "type": "string",
+                            "enum": mcp_shared.BUYER_TYPES,
+                            "description": mcp_shared.BUYER_TYPE_DESCRIPTION,
+                        },
                     "query": {
                         "type": "string",
                         "description": "Search keyword. Swedish works best. Examples: 'IT-konsult', 'vägbyggnation', 'solcell', 'städning'."
@@ -681,6 +687,9 @@ async def _search_tenders(conn, args: dict) -> list[types.Content]:
     if args.get("cpv"):
         where.append("cpv_codes LIKE ?")
         params.append(f'%"{args["cpv"]}%')
+    if args.get("buyer_type") in mcp_shared.BUYER_TYPES:
+        where.append("buyer_type = ?")
+        params.append(args["buyer_type"])
 
     if args.get("open_only", True):
         where.append("(deadline IS NULL OR deadline > ?)")

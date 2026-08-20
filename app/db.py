@@ -69,6 +69,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for table, column, ddl in (
         ("tenders", "winner_name", "TEXT"),
         ("tenders", "buyer_city", "TEXT"),
+        ("tenders", "buyer_type", "TEXT"),
         ("posts", "image_url", "TEXT"),
     ):
         try:
@@ -117,17 +118,25 @@ def upsert_tender(conn: sqlite3.Connection, t: dict) -> None:
         wn = json.dumps(wn, ensure_ascii=False)
     # Only the TED scrapers set buyer_city; default it so the other sources
     # keep working without knowing about the column.
-    t = {**t, "winner_name": wn, "buyer_city": t.get("buyer_city") or None}
+    # buyer_type is derived, never supplied: computing it here means every
+    # writer gets it, and the column can be filtered in SQL rather than each
+    # caller re-deriving it in Python.
+    from app.buyer_class import classify
+    city = t.get("buyer_city") or None
+    t = {**t, "winner_name": wn, "buyer_city": city,
+         "buyer_type": classify(t.get("authority") or "", city)}
     conn.execute(
         """
         INSERT INTO tenders (
             source_system, source_id, tender_url, title, authority,
             cpv_codes, deadline, published_at, description, value,
-            procedure, contract_type, document_type, region, winner_name, buyer_city, raw_json
+            procedure, contract_type, document_type, region, winner_name, buyer_city,
+            buyer_type, raw_json
         ) VALUES (
             :source_system, :source_id, :tender_url, :title, :authority,
             :cpv_codes, :deadline, :published_at, :description, :value,
-            :procedure, :contract_type, :document_type, :region, :winner_name, :buyer_city, :raw_json
+            :procedure, :contract_type, :document_type, :region, :winner_name, :buyer_city,
+            :buyer_type, :raw_json
         )
         ON CONFLICT(source_system, source_id) DO UPDATE SET
             tender_url=excluded.tender_url,
@@ -144,6 +153,7 @@ def upsert_tender(conn: sqlite3.Connection, t: dict) -> None:
             region=excluded.region,
             winner_name=excluded.winner_name,
             buyer_city=excluded.buyer_city,
+            buyer_type=excluded.buyer_type,
             raw_json=excluded.raw_json,
             fetched_at=CURRENT_TIMESTAMP
         """,

@@ -41,7 +41,8 @@ DEFAULT_BASE = "https://www.agentanbud.se"
 
 # Query parameters the running code must expose. Guards against a deploy that
 # silently rolled back to an older image.
-EXPECTED_TENDER_PARAMS = {"source", "authority", "q", "cpv", "page", "page_size"}
+EXPECTED_TENDER_PARAMS = {"source", "authority", "q", "cpv", "buyer_type",
+                          "page", "page_size"}
 
 failures: list[str] = []
 checks_run = 0
@@ -324,7 +325,8 @@ def main() -> int:
 
     if not writes_open:
         check("POST /api/blog utan nyckel avvisas", st in (401, 403), f"HTTP {st}")
-        for path in ["/api/sync", "/api/reset-ted", "/api/repair-links"]:
+        for path in ["/api/sync", "/api/reset-ted", "/api/repair-links",
+                     "/api/reclassify-buyers"]:
             st, _ = post_json(base, path, {})
             check(f"POST {path} utan nyckel avvisas", st in (401, 403), f"HTTP {st}")
     else:
