@@ -23,6 +23,9 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       # Admin auth — when set, mutating endpoints require X-Admin-Key
       - ADMIN_API_KEY=${ADMIN_API_KEY:-}
+      # Local development only: opens write endpoints when no key is set.
+      # Leave unset in production — writes fail closed without a key.
+      - ALLOW_OPEN_ADMIN=${ALLOW_OPEN_ADMIN:-}
       # Schedule for the in-container cron (any valid crontab expression)
       - CRON_SCHEDULE=${CRON_SCHEDULE:-0 6 * * *}
       # Scraper toggles — set to "false" to skip a source

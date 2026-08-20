@@ -305,25 +305,34 @@ def main() -> int:
         check(f"detaljsida för avslutad upphandling (#{tid})", st3 == 200, f"HTTP {st3}")
 
     # ---- 5. Skrivytan är stängd --------------------------------------------
-    # Careful: probing these unauthenticated is only safe if the instance
-    # actually requires a key. On an instance with ADMIN_API_KEY unset the
-    # mutating endpoints are open by design — POSTing to /api/sync or
-    # /api/reset-ted there would really start a sync or wipe the TED tables.
-    # So we first ask /api/admin/query, which fails CLOSED (403) when no key is
-    # configured, and only probe the destructive ones once a key is proven.
+    # Probing these unauthenticated is safe only while the instance refuses
+    # them — a POST that gets through would really start a sync or wipe the
+    # TED tables. So establish the regime first with a request that has no
+    # side effect either way: an empty POST /api/blog is rejected by the auth
+    # gate (403 no key / 401 key required) or, if writes are open, by body
+    # validation (400) before anything is written.
+    #
+    # /api/admin/query is NOT the probe: it fails closed on a missing key
+    # regardless of ALLOW_OPEN_ADMIN, because arbitrary SQL warrants the
+    # stricter rule — so a 403 from it does not prove the other writes are shut.
     print("\n5. Skrivendpoints kräver nyckel")
-    st, body = post_json(base, "/api/admin/query", {"sql": "SELECT 1"})
-    key_configured = st == 401
-    check("POST /api/admin/query utan nyckel avvisas", st in (401, 403), f"HTTP {st}")
+    st, _ = post_json(base, "/api/blog", {})
+    writes_open = st not in (401, 403)
 
-    if key_configured:
-        for path in ["/api/sync", "/api/reset-ted", "/api/repair-links", "/api/blog"]:
+    st_q, _ = post_json(base, "/api/admin/query", {"sql": "SELECT 1"})
+    check("POST /api/admin/query utan nyckel avvisas", st_q in (401, 403), f"HTTP {st_q}")
+
+    if not writes_open:
+        check("POST /api/blog utan nyckel avvisas", st in (401, 403), f"HTTP {st}")
+        for path in ["/api/sync", "/api/reset-ted", "/api/repair-links"]:
             st, _ = post_json(base, path, {})
             check(f"POST {path} utan nyckel avvisas", st in (401, 403), f"HTTP {st}")
     else:
-        print("  SKIP  destruktiva endpoints — ingen ADMIN_API_KEY är satt på den här")
-        print("        instansen, så de är öppna med flit (lokal dev). Att sonda dem")
-        print("        skulle starta en riktig sync/rensning. Sätt nyckeln för att testa.")
+        print("  SKIP  destruktiva endpoints — instansen svarar utan nyckel, alltså")
+        print("        körs den med ALLOW_OPEN_ADMIN. Att sonda dem skulle starta en")
+        print("        riktig sync/rensning. Sätt ADMIN_API_KEY för att testa dem.")
+        check("skrivytan är inte öppen utan nyckel", False,
+              "ALLOW_OPEN_ADMIN är på — aldrig i produktion")
 
     # ---- 6. MCP-ytan levererar ---------------------------------------------
     # For connected agents this IS the product; an empty tool result is an
