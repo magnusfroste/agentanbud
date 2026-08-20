@@ -941,11 +941,13 @@ async def _get_winner_history(conn, args: dict) -> list[types.Content]:
     lines = [
         f"**Vem vinner — {scope}**",
         f"Baserat på {contracts} tilldelningar ({len(wins)} unika leverantörer).",
+        "Belopp är uppskattad andel: ett ramavtals värde delas lika mellan de "
+        "namngivna vinnarna, eftersom TED inte redovisar hur avropen fördelas.",
         "",
     ]
     for i, (w, n) in enumerate(ranked, 1):
         tot = value_by_winner.get(w)
-        val_str = f" — {tot:,.0f} SEK totalt".replace(",", " ") if tot else ""
+        val_str = f" — ca {tot:,.0f} SEK".replace(",", " ") if tot else ""
         lines.append(f"{i}. **{w}** — {n} vinst{'er' if n != 1 else ''}{val_str}")
     lines.append("")
     lines.append("💡 Tips: en dominerande vinnare kan betyda hård konkurrens — men också "
