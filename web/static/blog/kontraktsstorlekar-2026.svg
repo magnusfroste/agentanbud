@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" width="1200" height="560" role="img"
+     aria-label="14 procent av de svenska offentliga upphandlingarna rymmer 83 procent av pengarna. 658 kontrakt over 100 miljoner delar pa 337 miljarder, medan 2932 kontrakt under 20 miljoner delar pa 20 miljarder. Medianupphandlingen ar 10 miljoner, genomsnittet 87 miljoner.">
+  <title>Var pengarna finns och var kontrakten finns</title>
+  <rect width="1200" height="560" rx="16" fill="#fcfcfb"/>
+<text x="72" y="58" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="27" font-weight="600" fill="#0b0b0b" text-anchor="start">Var pengarna finns — och var kontrakten finns</text>
+<text x="72" y="90" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="19" font-weight="400" fill="#52514e" text-anchor="start">Svenska offentliga upphandlingar 2026 som anger ett belopp, per storleksklass</text>
+<text x="225.0" y="134" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="17" font-weight="600" fill="#52514e" text-anchor="middle">av kontrakten</text>
+<text x="495.0" y="134" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="17" font-weight="600" fill="#52514e" text-anchor="middle">av pengarna</text>
+  <rect x="150" y="150.0" width="150" height="1.0" fill="#a9c9ee"/>
+  <rect x="420" y="150.0" width="150" height="1.0" fill="#a9c9ee"/>
+<text x="136" y="156.60949529512405" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="16" font-weight="400" fill="#0b0b0b" text-anchor="end">under 1 mkr</text>
+  <rect x="150" y="151.2" width="150" height="72.2" fill="#a9c9ee"/>
+  <rect x="420" y="150.0" width="150" height="1.0" fill="#a9c9ee"/>
+<text x="225.0" y="194.30196749358424" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="17" font-weight="700" fill="#0b0b0b" text-anchor="middle">25 %</text>
+<text x="136" y="170.21899059024807" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="16" font-weight="400" fill="#0b0b0b" text-anchor="end">1–5 mkr</text>
+  <rect x="150" y="225.4" width="150" height="110.7" fill="#a9c9ee"/>
+  <rect x="420" y="152.6" width="150" height="10.1" fill="#a9c9ee"/>
+<text x="225.0" y="287.74721984602223" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="17" font-weight="700" fill="#0b0b0b" text-anchor="middle">38 %</text>
+<text x="136" y="244.38494439692045" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="16" font-weight="400" fill="#0b0b0b" text-anchor="end">5–20 mkr</text>
+  <rect x="150" y="338.1" width="150" height="67.7" fill="#a9c9ee"/>
+  <rect x="420" y="164.8" width="150" height="33.8" fill="#a9c9ee"/>
+<text x="225.0" y="378.94696321642425" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="17" font-weight="700" fill="#0b0b0b" text-anchor="middle">23 %</text>
+<text x="495.0" y="188.67931136543018" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="17" font-weight="700" fill="#0b0b0b" text-anchor="middle">12 %</text>
+<text x="136" y="357.109495295124" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="16" font-weight="400" fill="#0b0b0b" text-anchor="end">20–100 mkr</text>
+  <rect x="150" y="407.8" width="150" height="40.2" fill="#2a78d6"/>
+  <rect x="420" y="200.6" width="150" height="247.4" fill="#2a78d6"/>
+<text x="225.0" y="434.89221556886224" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="17" font-weight="700" fill="#ffffff" text-anchor="middle">14 %</text>
+<text x="495.0" y="331.2799427782163" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="17" font-weight="700" fill="#ffffff" text-anchor="middle">83 %</text>
+<text x="136" y="426.78443113772454" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="16" font-weight="600" fill="#0b0b0b" text-anchor="end">över 100 mkr</text>
+<text x="700" y="180" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="96" font-weight="700" fill="#2a78d6" text-anchor="start" letter-spacing="-4">14 %</text>
+<text x="700" y="224" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="600" fill="#0b0b0b" text-anchor="start">av kontrakten rymmer</text>
+<text x="700" y="252" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="600" fill="#0b0b0b" text-anchor="start">83 % av pengarna</text>
+<text x="700" y="296" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="400" fill="#52514e" text-anchor="start">658 kontrakt över 100 miljoner delar på</text>
+<text x="700" y="320" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="400" fill="#52514e" text-anchor="start">337 miljarder. De 2 932 kontrakt som är</text>
+<text x="700" y="344" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="400" fill="#52514e" text-anchor="start">under 20 miljoner delar på 20 miljarder.</text>
+  <rect x="700" y="380" width="428" height="1" fill="#e6e5e2"/>
+<text x="700" y="416" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="21" font-weight="600" fill="#0b0b0b" text-anchor="start">Medianupphandlingen: 10 mkr</text>
+<text x="700" y="444" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="21" font-weight="400" fill="#52514e" text-anchor="start">Genomsnittet: 87 mkr</text>
+<text x="700" y="470" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="400" fill="#52514e" text-anchor="start">Nio gånger skillnad — snittet beskriver ingen.</text>
+<text x="72" y="510" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="400" fill="#52514e" text-anchor="start">4 676 kontrakt i kronor. 48 % av annonserna anger belopp; två poster över 10 mdr är uteslutna som orimliga.</text>
+<text x="72" y="532" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="400" fill="#52514e" text-anchor="start">Källa: agentanbud.se — TED, Mercell och LOV. Samma upphandling räknas en gång.</text>
+</svg>
