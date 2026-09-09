@@ -31,7 +31,7 @@
     </div>
     <div class="path-badge">Mest kraft</div>
     <h3>2. MCP — för agentverktyg</h3>
-    <p>Claude Cowork, Claude Code, Codex, Antigravity, Cursor, VS Code — anslut med URL, verktygen listas automatiskt. Inga API-nycklar.</p>
+    <p>ChatGPT, Claude Cowork, Claude Code, Codex, Antigravity, Cursor, VS Code — anslut med URL, verktygen listas automatiskt. Inga API-nycklar.</p>
   </a>
 
   <a href="#rest" class="path-card">
@@ -175,6 +175,7 @@ Börja alltid med att hämta /api/stats för aktuell översikt.</code></pre>
       <button class="code-tab active" data-tab="remote">Remote (URL)</button>
       <button class="code-tab" data-tab="cowork">Claude Cowork</button>
       <button class="code-tab" data-tab="claude">Claude Code</button>
+      <button class="code-tab" data-tab="chatgpt">ChatGPT</button>
       <button class="code-tab" data-tab="codex">Codex (OpenAI)</button>
       <button class="code-tab" data-tab="antigravity">Antigravity (Google)</button>
       <button class="code-tab" data-tab="kilo">Kilo Code</button>
@@ -222,6 +223,20 @@ URL:  https://www.agentanbud.se/mcp</code></pre>
         <pre><code># Ett kommando i terminalen:
 claude mcp add --transport http agentanbud https://www.agentanbud.se/mcp</code></pre>
         <p class="muted">Verifiera med <code>/mcp</code> inne i Claude Code — verktygen listas automatiskt.</p>
+      </div>
+      <div class="code-content hidden" id="tab-chatgpt">
+        <p class="muted" style="margin-top: 0;"><strong>Ingen kod alls.</strong> ChatGPT kan ansluta till en fjärr-MCP-server
+        direkt i appen via <em>Developer mode</em> (kräver Plus, Pro, Business eller Enterprise — inte Free).</p>
+        <pre><code>1. Settings → Apps → Advanced settings → slå på Developer mode
+2. Skapa ny app/plugin:
+     Namn:            Agentanbud
+     MCP Server URL:  https://www.agentanbud.se/mcp
+     Authentication:  No authentication
+3. Aktivera den i en chatt och skriv t.ex.
+     "Bevaka nya upphandlingar inom fastighetsautomation
+      och sammanfatta dem varje morgon"</code></pre>
+        <p class="muted">Verktygen listas automatiskt. Läsning kräver ingen nyckel — det är hela poängen.
+        Menyn hette <em>Connectors</em> fram till juli 2026 och kan heta så i äldre guider.</p>
       </div>
       <div class="code-content hidden" id="tab-codex">
         <pre><code># Codex CLI — lägg till i ~/.codex/config.toml:
