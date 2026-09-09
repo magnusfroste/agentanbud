@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 510" width="1200" height="510" role="img"
+     aria-label="En AI-agent sokte pa 20 olika formuleringar for samma behov inom fastighetsautomation, bland annat vattenmatare, elmatare, SCADA, IoT, NB-IoT och LoRaWAN. 65 sokningar utan filter.">
+  <title>Sa soker en agent</title>
+  <rect width="1200" height="510" rx="16" fill="#fcfcfb"/>
+<text x="72" y="58" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="27" font-weight="600" fill="#0b0b0b" text-anchor="start">Så söker en agent</text>
+<text x="72" y="90" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="19" font-weight="400" fill="#52514e" text-anchor="start">En Codex-agent som bevakar fastighetsautomation på agentanbud.se, september 2026</text>
+<text x="72" y="222" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="128" font-weight="700" fill="#2a78d6" text-anchor="start" letter-spacing="-5">20</text>
+<text x="72" y="268" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="600" fill="#0b0b0b" text-anchor="start">formuleringar för</text>
+<text x="72" y="296" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="600" fill="#0b0b0b" text-anchor="start">ett och samma behov</text>
+<text x="72" y="336" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="400" fill="#52514e" text-anchor="start">En människa skriver ett ord.</text>
+<text x="72" y="360" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="18" font-weight="400" fill="#52514e" text-anchor="start">En agent uttömmer sin nisch.</text>
+  <rect x="470" y="134" width="127" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="482" y="150" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">vattenmätare</text>
+  <rect x="470" y="159" width="67" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="482" y="175" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">scada</text>
+  <rect x="470" y="184" width="76" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="482" y="200" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">mätare</text>
+  <rect x="470" y="209" width="50" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="482" y="225" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">iot</text>
+  <rect x="470" y="234" width="196" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="482" y="250" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">fastighetsautomation</text>
+  <rect x="470" y="259" width="93" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="482" y="275" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">elmätare</text>
+  <rect x="470" y="284" width="110" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="482" y="300" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">smart stad</text>
+  <rect x="470" y="309" width="119" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="482" y="325" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">uppkopplade</text>
+  <rect x="470" y="334" width="101" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="482" y="350" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">telemetri</text>
+  <rect x="470" y="359" width="76" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="482" y="375" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">nb-iot</text>
+  <rect x="770" y="134" width="84" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="782" y="150" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">lorawan</text>
+  <rect x="770" y="159" width="170" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="782" y="175" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">iot konnektivitet</text>
+  <rect x="770" y="184" width="179" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="782" y="200" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">internet of things</text>
+  <rect x="770" y="209" width="162" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="782" y="225" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">fjärrövervakning</text>
+  <rect x="770" y="234" width="84" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="782" y="250" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">dis iot</text>
+  <rect x="770" y="259" width="153" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="782" y="275" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">bredbant tv iot</text>
+  <rect x="770" y="284" width="127" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="782" y="300" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">iot sensorer</text>
+  <rect x="770" y="309" width="342" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="782" y="325" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">styr övervakning fastighetsautomation</text>
+  <rect x="770" y="334" width="299" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="782" y="350" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">service support scada anläggning</text>
+  <rect x="770" y="359" width="265" height="22" rx="11" fill="#2a78d6" opacity="0.10"/>
+<text x="782" y="375" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="500" fill="#0b0b0b" text-anchor="start">scada plc öppningsbara broar</text>
+  <rect x="72" y="400" width="1056" height="1" fill="#e6e5e2"/>
+<text x="72" y="438" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="19" font-weight="400" fill="#0b0b0b" text-anchor="start">65 sökningar · 0 filter på CPV, källa eller region · första anslutningen 31 augusti</text>
+<text x="72" y="464" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="19" font-weight="400" fill="#0b0b0b" text-anchor="start">Sedan dess: 25 anslutningar från Codex och Claude Code på tio dagar.</text>
+<text x="72" y="490" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="400" fill="#52514e" text-anchor="start">Källa: agentanbud.se — anonym användningslogg. Inga IP-adresser, inga konton, bara sökorden.</text>
+</svg>
