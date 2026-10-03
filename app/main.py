@@ -805,6 +805,12 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             if total == 0 and status != "all" and (q or source or authority or cpv):
                 closed_available = _count(content_where, content_args)
 
+            # `results` is what the visitor saw, after the status filter.
+            # `results_all` ignores that filter, so /analytics can tell
+            # "we have no such data" apart from "we have it, but it closed" —
+            # without the two the gap report called both a missing source.
+            results_all = total or closed_available
+
             # Log only human searches: crawlers walk every filter link on this
             # page (authority × source × status …), which used to flood the log
             # with thousands of query-less "searches" and drown the real signal.
@@ -813,7 +819,8 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 _log_usage_safe(conn, "browser", "search", query=q or None,
                                 meta={"source": source, "authority": authority,
                                       "cpv": cpv, "status": status, "bot": 0,
-                                      "segment": _segment_for(q, cpv), "results": total})
+                                      "segment": _segment_for(q, cpv),
+                                      "results": total, "results_all": results_all})
 
             sort_map = {
                 "deadline": "CASE WHEN deadline IS NULL THEN 1 ELSE 0 END, deadline ASC",
@@ -1439,7 +1446,10 @@ Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...
                 _log_usage_safe(conn, "api", "search", query=q,
                                 meta={"source": source, "authority": authority,
                                       "cpv": cpv, "bot": 0,
-                                      "segment": _segment_for(q, cpv), "results": total})
+                                      "segment": _segment_for(q, cpv),
+                                      # No deadline filter on this route, so the
+                                      # visible count IS the unfiltered one.
+                                      "results": total, "results_all": total})
             rows = conn.execute(
                 f"""
                 SELECT tenders.id, source_system, source_id, tender_url, title, authority,
