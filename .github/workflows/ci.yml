@@ -1,0 +1,105 @@
+# Runs on every PR and every push to main.
+#
+# Two jobs, because the two outages this project has had were both invisible
+# to a plain test run:
+#   tests — the regression scripts in scripts/test_*.py, plus an import of the
+#           app with /mcp mounted (an unpinned mcp 2.0 once broke that import
+#           and took the whole site down).
+#   image — builds the real Dockerfile and boots it. A missing COPY line once
+#           shipped an image where /mcp silently 404'd while the rest of the
+#           site looked healthy; only a check against the built image sees that.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"   # same as the Dockerfile
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: App imports with /mcp mounted
+        run: |
+          python - <<'PY'
+          import tempfile
+          import app.main as m
+          app = m.create_app(tempfile.mktemp(suffix=".db"))
+          paths = {getattr(r, "path", "") for r in app.routes}
+          assert any(p.startswith("/mcp") for p in paths), \
+              f"/mcp is not mounted — mcp_http failed to import. Routes: {sorted(paths)}"
+          print("ok: app builds, /mcp mounted")
+          PY
+
+      - name: Regression tests
+        run: |
+          set -e
+          for t in scripts/test_*.py; do
+            echo "::group::$t"
+            python "$t"
+            echo "::endgroup::"
+          done
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the production image
+        run: docker build -t agentanbud:ci .
+
+      - name: Boot it and check what a deploy would ship
+        run: |
+          set -e
+          docker run -d --name app -p 8080:8080 -v "$RUNNER_TEMP/data:/data" agentanbud:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:8080/api/health > health.json 2>/dev/null && break
+            sleep 1
+          done
+          cat health.json || { docker logs app; exit 1; }
+
+          # The image must report the commit it was built from.
+          want=$(git rev-parse HEAD)
+          got=$(python3 -c "import json; print(json.load(open('health.json'))['build']['commit'])")
+          echo "built from $want, image reports $got"
+          [ "$got" = "$want" ] || { echo "::error::build stamp mismatch"; exit 1; }
+
+          # /mcp must be live in the image, not just importable on the runner.
+          curl -fsS -X POST http://localhost:8080/mcp \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"ci"}}}' \
+            -D headers.txt -o init.json
+          cat init.json; echo
+          sid=$(grep -i '^mcp-session-id:' headers.txt | tr -d '\r' | awk '{print $2}')
+          curl -fsS -X POST http://localhost:8080/mcp \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -H "Mcp-Session-Id: $sid" \
+            -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' -o tools.json
+          python3 - <<'PY'
+          import json
+          tools = json.load(open("tools.json"))["result"]["tools"]
+          names = sorted(t["name"] for t in tools)
+          print(f"{len(names)} tools:", ", ".join(names))
+          assert "search_tenders" in names, "search_tenders missing from /mcp"
+          # No admin key in CI, so the blog write tools must be hidden.
+          assert "create_post" not in names, "write tools exposed without a key"
+          PY
+
+      - name: Container logs
+        if: always()
+        run: docker logs app 2>&1 | tail -50 || true
