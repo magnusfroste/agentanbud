@@ -137,6 +137,12 @@ utan träff och en 7-dagarsserie. Agentens egna `get_usage_stats`-anrop
 räknas separat (`operator_calls`) så en operator som pollar inte rapporterar
 mest om sig själv.
 
+`unmet_demand` listar bara termer databasen *fortfarande* inte kan svara på:
+en sökning som gav noll för att statusfiltret gömde passerade träffar, eller
+för att den kombinerades med ett käll-/myndighets-/CPV-filter, är ingen lucka
+i datan och räknas inte. Termer faller ur listan av sig själva när en ny
+källa börjar täcka dem.
+
 Utan MCP: `GET /api/analytics?days=1` ger samma siffror som JSON.
 
 Siffrorna är aggregerade utan personuppgifter — fria att publicera och citera.

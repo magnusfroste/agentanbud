@@ -11,9 +11,14 @@ user-agent strings, no visitor ids are ever stored.
 from __future__ import annotations
 
 import json
+import logging
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+from app.search import build_match, match_subquery
+
+LOG = logging.getLogger(__name__)
 
 
 SEGMENT_OTHER = "Övrigt"
@@ -89,14 +94,60 @@ SELF_REFERENTIAL_TOOLS = ("get_usage_stats",)
 # whether anyone is using the site, so left in they would climb the client
 # ranking and eventually top it — turning "which agents do people connect?"
 # into a picture of our own infrastructure.
-#   smoke — scripts/smoke_test.py, a full handshake on every deploy
+#   smoke        — scripts/smoke_test.py, a full handshake on every deploy
+#   status-check — Easypanel's health probe, on a fixed schedule
 # Counted separately as `monitoring_connects` rather than dropped, so the
 # exclusion stays visible on the page and in the tool output.
 #
 # Keep this list to clients we control. Anything else is a name a real agent
 # could also send, and filtering it silently removes that agent from the very
 # figures this module exists to report.
-SELF_REFERENTIAL_CLIENTS = ("smoke",)
+SELF_REFERENTIAL_CLIENTS = ("smoke", "status-check")
+
+
+# A term only belongs in the gap report if the corpus still has nothing for
+# it. Checking against live data rather than trusting the logged count alone
+# does two things: it clears the false gaps already recorded before searches
+# logged `results_all`, and it retires a term by itself the day a source that
+# covers it is added — no one has to remember to prune the list.
+#
+# Memoised per corpus size so repeated page renders are free; the nightly sync
+# changes the count, which invalidates the cache exactly when it should.
+_HAS_DATA_CACHE: dict[tuple[int, str], bool] = {}
+_HAS_DATA_CACHE_MAX = 2000
+
+
+def _term_has_data(conn, term: str, corpus: int) -> bool:
+    """Does the corpus hold anything for `term` right now?
+
+    Mirrors the search path: FTS first, then the LIKE floor that catches
+    matches inside Swedish compounds (FTS prefixes only anchor at token
+    start). A miss here costs a table scan, a hit returns almost at once, so
+    the common case — a term that does have data and should be dropped from
+    the report — is the cheap one.
+    """
+    key = (corpus, term)
+    if key in _HAS_DATA_CACHE:
+        return _HAS_DATA_CACHE[key]
+    found = True  # on error, assume data exists: never invent a gap
+    try:
+        match = build_match(conn, term)
+        hit = None
+        if match:
+            hit = conn.execute(
+                f"SELECT 1 FROM ({match_subquery()}) LIMIT 1", [match]).fetchone()
+        if hit is None:
+            like = f"%{term}%"
+            hit = conn.execute(
+                "SELECT 1 FROM tenders WHERE title LIKE ? OR description LIKE ? LIMIT 1",
+                [like, like]).fetchone()
+        found = hit is not None
+    except Exception:
+        LOG.exception("gap check failed for %r", term)
+    if len(_HAS_DATA_CACHE) >= _HAS_DATA_CACHE_MAX:
+        _HAS_DATA_CACHE.clear()
+    _HAS_DATA_CACHE[key] = found
+    return found
 
 
 def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
@@ -210,16 +261,44 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         + _and("query IS NOT NULL AND TRIM(query) != '' AND action != 'view'")
         + " GROUP BY term ORDER BY n DESC LIMIT ?", [top])
 
+    # Searches that found nothing — candidates for the gap report, not yet
+    # the report itself. Three conditions beyond "results = 0":
+    #   not a bot    — the gap list was the one metric still counting crawlers.
+    #                  Stricter than REAL_SEARCH, which lets a flagged bot
+    #                  through if it carried a keyword: harmless when counting
+    #                  searches, but a crawler's term is not unmet demand.
+    #                  Rows with no flag at all count as human, as elsewhere.
+    #   results_all  — 0 after the status filter is not a gap if the matches
+    #                  merely closed. Rows logged before results_all existed
+    #                  carry NULL and pass to the live check below.
+    #   no narrowing — a query combined with a source/authority/CPV filter can
+    #                  return 0 while the term itself has plenty of data.
     gap_rows = rows(
         "SELECT LOWER(TRIM(query)) AS term, COUNT(*) AS n FROM usage_log "
-        + _and("action = 'search' AND json_extract(meta, '$.results') = 0"
-               " AND query IS NOT NULL AND TRIM(query) != ''")
-        + " GROUP BY term ORDER BY n DESC LIMIT ?", [top])
+        + _and("action = 'search'"
+               + " AND COALESCE(json_extract(meta, '$.bot'), 0) = 0"
+               + " AND json_extract(meta, '$.results') = 0"
+               + " AND COALESCE(json_extract(meta, '$.results_all'), 0) = 0"
+               + " AND COALESCE(json_extract(meta, '$.source'), '') = ''"
+               + " AND COALESCE(json_extract(meta, '$.authority'), '') = ''"
+               + " AND COALESCE(json_extract(meta, '$.cpv'), '') = ''"
+               + " AND query IS NOT NULL AND TRIM(query) != ''")
+        + " GROUP BY term ORDER BY n DESC LIMIT ?", [top * 4])
 
     tool_rows = rows(
         "SELECT action, COUNT(*) AS n FROM usage_log "
         + _and("action LIKE 'tool:%'") + not_self + not_monitoring
         + " GROUP BY action ORDER BY n DESC LIMIT ?", self_names + self_clients + [top])
+
+    # Drop every candidate the corpus can actually answer today, then keep the
+    # first `top`. Over-fetching above leaves room for the ones removed here.
+    corpus = conn.execute("SELECT COUNT(*) FROM tenders").fetchone()[0] or 0
+    unmet = []
+    for r in gap_rows:
+        if len(unmet) >= top:
+            break
+        if not _term_has_data(conn, r["term"], corpus):
+            unmet.append({"term": r["term"], "n": r["n"]})
 
     # --- 30-day series: human pageviews only, so growth means real interest
     day_rows = conn.execute(
@@ -256,7 +335,7 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         "segments": [{"label": l, "n": n, "pct": int(n / seg_total * 100)}
                      for l, n in seg_counter.most_common()],
         "top_terms": [{"term": r["term"], "n": r["n"]} for r in term_rows],
-        "unmet_demand": [{"term": r["term"], "n": r["n"]} for r in gap_rows],
+        "unmet_demand": unmet,
         "unclassified": [{"term": t, "n": n} for t, n in other_counter.most_common(top)],
         "other_share_pct": int(seg_counter[SEGMENT_OTHER] / seg_total * 100),
         "mcp_tools": [{"tool": r["action"][5:], "n": r["n"]} for r in tool_rows],

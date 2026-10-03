@@ -94,7 +94,14 @@
 {% if unmet %}
 <section class="insight-section">
   <h2>Efterfrågan utan träff</h2>
-  <p class="muted">Sökningar som gav <strong>noll resultat</strong> — luckor i datan. Varje rad är en anledning att lägga till en källa (eller en sponsor som vill fylla den).</p>
+  <p class="muted">
+    Sökningar som gav <strong>noll resultat</strong> — och som databasen
+    <em>fortfarande</em> inte kan svara på. Filtrerade sökningar räknas inte,
+    och inte heller termer där träffarna fanns men hade passerat deadline:
+    det är inte en lucka i datan. Varje rad är en anledning att lägga till en
+    källa (eller en sponsor som vill fylla den). Termer försvinner härifrån av
+    sig själva den dag vi börjar täcka dem.
+  </p>
   <div class="bar-chart">
     {% for u in unmet %}
     <div class="bar-row">
