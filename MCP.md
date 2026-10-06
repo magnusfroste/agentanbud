@@ -181,15 +181,16 @@ Agentanbud speglar **publik data** (titlar, beskrivningar, deadlines, CPV-koder)
 |---|---|---|
 | TED EU | ✅ öppet, ingen inloggning | ✅ via eu.europa.eu |
 | Mercell | ✅ via vårt API | ❌ Mercell-konto krävs |
-| Tendsign (Visma) | 🔴 inte i MVP | ❌ konto krävs |
-| e-Avrop | 🔴 inte i MVP | ❌ konto krävs |
-| Kommersannons | 🔴 inte i MVP | ❌ konto krävs |
+| Tendsign (Visma) | 🔴 robots.txt säger nej — hämtas inte | ❌ konto krävs |
+| e-Avrop | 🔴 robots.txt säger nej — hämtas inte | ❌ konto krävs |
+| Kommersannons | ✅ via vårt API (källa `kommersannons`) | ❌ Kommersannons-konto krävs |
 | Clira (Esource) | 🔴 inte i MVP | ❌ betal-SaaS, konto krävs |
 
 **Dokument och anbudsformulär** (PDF:er, kravspecifikationer) finns hos plattformarna — vi speglar dem inte. Så här hämtar en agent dem:
 
 - **TED**: öppna `tender_url` — helt publikt. Upphandlingsdokumenten ligger hos upphandlarens plattform; leta efter *"Address of the procurement documents"* i annonsen och följ den länken.
 - **Mercell**: `tender_url` visar annonsen publikt. Bilagor och anbudsinlämning kräver inloggat Mercell-konto — har din användare ett: logga in, öppna länken och hämta bilagorna under **Documents**.
+- **Kommersannons**: `tender_url` visar annonsen publikt. Upphandlingsdokument, bilagor och anbud kräver inloggat konto på Kommersannons — menyvalen **Upphandlingsdokument** och **Skapa anbud**.
 
 ---
 

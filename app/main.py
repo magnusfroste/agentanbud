@@ -1102,9 +1102,11 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                     id="mercell",
                     name="Mercell (public search API)",
                     status="live",
-                    description="Svensk upphandlingsplattform som speglar Tendsign, e-Avrop, "
-                                "Kommersannons, TED och andra. Levererar ~65-70% av svensk volym "
-                                "via ett öppet, oautentiserat JSON-API.",
+                    description="Svensk upphandlingsplattform med många kommuner, regioner "
+                                "och myndigheter, även under EU:s tröskelvärden. Publicerar en "
+                                "del annonser från andra annonsdatabaser, men långt ifrån alla: "
+                                "fyra av tio aktiva annonser på Kommersannons fanns varken här "
+                                "eller på TED (okt 2026). Öppet, oautentiserat JSON-API.",
                     method="REST GET",
                     method_note="(oautentiserat, polite user-agent)",
                     url_pattern="https://search-service-api.discover.app.mercell.com/public/api/v1/search",
@@ -1167,6 +1169,25 @@ full data lives in the notice XML body. ~18k SWE awards/year.""",
 Body: {"query": "buyer-country = SWE AND notice-subtype = \\"4\\" OR \\"5\\" ...",
        "fields": ["estimated-value-lot", "future-notice", ...]}
 ~1k SWE PINs/year. Low volume but high strategic value.""",
+                ),
+                make(
+                    id="kommersannons",
+                    name="Kommersannons (Antirio eLite)",
+                    status="live",
+                    description="Registrerad annonsdatabas som främst används av kommuner och "
+                                "kommunala bolag — ofta upphandlingar under EU:s tröskelvärden, "
+                                "som aldrig når TED. Vi sparar bara annonser som inte redan "
+                                "finns via Mercell eller TED, och hoppar över efterannonser "
+                                "(vinnaren kräver inloggning). robots.txt tillåter hämtning.",
+                    method="HTML (ASP.NET WebForms)",
+                    method_note="(listsidor via postback, detaljsida per annons)",
+                    url_pattern="https://www.kommersannons.se/elite/notice/noticelist.aspx",
+                    requires_auth="Nej för att läsa — konto krävs för dokument och anbud",
+                    technical="""GET noticelist.aspx → 20 annonser per sida, ~20 sidor.
+Nästa sida = POST med sidans __VIEWSTATE + btnNext.
+NoticeOverview.aspx?ProcurementId=N → köpare, CPV, förfarande,
+exakt deadline (setDeadline('…', …) i svensk lokaltid → UTC).
+Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning.""",
                 ),
             ]
 
