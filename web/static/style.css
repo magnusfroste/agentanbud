@@ -142,6 +142,40 @@ header.site {
   flex-wrap: wrap;
 }
 
+.footer-sponsors {
+  max-width: var(--max-w);
+  margin: 0 auto 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 2rem;
+}
+
+.footer-sponsors-label {
+  color: var(--muted-2);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.footer-sponsors a {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+
+.footer-sponsors a strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.footer-sponsors a:hover,
+.footer-sponsors a:hover strong {
+  color: var(--accent);
+}
+
 .footer-links {
   display: flex;
   gap: 1.25rem;

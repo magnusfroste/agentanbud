@@ -114,6 +114,12 @@
     {% block content %}{% endblock %}
   </main>
   <footer class="site-footer">
+    {# rel="sponsored": paid placements must say so to search engines. #}
+    <div class="footer-sponsors" aria-label="Sponsorer">
+      <span class="footer-sponsors-label">Sponsorer</span>
+      <a href="https://www.liteit.se" target="_blank" rel="sponsored noopener"><strong>Liteit</strong> utvecklar organisationer där agenter gör mer</a>
+      <a href="https://www.autoversio.ai" target="_blank" rel="sponsored noopener"><strong>Autoversio</strong> möjliggör AI utan att läcka verksamhetens kunskap till tredje part</a>
+    </div>
     <div class="inner">
       <span class="muted">Agentanbud — öppen data för svensk upphandling.
         {%- if BUILD and BUILD.commit_short != "unknown" %}
