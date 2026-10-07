@@ -264,6 +264,9 @@ def run(db_path: str) -> int:
                     skipped_dup += 1
                     continue
                 upsert_tender(conn, rec)
+                # Commit per notice: the detail fetches sit between upserts, and an
+                # open transaction would hold the write lock for the whole crawl.
+                conn.commit()
                 written += 1
         conn.commit()
         msg = (f"kommersannons.se: {written} sparade, {skipped_dup} fanns redan i annan källa, "

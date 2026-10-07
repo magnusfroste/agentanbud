@@ -196,6 +196,7 @@ def run(db_path: str) -> int:
             try:
                 upsert_tender(conn, _map_record(rec))
                 written += 1
+                conn.commit()
             except Exception as exc:
                 LOG.warning("mercell record %r failed: %s", rec.get("id"), exc)
         conn.commit()
