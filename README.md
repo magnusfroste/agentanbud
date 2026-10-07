@@ -237,9 +237,9 @@ klientdokumentation i [`MCP.md`](MCP.md).
 | **TED EU Awards** | Samma API, `notice-type` can-* | ✅ Live (~5 200, ~88% med vinnare) |
 | **TED EU PIN** | Samma API, `notice-type` pin-* | ✅ Live (~295, förhandsinfo) |
 | **Upphandlingsmyndigheten LOV** | Publik JSON-API | ✅ Live (~429 st) |
-| Tendsign / MeForm | Inget öppet API | 🔴 Kräver Selenium (PRs välkomna!) |
+| **Kommersannons** (Antirio eLite) | HTML, ASP.NET-postbacks · robots.txt `allow: /` | ✅ Live (~110 st som inte finns i andra källor) |
+| Tendsign / MeForm | robots.txt Disallow: / | 🔴 Respekterat — ingen scraping |
 | e-Avrop | robots.txt Disallow: / | 🔴 Respekterat — ingen scraping |
-| Kommersannons | Inget öppet API | 🔴 Vanilla HTTP-scrape möjligt |
 | Clira / Esource | Sanctum-skyddat | 🔴 Kräver konto/headless browser |
 
 > **TED-filtrering:** vi filtrerar på `notice-type` (inte legacy `notice-subtype`,
@@ -261,9 +261,17 @@ Kunskapsbasen exponeras via `/kunskap` (HTML) + `/api/knowledge` (JSON)
 direkt från AI-agenter. Användbart för att svara på frågor som "vilka
 miljökrav gäller typiskt vid IT-upphandling?" eller "vad är LOU?".
 
-**Mercell ensamt täcker 65–70% av svensk upphandlingsvolym** (vi verifierade
-det genom att jämföra deras `sourceId`-lista med kända aggregatorers
-`source_url`-domäner — Mercell speglar MeForm, e-Avrop, Kommersannons).
+**Ingen enskild källa täcker allt.** Tidigare stod här att Mercell speglar
+e-Avrop och Kommersannons och täcker 65–70 % av svensk volym. Det håller inte:
+när Kommersannons kopplades in (oktober 2026) fanns fyra av tio aktiva annonser
+där varken på Mercell eller TED. Kommersannons-skrapan sparar därför bara
+annonser som saknas i de andra källorna, och loggar hur många den hoppade över.
+
+Som jämförelse annonserades **18 015** upphandlingar i Sverige under 2025, varav
+drygt sex av tio över EU:s tröskelvärden och därmed på TED
+([Upphandlingsmyndigheten](https://www.upphandlingsmyndigheten.se/globalassets/dokument/publikationer/rapport-om-utvecklingen-pa-upphandlingsomradet-2025.pdf)).
+Luckan finns alltså under tröskelvärdena — de mindre, ofta kommunala
+upphandlingarna — och det är där nya källor gör störst skillnad.
 
 **Vill du lägga till en datakälla?** Öppna en PR med en ny `scraper/*.py`
 som implementerar `run(db_path) -> int`. Registrera den i
@@ -324,8 +332,9 @@ sqlite> SELECT title, authority FROM tenders WHERE cpv_codes LIKE '%72%' LIMIT 5
 
 Vi vill ha bidrag. Speciellt:
 
-- **Nya datakällor** — Tendsign, Kommersannons, kommuners egna
-  upphandlingssidor (kräver ofta Selenium/Playwright). Varje scraper är
+- **Nya datakällor** — kommuners egna upphandlingssidor och andra
+  annonsdatabaser vars robots.txt tillåter det (Tendsign och e-Avrop gör
+  det inte). Varje scraper är
   en ~150-rad fil som implementerar `run(db_path) -> int`. Tänk på
   dubbletter: kolla om annonsen redan finns via Mercell/TED innan du
   lägger till en källa.

@@ -115,10 +115,11 @@ Base URL är https://www.agentanbud.se
 
 ## Endpoints
 
-GET /api/tenders?q={nyckelord}&amp;source={ted|mercell|ted_awards|ted_pin}&amp;authority={namn}&amp;cpv={kod}&amp;page={n}
+GET /api/tenders?q={nyckelord}&amp;source={ted|mercell|kommersannons|ted_awards|ted_pin|lov}&amp;authority={namn}&amp;cpv={kod}&amp;page={n}
   Sök upphandlingar. Paginerat med 25 per sida.
   Parametrar är valfria — bara q ger fulltextsökning.
-  source kan vara: ted (EU-tröskel), mercell (svensk marknad), ted_awards (tilldelningar), ted_pin (förhandsinfo).
+  source kan vara: ted (EU-tröskel), mercell (svensk marknad), kommersannons (mest kommuner, under tröskel),
+  ted_awards (tilldelningar), ted_pin (förhandsinfo), lov (valfrihetssystem).
 
 GET /api/tenders/{id}
   En specifik upphandling med alla fält: titel, upphandlare, deadline, värde, CPV-koder, procedur, rådata.

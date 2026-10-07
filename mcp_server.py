@@ -114,9 +114,11 @@ PROVIDERS = {
     },
     "kommersannons": {
         "name": "Kommersannons",
-        "url": "https://www.kommersannons.se/",
-        "auth": "required",
-        "data_status": "not_implemented",
+        "url": "https://www.kommersannons.se/elite/notice/noticelist.aspx",
+        "auth": "required",  # annonsen är publik, men anbud lämnas inloggad
+        "data_status": "live",
+        "note": "Mest kommuner och kommunala bolag, ofta under EU:s tröskelvärden. "
+                "Bara annonser som inte redan finns via Mercell eller TED.",
     },
     "clira": {
         "name": "Clira (Esource)",
@@ -200,6 +202,12 @@ def _format_tender(t: dict) -> str:
         )
     elif src == "lov":
         lines.append("ℹ️  LOV: löpande ansökan utan deadline. Ansökan görs hos kommunen via länken.")
+    elif src == "kommersannons":
+        lines.append(
+            "ℹ️  Annonsen på länken är publik på Kommersannons. Upphandlingsdokument "
+            "och anbud kräver inloggat konto där — under 'Upphandlingsdokument' "
+            "och 'Skapa anbud' i menyn."
+        )
 
     if t.get("description"):
         desc = t["description"][:400]

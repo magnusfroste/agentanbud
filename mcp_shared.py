@@ -13,7 +13,7 @@ from __future__ import annotations
 
 # Data sources present in the tenders table. Keep in step with
 # scraper/orchestrator.py's registry.
-SOURCES = ["mercell", "ted", "ted_awards", "ted_pin", "lov"]
+SOURCES = ["mercell", "ted", "ted_awards", "ted_pin", "lov", "kommersannons"]
 
 BUYER_TYPES = ["municipal", "regional", "state", "unknown"]
 
@@ -27,9 +27,10 @@ BUYER_TYPE_DESCRIPTION = (
 )
 
 SOURCE_DESCRIPTION = (
-    "Data source filter. 'mercell' = most Swedish tenders, 'ted' = EU-threshold "
-    "notices, 'ted_awards' = awarded contracts, 'ted_pin' = planned procurements, "
-    "'lov' = LOV services."
+    "Data source filter. 'mercell' = Swedish tenders, many below EU thresholds, "
+    "'ted' = EU-threshold notices, 'ted_awards' = awarded contracts, 'ted_pin' = "
+    "planned procurements, 'lov' = LOV services, 'kommersannons' = mostly "
+    "municipal tenders not published elsewhere."
 )
 
 

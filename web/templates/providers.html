@@ -58,27 +58,22 @@
 
 <p class="muted">Kända plattformar vi vill spegla men som kräver mer jobb (vanligtvis: inloggning, headless browser, eller mer komplex HTML-scraping).</p>
 
-<div class="card">
-  <strong>Tendsign (Visma MeForm)</strong> <span class="muted">— ~36% av offentlig.ai:s volym</span>
-  <p>Plattform för svenska upphandlingar från kommuner och myndigheter. Inget publikt API. Scraping kräver Selenium + headless browser. Referens: <a href="https://github.com/yuril93/tendsign.com-scraping" target="_blank" rel="noopener">yuril93/tendsign.com-scraping</a> (Selenium, 2019 — kan behöva uppdateras).</p>
+<div class="card" style="border-left: 4px solid var(--ok);">
+  <strong>Tendsign (Visma MeForm)</strong> <span class="muted">— respekterad, INTE speglad</span>
+  <p>Plattform för svenska upphandlingar från kommuner och myndigheter. Inget publikt API, och <code>robots.txt</code> säger <code>Disallow: /</code>. Vi respekterar det, precis som för e-Avrop — vägen hit går via ett samarbete, inte runt deras val.</p>
 </div>
 
 
 <div class="card" style="border-left: 4px solid var(--ok);">
   <strong>e-Avrop</strong> <span class="muted">— respekterad, INTE speglad</span>
   <p>Vi respekterar e-Avrops <code>robots.txt</code> (<code>Disallow: /</code>). De har gjort ett aktivt val att blockera crawling. Det är deras rätt — plattformen äger sin data, även om underliggande upphandlingar är offentliga handlingar.</p>
-  <p>Om du vill ha e-Avrop-data: gå direkt till <a href="https://www.e-avrop.com/e-Upphandling/" target="_blank" rel="noopener">e-Avrop</a> eller använd Mercell som speglar den mesta av e-Avrops data ändå.</p>
+  <p>Om du vill ha e-Avrop-data: gå direkt till <a href="https://www.e-avrop.com/e-Upphandling/" target="_blank" rel="noopener">e-Avrop</a>. Upphandlingar över EU:s tröskelvärden publiceras dessutom alltid på TED, som vi speglar.</p>
   <p class="muted"><em>Det här är ett medvetet val: vi tror att öppna data byggs bäst genom samarbete, inte konfrontation.</em></p>
 </div>
 
 <div class="card">
   <strong>Clira (Esource)</strong> <span class="muted">— ~5% av volymen</span>
   <p>AI-driven upphandlingsplattform. Backend (<code>api.clira.io</code>) är Sanctum-skyddat och kräver inloggning. Offentlig annonsvisning finns på <code>public.clira.io</code> men data är client-side-renderad. Möjlig lösning: konto + scraping, eller headless browser.</p>
-</div>
-
-<div class="card">
-  <strong>Kommersannons (Elite / upphandling.se)</strong> <span class="muted">— ~12% av volymen (delvis via Mercell)</span>
-  <p>Samlar flera kommuners upphandlingar. Inget publikt API. Innehåll är delvis JS-renderat. Möjlig men inte trivial scraping.</p>
 </div>
 
 <div class="card">
