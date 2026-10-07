@@ -999,15 +999,18 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             v = s["visits"]
             kpis = {"views": v["total"], "human_views": v["human"],
                     "bot_views": v["bot"], "human_pct": v["human_pct"],
-                    "searches": s["searches"], "agent_calls": s["agent_calls"],
+                    "searches": s["searches"], "web_searches": s["web_searches"],
+                    "api_searches": s["api_searches"], "agent_calls": s["agent_calls"],
                     "agent_sessions": s["agent_sessions"],
                     "operator_calls": s["operator_calls"]}
 
             usage_types = [
                 {"label": "Sidvisningar", "n": v["total"], "color": "#2563eb"},
-                {"label": "Webbsökningar", "n": s["searches"], "color": "#8b5cf6"},
+                # Each search in exactly one slice: "Webbsökningar" used to be
+                # every search, so API searches were counted twice in this chart.
+                {"label": "Sökningar på webbsidan", "n": s["web_searches"], "color": "#8b5cf6"},
                 {"label": "MCP-agentverktyg", "n": s["agent_calls"], "color": "#10b981"},
-                {"label": "API-anrop", "n": s["api_calls"], "color": "#f59e0b"},
+                {"label": "Sökningar via REST-API", "n": s["api_searches"], "color": "#f59e0b"},
             ]
             ut_total = sum(u["n"] for u in usage_types) or 1
             usage_types = [{**u, "pct": int(u["n"] / ut_total * 100)}

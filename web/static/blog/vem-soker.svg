@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" width="1200" height="560" role="img"
+     aria-label="Sökningar på Agentanbud 8 september till 7 oktober 2026: 34 825 via REST-API:t, 16 948 via MCP och 854 på webbsidan. 98 procent av sökningarna gjordes av program, inte av människor i sökrutan.">
+  <title>Vem söker på Agentanbud?</title>
+  <rect width="1200" height="560" rx="16" fill="#fcfcfb"/>
+<text x="72.0" y="58.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="27" font-weight="600" fill="#0b0b0b" text-anchor="start">Vem söker på Agentanbud?</text>
+<text x="72.0" y="90.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="19" font-weight="400" fill="#52514e" text-anchor="start">Sökningar 8 september – 7 oktober 2026, per kanal</text>
+<text x="72.0" y="157.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="600" fill="#0b0b0b" text-anchor="start">REST-API:t</text>
+<text x="72.0" y="183.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="15" font-weight="400" fill="#52514e" text-anchor="start">program och agenter, /api/tenders</text>
+  <rect x="430" y="135" width="580.0" height="44" rx="6" fill="#2a78d6"/>
+<text x="1024.0" y="165.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="600" fill="#0b0b0b" text-anchor="start">34 825</text>
+<text x="72.0" y="249.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="600" fill="#0b0b0b" text-anchor="start">MCP</text>
+<text x="72.0" y="275.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="15" font-weight="400" fill="#52514e" text-anchor="start">AI-agenter som söker via search_tenders</text>
+  <rect x="430" y="227" width="282.3" height="44" rx="6" fill="#2a78d6"/>
+<text x="726.3" y="257.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="600" fill="#0b0b0b" text-anchor="start">16 948</text>
+<text x="72.0" y="341.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="600" fill="#0b0b0b" text-anchor="start">Webbsidan</text>
+<text x="72.0" y="367.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="15" font-weight="400" fill="#52514e" text-anchor="start">människor som skriver i sökrutan</text>
+  <rect x="430" y="319" width="14.2" height="44" rx="6" fill="#a9c9ee"/>
+<text x="458.2" y="349.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="22" font-weight="600" fill="#0b0b0b" text-anchor="start">854</text>
+  <rect x="72" y="401" width="1056" height="1" fill="#e6e5e2"/>
+<text x="72.0" y="455.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="40" font-weight="700" fill="#2a78d6" text-anchor="start">98 %</text>
+<text x="192.0" y="433.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="19" font-weight="600" fill="#0b0b0b" text-anchor="start">av sökningarna gjordes av program.</text>
+<text x="192.0" y="459.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="17" font-weight="400" fill="#52514e" text-anchor="start">854 av 52 627 kom från en människa i sökrutan.</text>
+<text x="72.0" y="538.0" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="13" font-weight="400" fill="#8a8884" text-anchor="start">Källa: agentanbud.se/analytics · inga cookies, inga IP-adresser · REST-API = sökningar mot /api/tenders, MCP = search_tenders</text>
+</svg>
