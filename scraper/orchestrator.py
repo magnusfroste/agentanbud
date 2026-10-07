@@ -5,6 +5,11 @@ CLI: `python -m scraper.orchestrator`. The container's cron entry invokes
 this once per day. Each scraper logs its own outcome to `sync_log`; the
 dashboard reads that table to show recent runs.
 
+Every scraper commits per row. Committing once at the end held SQLite's
+write lock for the whole run — Mercell ~80 s, Kommersannons ~4 min, network
+waits included — and every pageview the site tried to log meanwhile failed
+with 'database is locked' (seen in production, October 2026).
+
 Enable/disable individual sources via env vars (see docker-compose.yml):
   SCRAPE_MERCELL=true
   SCRAPE_TED=true

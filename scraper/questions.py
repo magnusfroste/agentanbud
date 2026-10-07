@@ -113,6 +113,7 @@ def run(db_path: str) -> int:
             try:
                 upsert_knowledge(conn, _map_record(rec))
                 written += 1
+                conn.commit()
             except Exception as exc:
                 LOG.warning("questions record %r failed: %s", rec.get("documentId"), exc)
         conn.commit()

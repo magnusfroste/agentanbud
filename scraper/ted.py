@@ -252,6 +252,7 @@ def run(db_path: str, lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> int:
             try:
                 upsert_tender(conn, _map_record(rec))
                 written += 1
+                conn.commit()
             except Exception as exc:
                 LOG.warning("ted record %r failed: %s", rec.get("publication-number"), exc)
         conn.commit()

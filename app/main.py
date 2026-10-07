@@ -17,8 +17,9 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 LOG = logging.getLogger(__name__)
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from jinja2 import Environment, FileSystemLoader
 
 from .cron import get_schedule, next_run
@@ -279,26 +280,35 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
     _PAGEVIEW_SKIP_PREFIXES = ("/static", "/api", "/mcp", "/openapi", "/docs",
                                "/redoc", "/favicon", "/robots", "/sitemap", "/llms")
 
+    def _write_pageview(path: str, is_bot: bool) -> None:
+        conn = connect(db)
+        try:
+            if is_bot:
+                # Crawlers are ~97% of pageviews and we only ever show
+                # the total — aggregate instead of one row per hit.
+                bump_daily_counter(conn, "bot_view")
+            else:
+                _log_usage_safe(conn, "browser", "view", query=path,
+                                meta={"bot": 0})
+        finally:
+            conn.close()
+
     @app.middleware("http")
     async def _log_pageviews(request: Request, call_next):
         response = await call_next(request)
         try:
             path = request.url.path
+            # 2xx only: a redirect is not a visit, and counting it as one
+            # counted every followed redirect twice.
             if (request.method == "GET"
-                    and response.status_code < 400
+                    and 200 <= response.status_code < 300
                     and not path.startswith(_PAGEVIEW_SKIP_PREFIXES)):
                 is_bot = _looks_like_bot(request.headers.get("user-agent", ""))
-                conn = connect(db)
-                try:
-                    if is_bot:
-                        # Crawlers are ~97% of pageviews and we only ever show
-                        # the total — aggregate instead of one row per hit.
-                        bump_daily_counter(conn, "bot_view")
-                    else:
-                        _log_usage_safe(conn, "browser", "view", query=path,
-                                        meta={"bot": 0})
-                finally:
-                    conn.close()
+                # In a thread, not on the event loop: sqlite3 blocks while it
+                # waits for a lock (up to its 5 s timeout), and doing that in
+                # an async middleware stalled every request on the server, not
+                # just this one.
+                await run_in_threadpool(_write_pageview, path, is_bot)
         except Exception:
             LOG.exception("pageview logging failed")
         return response
@@ -733,6 +743,18 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             ))
         finally:
             conn.close()
+
+    # "/upphandlingar" is the address a Swedish speaker — or an agent — guesses
+    # for the search page. It 404'd for a real search (?q=klimatdata, four
+    # times in a day) before this. Permanent, and the query string carries over.
+    @app.get("/upphandlingar", include_in_schema=False)
+    def upphandlingar_redirect(request: Request):
+        q = request.url.query
+        return RedirectResponse("/browse" + (f"?{q}" if q else ""), status_code=301)
+
+    @app.get("/upphandlingar/{tid}", include_in_schema=False)
+    def upphandling_redirect(tid: int):
+        return RedirectResponse(f"/tenders/{tid}", status_code=301)
 
     @app.get("/browse", include_in_schema=False)
     def browse(
