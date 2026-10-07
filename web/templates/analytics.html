@@ -50,8 +50,8 @@
     <div class="l">🤖 Agenter (unika sessioner · {{ kpis.agent_calls }} anrop)</div>
   </div>
   <div class="insight-kpi highlight">
-    <div class="v">{{ "{:,}".format(kpis.searches).replace(",", " ") }}</div>
-    <div class="l">🔍 Sökningar på webben</div>
+    <div class="v">{{ "{:,}".format(kpis.web_searches).replace(",", " ") }}</div>
+    <div class="l">🔍 Sökningar på webbsidan · {{ "{:,}".format(kpis.api_searches).replace(",", " ") }} via API</div>
   </div>
   <div class="insight-kpi">
     <div class="v">{{ "{:,}".format(kpis.bot_views).replace(",", " ") }}</div>
@@ -122,7 +122,7 @@
   <p class="muted">Mänskliga besök + sökningar + agentanrop per dag (crawlers exkluderade). Tillväxten är själva säljargumentet.</p>
   <div class="weekday-chart weekday-chart-30">
     {% for d in daily %}
-    <div class="weekday-col" title="{{ d.day }}: {{ d.n }} ({{ d.views }} besök, {{ d.searches }} sök, {{ d.agents }} agent)">
+    <div class="weekday-col" title="{{ d.day }}: {{ d.n }} ({{ d.views }} besök, {{ d.searches }} sök i alla kanaler, {{ d.agents }} agent)">
       <div class="weekday-bar" style="height: {{ d.pct }}%"></div>
       <span class="weekday-label">{{ d.day }}</span>
     </div>

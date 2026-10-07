@@ -197,6 +197,11 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     view_total = human_views + bot_views
 
     searches = scalar(REAL_SEARCH)
+    # Split by channel. `searches` alone was labelled "Sökningar på webben"
+    # everywhere, but 97.6% of it came from the REST API (Oct 2026): machine
+    # traffic shown as people typing in the search box.
+    web_searches = scalar(REAL_SEARCH + " AND channel = 'browser'")
+    api_searches = scalar(REAL_SEARCH + " AND channel = 'api'")
     agent_calls = scalar("action LIKE 'tool:%'" + not_self + not_monitoring,
                          self_names + self_clients)
     operator_calls = scalar("action IN (%s)" % ",".join("?" * len(self_names)), self_names)
@@ -328,6 +333,8 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         "visits": {"total": view_total, "human": human_views, "bot": bot_views,
                    "human_pct": int(human_views / view_total * 100) if view_total else 0},
         "searches": searches,
+        "web_searches": web_searches,
+        "api_searches": api_searches,
         "agent_calls": agent_calls,
         "agent_sessions": agent_sessions,
         "operator_calls": operator_calls,
@@ -358,7 +365,8 @@ def format_usage_markdown(s: dict) -> str:
     out = [f"# Agentanbud — användning ({period})", "",
            f"**Besök:** {v['total']} ({v['human']} mänskliga / {v['bot']} botar & crawlers, "
            f"{v['human_pct']}% mänskliga)",
-           f"**Sökningar på webben:** {s['searches']}",
+           f"**Sökningar:** {s['searches']} — {s.get('web_searches', 0)} i sökrutan på webbsidan, "
+           f"{s.get('api_searches', 0)} via REST-API:t",
            f"**MCP-anslutningar:** {s.get('mcp_connects', 0)}"
         + (f" (exkl. {s['monitoring_connects']} från vår egen driftövervakning)"
            if s.get("monitoring_connects") else "")
