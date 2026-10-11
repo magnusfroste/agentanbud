@@ -207,9 +207,17 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     operator_calls = scalar("action IN (%s)" % ",".join("?" * len(self_names)), self_names)
     # Excludes the operator's own polling for the same reason agent_calls does —
     # otherwise the reporter counts itself as one of the "unique agents".
+    # "Unique agents": was distinct session hashes, but a client that skips the
+    # handshake gets a new session id from the server on every call, so the
+    # figure counted calls. Now: the visitor id where there is one (it changes
+    # daily, so this is agents per day summed), a handshake session where there
+    # is one, and otherwise once per day.
     agent_sessions = conn.execute(
-        "SELECT COUNT(DISTINCT json_extract(meta, '$._sid')) FROM usage_log "
-        + _and("action LIKE 'tool:%' AND json_extract(meta, '$._sid') IS NOT NULL")
+        "SELECT COUNT(DISTINCT COALESCE(json_extract(meta, '$.v'), "
+        "CASE WHEN json_extract(meta, '$._sid') IN (SELECT json_extract(meta, '$._sid') "
+        "FROM usage_log WHERE action = 'mcp:connect') THEN json_extract(meta, '$._sid') END, "
+        "'anon:' || DATE(created_at))) FROM usage_log "
+        + _and("action LIKE 'tool:%'")
         + not_self + not_monitoring,
         args + self_names + self_clients,
     ).fetchone()[0] or 0
@@ -261,10 +269,44 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     def rows(sql: str, extra: list | None = None):
         return conn.execute(sql, args + (extra or [])).fetchall()
 
-    term_rows = rows(
-        "SELECT LOWER(TRIM(query)) AS term, COUNT(*) AS n FROM usage_log "
-        + _and("query IS NOT NULL AND TRIM(query) != '' AND action != 'view'")
-        + " GROUP BY term ORDER BY n DESC LIMIT ?", [top])
+    # Most searched terms, counted once per searcher per day. Counting calls
+    # let one automated client set the list: an agent that opened a new MCP
+    # session for every call asked the same five questions over 5,600 times
+    # (Oct 2026), and those five filled the top of the public page.
+    #   * Rows with a visitor id (app/visitors.py) count once per id; the id
+    #     already changes every day.
+    #   * Older MCP rows have no visitor id, only a session hash. If that
+    #     session made a handshake, the connect event names the client, and
+    #     the row counts once per client and day. Most did not: 284 of 17,546
+    #     tool calls (Oct 2026) belonged to a session with a handshake; the
+    #     rest were sessionless calls, each given a fresh id by the server.
+    #     Those count once per day. Both are lower bounds, and both age out:
+    #     usage_log keeps 30 days (db.prune_logs), and new rows carry the id.
+    #   * Older REST API rows have neither, and the API is called by scripts:
+    #     one client looped the same building terms hundreds of times. They
+    #     count once per day, the same lower bound.
+    #   * Older web searches count once per row, as before: people typing.
+    sid_client = {sid: client for sid, client in conn.execute(
+        "SELECT json_extract(meta, '$._sid'), json_extract(meta, '$.client') FROM usage_log "
+        "WHERE action = 'mcp:connect' AND json_extract(meta, '$._sid') IS NOT NULL")}
+    askers: dict[str, set] = {}
+    for r in rows(
+        "SELECT id, channel, LOWER(TRIM(query)) AS term, DATE(created_at) AS day, "
+        "json_extract(meta, '$.v') AS v, json_extract(meta, '$._sid') AS sid FROM usage_log "
+        + _and("query IS NOT NULL AND TRIM(query) != '' AND action != 'view'")):
+        if r["v"]:
+            key = ("v", r["v"])
+        elif r["sid"] and sid_client.get(r["sid"]):
+            key = ("c", sid_client[r["sid"]], r["day"])
+        elif r["sid"]:
+            key = ("anon", r["day"])
+        elif r["channel"] == "api":
+            key = ("api", r["day"])
+        else:
+            key = ("r", r["id"])
+        askers.setdefault(r["term"], set()).add(key)
+    term_rows = [{"term": t, "n": len(k)} for t, k in
+                 sorted(askers.items(), key=lambda kv: (-len(kv[1]), kv[0]))[:top]]
 
     # Searches that found nothing — candidates for the gap report, not yet
     # the report itself. Three conditions beyond "results = 0":
@@ -309,6 +351,8 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     day_rows = conn.execute(
         "SELECT DATE(created_at) AS day, "
         "SUM(action = 'view' AND json_extract(meta, '$.bot') = 0) AS views, "
+        "COUNT(DISTINCT CASE WHEN action = 'view' AND json_extract(meta, '$.bot') = 0 "
+        "THEN json_extract(meta, '$.v') END) AS visitors, "
         f"SUM({REAL_SEARCH}) AS searches, "
         f"SUM(action LIKE 'tool:%'{not_self}) AS agents "
         "FROM usage_log WHERE created_at >= DATE('now', '-29 days') GROUP BY day",
@@ -323,8 +367,15 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         v = (r["views"] if r else 0) or 0
         s = (r["searches"] if r else 0) or 0
         a = (r["agents"] if r else 0) or 0
-        daily.append({"date": d.isoformat(), "views": v, "searches": s,
+        u = (r["visitors"] if r else 0) or 0
+        daily.append({"date": d.isoformat(), "views": v, "visitors": u, "searches": s,
                       "agent_calls": a, "total": v + s + a})
+    # Unique visitors exist only from the day visitor ids began; days before
+    # read 0 and must not drag the average down.
+    measured = [d["visitors"] for d in daily[-7:] if d["visitors"]]
+    visitors = {"today": daily[-1]["visitors"],
+                "avg_7d": round(sum(measured) / len(measured)) if measured else None,
+                "measured_days": len(measured)}
 
     return {
         "period_days": days, "since": since,
@@ -341,7 +392,8 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         "api_calls": api_calls,
         "segments": [{"label": l, "n": n, "pct": int(n / seg_total * 100)}
                      for l, n in seg_counter.most_common()],
-        "top_terms": [{"term": r["term"], "n": r["n"]} for r in term_rows],
+        "top_terms": term_rows,
+        "visitors": visitors,
         "unmet_demand": unmet,
         "unclassified": [{"term": t, "n": n} for t, n in other_counter.most_common(top)],
         "other_share_pct": int(seg_counter[SEGMENT_OTHER] / seg_total * 100),

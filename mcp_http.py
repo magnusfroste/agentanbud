@@ -38,6 +38,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
 from app.db import connect, log_usage
+from app import visitors
 import mcp_shared
 import mcp_server
 from mcp_shared import SOURCES, SOURCE_DESCRIPTION
@@ -106,7 +107,8 @@ def _extract_query(name: str, arguments: dict) -> str | None:
     return None
 
 
-def _log_connect(client_info: dict, protocol: str | None, session_id: str | None) -> None:
+def _log_connect(client_info: dict, protocol: str | None, session_id: str | None,
+                 address: str | None = None, user_agent: str | None = None) -> None:
     """Record an MCP handshake: which client connected, and on what protocol.
 
     Aggregate only — the client's self-reported name/version plus the same
@@ -122,6 +124,9 @@ def _log_connect(client_info: dict, protocol: str | None, session_id: str | None
                     "protocol": (protocol or "")[:24]}
             if session_id:
                 meta["_sid"] = hashlib.sha256(session_id.encode()).hexdigest()[:12]
+            v = visitors.visitor_id(conn, address, user_agent)
+            if v:
+                meta["v"] = v
             # query stays None: it feeds the "most searched terms" stats, and
             # a client name is not a search term.
             log_usage(conn, "mcp", "mcp:connect", query=None, meta=meta)
@@ -131,7 +136,8 @@ def _log_connect(client_info: dict, protocol: str | None, session_id: str | None
         LOG.exception("failed to log MCP connect")
 
 
-async def _dispatch_tool(name: str, arguments: dict, session_id: str | None = None) -> list:
+async def _dispatch_tool(name: str, arguments: dict, session_id: str | None = None,
+                         address: str | None = None, user_agent: str | None = None) -> list:
     """Call the right tool handler (reuses the stdio version's logic)."""
     conn = connect(mcp_server.DB_PATH)
     try:
@@ -142,6 +148,11 @@ async def _dispatch_tool(name: str, arguments: dict, session_id: str | None = No
             meta = dict(arguments or {})
             if session_id:
                 meta["_sid"] = hashlib.sha256(session_id.encode()).hexdigest()[:12]
+            # The day's visitor id (app/visitors.py): a client that opens a
+            # new session for every call is still one searcher.
+            v = visitors.visitor_id(conn, address, user_agent)
+            if v:
+                meta["v"] = v
             log_usage(conn, "mcp", f"tool:{name}",
                       query=_extract_query(name, arguments), meta=meta or None)
         except Exception:
@@ -510,7 +521,8 @@ async def mcp_post(request: Request):
             # That is the interesting question about agent adoption, so record
             # it: client name + version only, no per-user identifier.
             _log_connect(params.get("clientInfo") or {},
-                         params.get("protocolVersion"), session_id)
+                         params.get("protocolVersion"), session_id,
+                         visitors.address_of(request.headers), request.headers.get("user-agent"))
             result = {
                 "protocolVersion": "2024-11-05",
                 "serverInfo": {"name": "agentanbud", "version": version_string()},
@@ -536,7 +548,9 @@ async def mcp_post(request: Request):
                     status_code=401,
                     headers={**_cors_headers(), "mcp-session-id": session_id},
                 )
-            content = await _dispatch_tool(name, arguments, session_id)
+            content = await _dispatch_tool(name, arguments, session_id,
+                                           visitors.address_of(request.headers),
+                                           request.headers.get("user-agent"))
             result = _format_result(content)
         else:
             return JSONResponse(
