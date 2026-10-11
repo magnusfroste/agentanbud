@@ -155,3 +155,28 @@ CREATE TRIGGER IF NOT EXISTS tenders_fts_au AFTER UPDATE ON tenders BEGIN
     INSERT INTO tenders_fts(rowid, title, description, authority)
     VALUES (new.id, new.title, new.description, new.authority);
 END;
+
+-- ---------------------------------------------------------------------------
+-- Operations (/ops). Both tables are small and written off the request path.
+
+-- One row per process start: which build ran, from when. This is the
+-- deployment history — the build stamp alone only says what is running now.
+CREATE TABLE IF NOT EXISTS deploys (
+    started_at  TEXT PRIMARY KEY,
+    version     TEXT,
+    commit_sha  TEXT,
+    built_at    TEXT
+);
+
+-- Requests per hour, by kind (page/api/mcp/asset/ops) and status class
+-- (2/3/4/5). Counted in memory and flushed once a minute by a background
+-- thread, never one write per request: per-request writes are what held the
+-- database lock before.
+CREATE TABLE IF NOT EXISTS request_hourly (
+    hour        TEXT NOT NULL,      -- 'YYYY-MM-DDTHH' UTC
+    kind        TEXT NOT NULL,
+    status      INTEGER NOT NULL,   -- status // 100
+    n           INTEGER NOT NULL DEFAULT 0,
+    ms_total    REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (hour, kind, status)
+);

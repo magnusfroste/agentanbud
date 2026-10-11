@@ -138,45 +138,10 @@
   // === Admin fetch helper ===
   // When ADMIN_API_KEY is set on the server, mutating endpoints require the
   // X-Admin-Key header. Ask once, keep in localStorage, retry on 401.
-  const ADMIN_KEY = 'ot-admin-key';
-  window.adminFetch = async function (url, opts = {}) {
-    const doFetch = (key) => fetch(url, {
-      ...opts,
-      headers: { ...(opts.headers || {}), ...(key ? { 'X-Admin-Key': key } : {}) },
-    });
-    let r = await doFetch(localStorage.getItem(ADMIN_KEY) || '');
-    if (r.status === 401) {
-      const key = prompt('Admin-nyckel krävs (X-Admin-Key):');
-      if (key) {
-        localStorage.setItem(ADMIN_KEY, key.trim());
-        r = await doFetch(key.trim());
-      }
-    }
-    return r;
-  };
-
-  // === Sync button (dashboard) ===
-  const syncBtn = document.getElementById('sync-btn');
-  if (syncBtn) {
-    syncBtn.addEventListener('click', async () => {
-      syncBtn.disabled = true;
-      syncBtn.innerHTML = '<span class="spinner"></span> Kör sync...';
-      try {
-        const r = await window.adminFetch('/api/sync', { method: 'POST' });
-        if (r.status === 409) {
-          window.otToast('Sync körs redan', 'warn', 4000);
-          return;
-        }
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        window.otToast('Sync startad — laddar om om 60s', 'ok');
-        setTimeout(() => location.reload(), 60000);
-      } catch (e) {
-        window.otToast('Fel: ' + e.message, 'error', 5000);
-        syncBtn.disabled = false;
-        syncBtn.textContent = 'Kör sync nu';
-      }
-    });
-  }
+  // Admin actions moved to /ops behind login (a session cookie). The key
+  // used to be kept here in localStorage, readable by any script on the
+  // page; remove it wherever it is still stored.
+  try { localStorage.removeItem('ot-admin-key'); } catch (e) {}
 
   // === Live dashboard refresh (every 30s) ===
   if (document.querySelector('[data-auto-refresh]')) {

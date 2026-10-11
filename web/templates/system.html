@@ -23,17 +23,9 @@
     </div>
   </div>
   
-  <!-- Hidden until an admin key is present. The server already refuses these
-       without one — /api/sync answers 401, and the smoke test asserts it on
-       every deploy — so this is not the access control. It is so a visitor is
-       never shown a button that appears to run something and then asks for a
-       password. The page itself stays public: sync history, schedule and build
-       are the transparency, the actions are not. -->
-  <div class="sync-actions" id="sync-actions" hidden>
-    <button id="sync-btn" class="btn primary">Kör sync nu</button>
-    <button id="backfill-btn" class="btn ghost">Backfill TED (90 dagar)</button>
-  </div>
-  <div id="sync-result" class="sync-result"></div>
+  <!-- The actions that change data live behind login on /ops. This page is
+       the transparency: status, schedule, sync history and sources. -->
+  <p class="muted">Administration och maskinens hälsa: <a href="/ops">Drift</a> (inloggning).</p>
 </section>
 
 <!-- SYNC LOG -->
@@ -76,33 +68,4 @@
   </table>
 </section>
 
-<script>
-  async function triggerSync(url, label) {
-    const result = document.getElementById('sync-result');
-    result.innerHTML = `<span class="spinner"></span> ${label} startar...`;
-    try {
-      const r = await window.adminFetch(url, { method: 'POST' });
-      const data = await r.json();
-      if (r.status === 202) {
-        result.innerHTML = `✅ ${label} startad. Laddar om om 60s.`;
-        setTimeout(() => location.reload(), 60000);
-      } else if (r.status === 401) {
-        result.innerHTML = `❌ Fel admin-nyckel`;
-      } else {
-        result.innerHTML = `❌ ${data.error || data.detail || 'Okänt fel'}`;
-      }
-    } catch (e) {
-      result.innerHTML = `❌ ${e}`;
-    }
-  }
-
-  // Same key adminFetch uses, so the buttons appear exactly for whoever can
-  // actually use them — no separate notion of "logged in".
-  if (localStorage.getItem('ot-admin-key')) {
-    document.getElementById('sync-actions')?.removeAttribute('hidden');
-  }
-
-  document.getElementById('sync-btn')?.addEventListener('click', () => triggerSync('/api/sync', 'Sync'));
-  document.getElementById('backfill-btn')?.addEventListener('click', () => triggerSync('/api/backfill?days=90', 'Backfill'));
-</script>
 {% endblock %}

@@ -160,8 +160,18 @@ Alla **läs**-endpoints är öppna — ingen auth, inga tokens.
 
 **Skriv-/adminåtgärder** (`POST /api/sync`, `/api/backfill`, `/api/reset-ted`,
 `/api/repair-links`, `/api/admin/query`, `POST/PUT /api/blog`) kräver headern
-`X-Admin-Key` när `ADMIN_API_KEY` är satt. Datan synkas ändå automatiskt varje
-dag — du behöver normalt aldrig trigga något.
+`X-Admin-Key` när `ADMIN_API_KEY` är satt, eller en inloggad session på `/ops`.
+Datan synkas ändå automatiskt varje dag — du behöver normalt aldrig trigga något.
+
+**Öppet och låst.** Upphandlingarna är offentliga, och det är hur tjänsten
+används också: `/analytics` och `/system` är öppna med flit. Maskinens hälsa,
+versioner, fel och knapparna som ändrar data ligger på `/ops`. Inloggningen är
+`ADMIN_API_KEY`, inskriven en gång; sessionen är en signerad cookie (HttpOnly,
+Secure, SameSite=Strict) i åtta timmar, och byter du nyckeln loggas alla ut.
+Nyckeln sparas aldrig i webbläsaren och visas aldrig, inte ens inloggad: sidan
+säger bara att den är definierad. `GET /api/ops` ger samma ögonblicksbild som
+JSON, med header eller session. Vill du ha ett lager till framför: Cloudflare
+Access med e-postkod på `/ops*` och `/api/ops*`, utan att röra resten.
 
 **Upptäckbarhet (SEO/AEO):** `GET /robots.txt` (välkomnar AI-crawlers),
 `GET /llms.txt` (kort beskrivning för LLM:er) och `GET /sitemap.xml` (alla
@@ -182,6 +192,7 @@ en innehålls-hash (`?v=…`) så design-ändringar slår igenom direkt.
 | `/kunskap` | Kunskapsbank (LOU/LOV, hållbarhetskriterier) |
 | `/analytics` | Cookie-fri användningsstatistik (människor / agenter / crawlers) |
 | `/system` | Driftstatus + synk-loggar |
+| `/ops` | **Drift, bakom inloggning:** maskinens last, minne och disk, versioner och driftsättningar, anrop per timme, fel, synkloggen, agentklienter och adminåtgärderna |
 
 **Exempel:**
 

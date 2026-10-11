@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Drift — logga in{% endblock %}
+
+{% block content %}
+<h1>Drift</h1>
+<p class="sub">Maskinens hälsa, versioner, fel och administration. Det som rör upphandlingarna och hur tjänsten används är öppet på <a href="/system">Driftstatus</a> och <a href="/analytics">Analys</a>.</p>
+
+<section class="insight-section">
+  {% if not configured %}
+    <p class="sync-error">Inloggning är avstängd: ingen admin-nyckel är konfigurerad på servern.</p>
+  {% else %}
+    {% if error == "nyckel" %}<p class="sync-error">Fel nyckel.</p>{% endif %}
+    {% if error == "last" %}<p class="sync-error">För många försök. Vänta en kvart och försök igen.</p>{% endif %}
+    <form method="post" action="/ops/login" class="search-form">
+      <label for="key" class="muted">Admin-nyckel</label>
+      <input type="password" id="key" name="key" autocomplete="current-password" required class="filter-input" />
+      <button type="submit" class="btn primary">Logga in</button>
+    </form>
+    <p class="muted">Nyckeln skickas en gång och sparas inte i webbläsaren. Inloggningen gäller i åtta timmar.</p>
+  {% endif %}
+</section>
+
+<script>
+  // The old admin buttons kept the key in localStorage. It is not used any
+  // more; remove it wherever it is still lying around.
+  try { localStorage.removeItem('ot-admin-key'); } catch (e) {}
+</script>
+{% endblock %}

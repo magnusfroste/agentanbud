@@ -239,7 +239,7 @@
 <section class="empty">
   <div class="icon">📭</div>
   <p>Databasen är tom. Kör en synk för att hämta upphandlingar.</p>
-  <button id="empty-sync" class="btn primary">Kör första synken</button>
+  <a href="/ops" class="btn primary">Logga in och starta synk</a>
 </section>
 {% endif %}
 
@@ -347,24 +347,4 @@
   <a href="/browse" class="btn primary large">Utforska upphandlingar →</a>
 </section>
 
-<script>
-  document.getElementById("empty-sync")?.addEventListener("click", async () => {
-    const btn = document.getElementById("empty-sync");
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Startar...';
-    try {
-      const r = await window.adminFetch("/api/sync", { method: "POST" });
-      if (r.status === 202) {
-        btn.textContent = "Startad — laddar om om 60s";
-        setTimeout(() => location.reload(), 60000);
-      } else {
-        btn.textContent = "Kunde inte starta";
-        btn.disabled = false;
-      }
-    } catch (e) {
-      btn.textContent = "Fel: " + e;
-      btn.disabled = false;
-    }
-  });
-</script>
 {% endblock %}
