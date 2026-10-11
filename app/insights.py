@@ -5,8 +5,13 @@ Kept in one place so every surface reports the same figures: the HTML page,
 and the MCP `get_usage_stats` tool an operator agent uses to write about
 traffic. Two copies of these rules would drift the moment one is tuned.
 
-Everything here is aggregate and non-identifying — no IP addresses, no
-user-agent strings, no visitor ids are ever stored.
+Everything returned here is aggregate and non-identifying. What is stored:
+no IP addresses and no user-agent strings, ever. Rows do carry a visitor id
+(app/visitors.py) — a hash of a salt that is deleted after a day, the address
+and the user agent — so a visitor can be counted once per day but not
+followed across days, and not recomputed once the salt is gone. The id never
+leaves the log: no figure here exposes it. The privacy text on /analytics
+says the same and must change if this does.
 """
 from __future__ import annotations
 

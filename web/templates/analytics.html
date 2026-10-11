@@ -9,20 +9,30 @@
 <section class="insight-section">
   <h2>🔒 Integritet</h2>
   <p>
-    Inga cookies. Ingen tredjepartsanalys — inget Google Analytics, ingen
-    Mixpanel, inga spårningspixlar. Allt du ser här kommer från vår egen
-    logg, i vår egen SQLite, på vår egen server.
+    Inga cookies för besökare. Ingen tredjepartsanalys — inget Google
+    Analytics, ingen Mixpanel, inga spårningspixlar. Allt du ser här kommer
+    från vår egen logg, i vår egen SQLite, på vår egen server.
   </p>
   <p class="muted">
     Vi sparar kanal (webbläsare/MCP/API), sökterm, en grov flagga för om
-    besöket är mänskligt eller automatiserat, och tidpunkt. För MCP-agenter
-    sparar vi också en kortlivad, anonym sessions-hash så vi kan räkna
-    <em>unika agenter</em> — den är slumpmässig, går inte att koppla till en
-    person och kan inte vändas tillbaka till agentens id. Vid anslutning
-    sparar vi dessutom det <em>klientnamn och den version</em> agenten själv
-    uppger (t.ex. "claude-code 1.2.0") — det beskriver programvaran, inte
-    användaren. Ingen IP-adress, ingen User-Agent-sträng, inget som kopplar
-    en sökning eller en anslutning till en person.
+    besöket är mänskligt eller automatiserat, och tidpunkt.
+  </p>
+  <p class="muted">
+    För att kunna räkna <em>unika</em> besökare och agenter — och räkna en
+    sökterm en gång per sökande i stället för en gång per anrop — får varje
+    besökare ett <em>besöks-id per dygn</em>: en kort hash av dagens
+    slumpmässiga salt, IP-adressen och webbläsarens namn. Saltet byts varje
+    dygn och gårdagens raderas, så samma besökare får ett nytt id nästa dag
+    och gamla id:n går inte att räkna fram igen, inte ens för oss.
+    IP-adressen och webbläsarens namn sparas aldrig, bara hashen. Id:t
+    knyter ihop det en besökare gör under ett dygn, men inte till en person,
+    och följer inte med till nästa dag. Loggen rensas efter 30 dagar.
+  </p>
+  <p class="muted">
+    När en agent ansluter via MCP sparar vi dessutom det
+    <em>klientnamn och den version</em> agenten själv uppger (t.ex.
+    "claude-code 1.2.0") — det beskriver programvaran, inte användaren.
+    Den enda cookien på sajten är inloggningen till vår egen driftpanel.
   </p>
 </section>
 
