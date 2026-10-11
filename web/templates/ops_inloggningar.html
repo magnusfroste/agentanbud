@@ -1,0 +1,25 @@
+{% extends "ops_base.html" %}
+{% block ops %}
+{% set s = d.summary %}{% set m = d.summary_30d %}
+<div class="grid">
+  <div class="card"><h2>Senaste 24 h <span class="pill {{ 'warning' if s.failed else 'ok' }}">{{ s.failed ~ ' misslyckade' if s.failed else 'Inga misslyckade' }}</span></h2>
+    <div class="kv"><div>Lyckade</div><div>{{ s.ok }}</div><div>Misslyckade</div><div>{{ s.failed }}</div></div></div>
+  <div class="card"><h2>Senaste 30 dagarna</h2>
+    <div class="kv"><div>Lyckade</div><div>{{ m.ok }}</div><div>Misslyckade</div><div>{{ m.failed }}</div>
+      {% for o, n in m.by_outcome.items() if o not in ('inloggad',) %}<div>{{ o|capitalize }}</div><div>{{ n }}</div>{% endfor %}</div></div>
+  <div class="card"><h2>Senast inloggad</h2>
+    {% if s.last_ok %}<div class="big" style="font-size:20px">{{ s.last_ok.at[:16] }}</div><div class="small">{{ s.last_ok.country or 'okänt land' }} · UTC</div>{% else %}<div class="small">—</div>{% endif %}</div>
+</div>
+<div class="card"><h2>Alla försök</h2>
+  {% if d.logins %}
+  <table><thead><tr><th>Tid (UTC)</th><th>Utfall</th><th>Land</th><th>Klient</th><th>Webbläsare</th></tr></thead><tbody>
+  {% for l in d.logins %}
+    {% set cls = {'inloggad': 'ok', 'utloggad': 'muted', 'fel nyckel': 'warning'}.get(l.outcome, 'critical') %}
+    <tr><td>{{ l.at[:16] }}</td><td><span class="pill {{ cls }}">{{ l.outcome }}</span></td><td>{{ l.country or '—' }}</td>
+        <td class="small mono">{{ l.client or '' }}</td><td class="small">{{ (l.user_agent or '')[:70] }}</td></tr>
+  {% endfor %}
+  </tbody></table>
+  {% else %}<div class="empty">Inga inloggningar loggade ännu.</div>{% endif %}
+  <div class="note">Sparas i 90 dagar. Klienten är en envägshash av adressen, samma som spärren efter fem fel använder; själva adressen sparas inte. Landet kommer från Cloudflare.</div>
+</div>
+{% endblock %}

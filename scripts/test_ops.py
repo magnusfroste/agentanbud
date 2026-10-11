@@ -53,8 +53,10 @@ print("Logged out")
 c = client("198.51.100.1")
 r = c.get("/ops")
 check("/ops without a session shows the login form", r.status_code == 200 and 'action="/ops/login"' in r.text)
-check("…and nothing from the dashboard", "Driftsättningar" not in r.text and "Rader per tabell" not in r.text)
+check("…and nothing from the dashboard", "Behöver uppmärksamhet" not in r.text and "Ops Central" not in r.text)
 check("/api/ops without a session is refused", c.get("/api/ops").status_code == 401)
+r2 = c.get("/ops/maskinen", follow_redirects=False)
+check("an ops page without a session sends you to the login", r2.status_code == 303 and r2.headers["location"] == "/ops")
 check("/ops is never cached", r.headers.get("cache-control") == "no-store")
 check("/ops is not indexed", "noindex" in (r.headers.get("x-robots-tag") or ""))
 check("robots.txt keeps crawlers off /ops", "Disallow: /ops" in c.get("/robots.txt").text)
@@ -76,14 +78,25 @@ check("the cookie does not contain the key", KEY not in set_cookie)
 
 print("Logged in")
 r = c.get("/ops")
-check("/ops shows the dashboard", r.status_code == 200 and "Rader per tabell" in r.text and "Driftsättningar" in r.text)
+check("/ops shows the overview", r.status_code == 200 and "Behöver uppmärksamhet" in r.text and "Ops Central" in r.text)
 check("the key appears nowhere on the page", KEY not in r.text)
+SECTIONS = ["maskinen", "trafik", "fel", "synk", "agenter", "inloggningar", "versioner", "konfiguration"]
+check("the side panel links every page", all(f'href="/ops/{x}"' in r.text for x in SECTIONS))
+MARK = {"maskinen": "Rader per tabell", "trafik": "Anrop per timme", "fel": "sedan start", "synk": "Kör synk nu",
+        "agenter": "Senaste verktygsanropen", "inloggningar": "Alla försök", "versioner": "Driftsättningar",
+        "konfiguration": "Admin-nyckel"}
+for x in SECTIONS:
+    rx = c.get(f"/ops/{x}")
+    check(f"/ops/{x} renders its page", rx.status_code == 200 and MARK[x] in rx.text and 'class="active"' in rx.text, f"HTTP {rx.status_code}")
+    check(f"/ops/{x} does not contain the key", KEY not in rx.text)
+check("an unknown ops page is a 404", c.get("/ops/nope").status_code == 404)
 r = c.get("/api/ops")
 check("/api/ops answers", r.status_code == 200)
 body = r.text
 check("the key appears nowhere in /api/ops", KEY not in body)
-check("…which says only that a key is defined", r.json()["config"]["admin_key_defined"] is True)
-check("the deployment history has this start", len(r.json()["deploys"]) >= 1)
+check("…which says only that a key is defined", r.json()["konfiguration"]["config"]["admin_key_defined"] is True)
+check("the deployment history has this start", len(r.json()["versioner"]["deploys"]) >= 1)
+check("…and every page is in it", all(x in r.json() for x in SECTIONS + ["overview", "warnings"]))
 
 print("Writes on the session")
 q = {"sql": "SELECT 1"}
@@ -126,6 +139,22 @@ try:
     check("/api/ops stays closed", n.get("/api/ops").status_code == 403)
 finally:
     m.ADMIN_API_KEY = saved
+
+print("The login log")
+lg = c.get("/ops/inloggningar").text
+check("failed and successful logins are listed", "fel nyckel" in lg and "inloggad" in lg)
+check("…the side panel counts the failures", 'class="count warning"' in c.get("/ops").text)
+conn = connect(DB)
+try:
+    dump = "\n".join(str(tuple(row)) for row in conn.execute("SELECT * FROM ops_logins"))
+finally:
+    conn.close()
+check("no address is stored in the login log", "198.51.100." not in dump, dump[:200])
+check("a lockout is logged as one", "spärrad" in dump)
+lo = TestClient(APP, base_url=BASE, headers={"cf-connecting-ip": "198.51.100.9", "cf-ipcountry": "se"})
+login(lo)
+lo.post("/ops/logout", follow_redirects=False)
+check("logout is logged too, with Cloudflare's country", "utloggad" in c.get("/ops/inloggningar").text and ">SE<" in c.get("/ops/inloggningar").text)
 
 print("Counting")
 conn = connect(DB)

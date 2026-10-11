@@ -169,7 +169,9 @@ versioner, fel och knapparna som ändrar data ligger på `/ops`. Inloggningen ä
 `ADMIN_API_KEY`, inskriven en gång; sessionen är en signerad cookie (HttpOnly,
 Secure, SameSite=Strict) i åtta timmar, och byter du nyckeln loggas alla ut.
 Nyckeln sparas aldrig i webbläsaren och visas aldrig, inte ens inloggad: sidan
-säger bara att den är definierad. `GET /api/ops` ger samma ögonblicksbild som
+säger bara att den är definierad. Varje inloggningsförsök loggas i 90 dagar
+med utfall, land från Cloudflare och en envägshash av adressen, aldrig
+adressen själv. `GET /api/ops` ger samma ögonblicksbild som
 JSON, med header eller session. Vill du ha ett lager till framför: Cloudflare
 Access med e-postkod på `/ops*` och `/api/ops*`, utan att röra resten.
 
@@ -192,7 +194,7 @@ en innehålls-hash (`?v=…`) så design-ändringar slår igenom direkt.
 | `/kunskap` | Kunskapsbank (LOU/LOV, hållbarhetskriterier) |
 | `/analytics` | Cookie-fri användningsstatistik (människor / agenter / crawlers) |
 | `/system` | Driftstatus + synk-loggar |
-| `/ops` | **Drift, bakom inloggning:** maskinens last, minne och disk, versioner och driftsättningar, anrop per timme, fel, synkloggen, agentklienter och adminåtgärderna |
+| `/ops` | **Ops Central, bakom inloggning:** översikt med det som behöver uppmärksamhet, och en sida var för maskinen, trafiken, fel, synk (med adminåtgärderna), agenter, inloggningar, versioner och konfiguration |
 
 **Exempel:**
 

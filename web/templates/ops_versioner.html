@@ -1,0 +1,14 @@
+{% extends "ops_base.html" %}
+{% block ops %}
+<div class="grid">
+  <div class="card"><h2>Kör nu</h2>
+    <div class="big mono" style="font-size:22px">{{ d.build.commit_short }}</div>
+    <div class="kv" style="margin-top:10px"><div>Version</div><div>{{ d.build.version }}</div><div>Byggd</div><div>{{ d.build.built_at }}</div><div>Startad</div><div>{{ d.started_at }}</div></div></div>
+</div>
+<div class="card"><h2>Driftsättningar</h2>
+  <table><thead><tr><th>Startad (UTC)</th><th>Version</th><th>Commit</th><th>Byggd</th></tr></thead><tbody>
+  {% for x in d.deploys %}<tr><td>{{ x.started_at }}</td><td>{{ x.version }}</td>
+    <td class="mono">{% if x.url %}<a href="{{ x.url }}" rel="noopener">{{ (x.commit_sha or '')[:7] }}</a>{% else %}{{ x.commit_sha }}{% endif %}</td><td class="small">{{ x.built_at }}</td></tr>{% endfor %}
+  </tbody></table>
+  <div class="note">En rad per gång appen startat. Två rader med samma commit är en omstart, inte en ny version.</div></div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "ops_base.html" %}
+{% block ops %}
+{% set t = d.t24 %}
+<div class="grid">
+  <div class="card"><h2>Senaste 24 h</h2><div class="big">{{ t.total|format_num }}</div><div class="small">anrop</div>
+    <div class="kv" style="margin-top:10px"><div>Sidor</div><div>{{ t.page|format_num }}</div><div>API</div><div>{{ t.api|format_num }}</div><div>MCP</div><div>{{ t.mcp|format_num }}</div></div></div>
+  <div class="card"><h2>Kvalitet <span class="pill {{ 'critical' if t.errors else 'ok' }}">{{ t.errors ~ ' serverfel' if t.errors else 'Inga serverfel' }}</span></h2>
+    <div class="big">{{ t.avg_ms }} ms</div><div class="small">snittid per anrop</div></div>
+  <div class="card"><h2>Besökaradress från Cloudflare</h2>
+    {% set vh = d.visitor_header %}
+    <div class="big">{{ vh.seen|format_num }}</div><div class="small">anrop med adress sedan start · {{ vh.missing }} utan</div>
+    <div class="note">Utan den kan unika besökare inte räknas. Ingen adress sparas: bara en hash som byter salt varje dygn.</div></div>
+</div>
+<div class="card"><h2>Anrop per timme, 48 h</h2>
+  {% if d.requests %}{% set w = 18 %}{% set hmax = 140 %}{% set peak = d.peak %}
+  <div class="chart"><svg viewBox="0 0 {{ d.slots|length * w + 44 }} {{ hmax + 30 }}" role="img" aria-label="Anrop per timme, senaste 48 timmarna">
+    <line x1="44" x2="{{ d.slots|length * w + 44 }}" y1="{{ 15 + hmax }}" y2="{{ 15 + hmax }}" stroke="var(--line)"/>
+    <line x1="44" x2="{{ d.slots|length * w + 44 }}" y1="15" y2="15" stroke="var(--line)" stroke-dasharray="3 3"/>
+    <text x="0" y="19">{{ peak|format_num }}</text><text x="0" y="{{ 15 + hmax }}">0</text>
+    {% for h in d.slots %}{% set bh = (h.total / peak * hmax) if peak else 0 %}{% set eh = (h.errors / peak * hmax) if peak else 0 %}
+      <rect x="{{ 44 + loop.index0 * w }}" y="{{ 15 + hmax - bh }}" width="{{ w - 2 }}" height="{{ bh }}" rx="1.5" fill="var(--accent)" opacity="0.55"><title>{{ h.hour }}:00 — {{ h.total }} anrop (sidor {{ h.page }}, API {{ h.api }}, MCP {{ h.mcp }}), {{ h.errors }} serverfel, snitt {{ h.avg_ms }} ms</title></rect>
+      {% if eh > 0 %}<rect x="{{ 44 + loop.index0 * w }}" y="{{ 15 + hmax - eh }}" width="{{ w - 2 }}" height="{{ eh }}" fill="var(--crit)"></rect>{% endif %}
+    {% endfor %}
+    <text x="44" y="{{ hmax + 28 }}">{{ d.slots[0].hour[5:].replace('T', ' ') }}:00</text>
+    <text x="{{ d.slots|length * w + 44 }}" y="{{ hmax + 28 }}" text-anchor="end">nu</text>
+  </svg></div>
+  <table style="margin-top:12px"><thead><tr><th>Timme (UTC)</th><th class="num">Totalt</th><th class="num">Sidor</th><th class="num">API</th><th class="num">MCP</th><th class="num">Filer</th><th class="num">Serverfel</th><th class="num">Snitt</th></tr></thead><tbody>
+    {% for h in d.requests|reverse %}{% if loop.index <= 12 %}<tr><td>{{ h.hour }}</td><td class="num">{{ h.total }}</td><td class="num">{{ h.page }}</td><td class="num">{{ h.api }}</td><td class="num">{{ h.mcp }}</td><td class="num">{{ h.asset }}</td><td class="num">{% if h.errors %}<span class="pill critical">{{ h.errors }}</span>{% else %}0{% endif %}</td><td class="num">{{ h.avg_ms }} ms</td></tr>{% endif %}{% endfor %}
+  </tbody></table>
+  {% else %}<div class="empty">Inga mätvärden ännu. Räknarna skrivs en gång i minuten efter start.</div>{% endif %}
+</div>
+{% endblock %}

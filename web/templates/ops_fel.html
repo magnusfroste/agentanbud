@@ -1,0 +1,13 @@
+{% extends "ops_base.html" %}
+{% block ops %}
+{% if not d.errors and not d.recent_5xx %}<div class="card"><div class="empty">Inga fel sedan start.</div></div>{% endif %}
+{% if d.recent_5xx %}<div class="card"><h2>Serverfel (5xx)</h2>
+  <table><thead><tr><th>Tid (UTC)</th><th>Sökväg</th><th class="num">Status</th><th class="num">Tid</th></tr></thead><tbody>
+  {% for e in d.recent_5xx %}<tr><td>{{ e.at }}</td><td class="mono">{{ e.path }}</td><td class="num"><span class="pill critical">{{ e.status }}</span></td><td class="num">{{ e.ms }} ms</td></tr>{% endfor %}
+  </tbody></table></div>{% endif %}
+{% if d.errors %}<div class="card"><h2>Loggade fel</h2>
+  <table><thead><tr><th>Tid (UTC)</th><th>Var</th><th>Meddelande</th></tr></thead><tbody>
+  {% for e in d.errors %}<tr><td>{{ e.at }}</td><td class="small mono">{{ e.logger }}</td><td>{{ e.message }}{% if e.exception %}<div class="small">{{ e.exception }}</div>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% endif %}
+<div class="note">Sedan appen startade. Sökvägar visas utan frågesträng, eftersom den kan innehålla vad någon sökte på.</div>
+{% endblock %}

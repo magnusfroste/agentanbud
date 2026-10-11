@@ -32,7 +32,7 @@ import shutil
 import threading
 import time
 from collections import defaultdict, deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -407,3 +407,89 @@ def config_status(admin_key: str, allow_open_admin: bool) -> dict:
         "log_level": os.environ.get("LOG_LEVEL", "INFO"),
         "scrapers": scrapers,
     }
+
+
+# ---------------------------------------------------------------------------
+# Login log
+# ---------------------------------------------------------------------------
+LOGIN_KEEP_DAYS = 90
+
+
+def record_login(conn, request, outcome: str) -> None:
+    """One row per attempt. Rare enough to write directly; a failure to log
+    must never be the reason a login fails, so callers wrap this."""
+    conn.execute(
+        "INSERT INTO ops_logins (outcome, client, country, user_agent) VALUES (?, ?, ?, ?)",
+        (outcome, client_id(request)[:12],
+         (request.headers.get("cf-ipcountry") or "")[:2].upper() or None,
+         (request.headers.get("user-agent") or "")[:160] or None),
+    )
+    conn.execute("DELETE FROM ops_logins WHERE at < datetime('now', ?)", (f"-{LOGIN_KEEP_DAYS} days",))
+    conn.commit()
+
+
+def logins(conn, limit: int = 200) -> list[dict]:
+    return [dict(r) for r in conn.execute(
+        "SELECT at, outcome, client, country, user_agent FROM ops_logins ORDER BY id DESC LIMIT ?",
+        (limit,)).fetchall()]
+
+
+def login_summary(conn, hours: int = 24) -> dict:
+    rows = conn.execute(
+        "SELECT outcome, COUNT(*) n, COUNT(DISTINCT client) clients FROM ops_logins "
+        "WHERE at >= datetime('now', ?) GROUP BY outcome", (f"-{hours} hours",)).fetchall()
+    by = {r["outcome"]: r["n"] for r in rows}
+    failed = sum(n for o, n in by.items() if o not in ("inloggad", "utloggad"))
+    last_ok = conn.execute(
+        "SELECT at, country FROM ops_logins WHERE outcome = 'inloggad' ORDER BY id DESC LIMIT 1").fetchone()
+    return {"ok": by.get("inloggad", 0), "failed": failed, "by_outcome": by,
+            "last_ok": dict(last_ok) if last_ok else None}
+
+
+def uptime(started: str) -> str:
+    try:
+        t0 = datetime.strptime(started, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return "—"
+    s = int((datetime.now(timezone.utc) - t0).total_seconds())
+    d, s = divmod(s, 86400)
+    h, s = divmod(s, 3600)
+    m = s // 60
+    return f"{d} d {h} h" if d else (f"{h} h {m} min" if h else f"{m} min")
+
+
+def traffic(rows: list[dict]) -> dict:
+    """Totals over the hours given (requests_by_hour rows)."""
+    tot = sum(r["total"] for r in rows)
+    ms = sum(r["avg_ms"] * r["total"] for r in rows)
+    return {"total": tot, "errors": sum(r["errors"] for r in rows),
+            "page": sum(r["page"] for r in rows), "api": sum(r["api"] for r in rows),
+            "mcp": sum(r["mcp"] for r in rows), "avg_ms": round(ms / tot) if tot else 0}
+
+
+# The pages of the ops central, in the order the side panel shows them.
+SECTIONS = [
+    ("", "Översikt"),
+    ("maskinen", "Maskinen"),
+    ("trafik", "Trafik"),
+    ("fel", "Fel"),
+    ("synk", "Synk"),
+    ("agenter", "Agenter"),
+    ("inloggningar", "Inloggningar"),
+    ("versioner", "Versioner"),
+    ("konfiguration", "Konfiguration"),
+]
+
+
+def hour_slots(rows: list[dict], hours: int = 48) -> list[dict]:
+    """The last `hours` hours, oldest first, empty hours included. The chart
+    is scaled to the slots, not to how many hours happen to have data, or one
+    hour of data fills the whole width."""
+    by = {r["hour"]: r for r in rows}
+    now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    out = []
+    for i in range(hours - 1, -1, -1):
+        h = (now - timedelta(hours=i)).strftime("%Y-%m-%dT%H")
+        out.append(by.get(h) or {"hour": h, "total": 0, "errors": 0, "avg_ms": 0,
+                                 "page": 0, "api": 0, "mcp": 0, "asset": 0, "ops": 0})
+    return out

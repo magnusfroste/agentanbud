@@ -188,3 +188,16 @@ CREATE TABLE IF NOT EXISTS visitor_salt (
     day   TEXT PRIMARY KEY,
     salt  TEXT NOT NULL
 );
+
+-- Logins to /ops: who tried, from where, with what result. A security log,
+-- so it keeps 90 days. The client is the same one-way hash the lockout uses,
+-- never the address; the country is Cloudflare's CF-IPCountry.
+CREATE TABLE IF NOT EXISTS ops_logins (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now')),
+    outcome     TEXT NOT NULL,     -- inloggad | fel nyckel | spärrad | fel ursprung | ingen nyckel | utloggad
+    client      TEXT,
+    country     TEXT,
+    user_agent  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ops_logins_at ON ops_logins(at DESC);

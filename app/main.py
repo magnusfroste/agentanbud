@@ -1056,44 +1056,127 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         return summary
 
     # ---- Operations (/ops): logged in, never public ----
-    # See app/ops.py for what lives here and why. Login is ADMIN_API_KEY,
-    # typed once; the session is an HttpOnly signed cookie.
+    # The ops central: an overview on /ops and one page per area, behind a
+    # side panel. See app/ops.py for what lives here and why. Login is
+    # ADMIN_API_KEY, typed once; the session is an HttpOnly signed cookie.
     def _ops_authed(request: Request) -> bool:
         return ops.session_valid(request.cookies.get(ops.COOKIE), ADMIN_API_KEY)
 
-    def _ops_snapshot() -> dict:
+    def _log_login(request: Request, outcome: str) -> None:
+        try:
+            conn = connect(db)
+            try:
+                ops.record_login(conn, request, outcome)
+            finally:
+                conn.close()
+        except Exception:
+            LOG.exception("ops: could not record login")
+
+    def _syncs(conn, limit: int = 30) -> list[dict]:
+        return [dict(r) for r in conn.execute(
+            "SELECT source, run_at, count, status, message FROM sync_log ORDER BY run_at DESC LIMIT ?",
+            (limit,)).fetchall()]
+
+    def _next_run() -> Optional[str]:
+        nr = next_run()
+        return nr.strftime("%Y-%m-%d %H:%M UTC") if nr else None
+
+    def _section_data(section: str, conn) -> dict:
+        """Only what one page shows: the machine probe alone takes half a
+        second, so the other pages do not pay for it."""
+        if section == "maskinen":
+            return {"machine": ops.machine(), "storage": ops.storage(db, conn)}
+        if section == "trafik":
+            rows = ops.requests_by_hour(conn, 48)
+            slots = ops.hour_slots(rows, 48)
+            return {"requests": rows, "slots": slots, "peak": max((h["total"] for h in slots), default=0),
+                    "t24": ops.traffic(slots[-24:]), "visitor_header": dict(visitors.HEADER)}
+        if section == "fel":
+            return {"errors": list(ops.ERRORS.items)[::-1], "recent_5xx": list(ops.STATS.recent_5xx)[::-1]}
+        if section == "synk":
+            return {"syncs": _syncs(conn), "cron_schedule": get_schedule(), "next_run": _next_run(),
+                    "cron_log": ops.cron_log_tail()}
+        if section == "agenter":
+            usage = _usage(7)
+            return {"mcp": {"clients": usage.get("mcp_clients", []), "tools": usage.get("mcp_tools", []),
+                            "recent": ops.recent_mcp_calls(conn)},
+                    "agent_calls": usage.get("agent_calls"), "agent_sessions": usage.get("agent_sessions")}
+        if section == "inloggningar":
+            return {"logins": ops.logins(conn), "summary": ops.login_summary(conn, 24),
+                    "summary_30d": ops.login_summary(conn, 24 * 30)}
+        if section == "versioner":
+            return {"build": build_info(), "started_at": started_at(), "deploys": ops.deploys(conn)}
+        if section == "konfiguration":
+            return {"config": ops.config_status(ADMIN_API_KEY, ALLOW_OPEN_ADMIN),
+                    "visitor_header": dict(visitors.HEADER)}
+        return {}
+
+    def _overview(conn) -> dict:
+        m = ops.machine()
+        st = ops.storage(db, conn)
+        rows = ops.requests_by_hour(conn, 24)
+        t24 = ops.traffic(rows)
+        syncs = _syncs(conn, 12)
+        last_run = syncs[0]["run_at"][:16] if syncs else None
+        sync_errors = [s for s in syncs if s["status"] != "ok" and (s["run_at"] or "")[:10] == (syncs[0]["run_at"] or "")[:10]]
+        usage = _usage(7)
+        logins_24 = ops.login_summary(conn, 24)
+        cfg = ops.config_status(ADMIN_API_KEY, ALLOW_OPEN_ADMIN)
+        errors = len(ops.ERRORS.items) + len(ops.STATS.recent_5xx)
+        vh = dict(visitors.HEADER)
+        disk_low = bool(st.get("disk_total")) and st.get("disk_free", 0) / st["disk_total"] < 0.15
+        warnings = []
+        if not cfg["admin_key_defined"]:
+            warnings.append(("konfiguration", "Admin-nyckeln saknas"))
+        if cfg["open_admin"]:
+            warnings.append(("konfiguration", "Öppen admin är PÅ"))
+        if errors:
+            warnings.append(("fel", f"{errors} fel sedan start"))
+        if sync_errors:
+            warnings.append(("synk", f"{len(sync_errors)} källa/källor misslyckades vid senaste synken"))
+        if logins_24["failed"]:
+            n = logins_24["failed"]
+            warnings.append(("inloggningar", f"{n} misslyckad{'e' if n > 1 else ''} inloggning{'ar' if n > 1 else ''} senaste dygnet"))
+        if vh["missing"] and not vh["seen"]:
+            warnings.append(("trafik", "Cloudflare skickar ingen besökaradress"))
+        if disk_low:
+            warnings.append(("maskinen", "Lite ledig disk"))
+        return {"build": build_info(), "uptime": ops.uptime(started_at()), "machine": m, "storage": st,
+                "t24": t24, "errors": errors, "syncs_last": last_run, "sync_errors": len(sync_errors),
+                "next_run": _next_run(), "agents": usage.get("mcp_clients", [])[:3],
+                "agent_calls_7d": usage.get("agent_calls"), "visitors": usage.get("visitors"),
+                "logins": logins_24, "config": cfg, "warnings": warnings, "disk_low": disk_low}
+
+    def _nav(conn) -> dict:
+        """Badges for the side panel: cheap counts only."""
+        failed = ops.login_summary(conn, 24)["failed"]
+        return {"fel": len(ops.ERRORS.items) + len(ops.STATS.recent_5xx), "inloggningar": failed}
+
+    def _ops_render(request: Request, section: str) -> Response:
         conn = connect(db)
         try:
             ops.STATS.flush(conn)
-            syncs = [dict(r) for r in conn.execute(
-                "SELECT source, run_at, count, status, message FROM sync_log ORDER BY run_at DESC LIMIT 30"
-            ).fetchall()]
-            usage = _usage(7)
-            nr = next_run()
-            return {
-                "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "build": build_info(),
-                "started_at": started_at(),
-                "machine": ops.machine(),
-                "storage": ops.storage(db, conn),
-                "requests": ops.requests_by_hour(conn, 48),
-                "recent_5xx": list(ops.STATS.recent_5xx)[::-1],
-                "errors": list(ops.ERRORS.items)[::-1],
-                "deploys": ops.deploys(conn),
-                "syncs": syncs,
-                "cron_schedule": get_schedule(),
-                "next_run": nr.strftime("%Y-%m-%d %H:%M UTC") if nr else None,
-                "cron_log": ops.cron_log_tail(),
-                "mcp": {
-                    "clients": usage.get("mcp_clients", []),
-                    "tools": usage.get("mcp_tools", []),
-                    "recent": ops.recent_mcp_calls(conn),
-                },
-                "config": ops.config_status(ADMIN_API_KEY, ALLOW_OPEN_ADMIN),
-                # CF-Connecting-IP seen/missing since start. If Cloudflare stops
-                # sending it, every visitor becomes unknown and the count reads 0.
-                "visitor_header": dict(visitors.HEADER),
-            }
+            data = _overview(conn) if section == "" else _section_data(section, conn)
+            nav = _nav(conn)
+        finally:
+            conn.close()
+        title = dict(ops.SECTIONS)[section]
+        return HTMLResponse(render(f"ops_{section or 'overview'}.html", request=request,
+                                   sections=ops.SECTIONS, section=section, title=title,
+                                   nav=nav, d=data,
+                                   generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")))
+
+    def _ops_snapshot() -> dict:
+        """Everything, for GET /api/ops."""
+        conn = connect(db)
+        try:
+            ops.STATS.flush(conn)
+            out = {"generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                   "overview": {k: v for k, v in _overview(conn).items() if k != "warnings"},
+                   "warnings": [w for _, w in _overview(conn)["warnings"]]}
+            for slug, _ in ops.SECTIONS[1:]:
+                out[slug] = _section_data(slug, conn)
+            return out
         finally:
             conn.close()
 
@@ -1102,41 +1185,56 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         if not _ops_authed(request):
             return HTMLResponse(render("ops_login.html", request=request, error=fel,
                                        configured=bool(ADMIN_API_KEY)))
-        snap = _ops_snapshot()
-        peak = max((h["total"] for h in snap["requests"]), default=0)
-        return HTMLResponse(render("ops.html", request=request, s=snap, peak=peak))
+        return _ops_render(request, "")
+
+    _OPS_SLUGS = {slug for slug, _ in ops.SECTIONS if slug}
+
+    @app.get("/ops/{section}", include_in_schema=False)
+    def ops_section(section: str, request: Request):
+        if section not in _OPS_SLUGS:
+            raise HTTPException(status_code=404, detail="no such ops page")
+        if not _ops_authed(request):
+            return RedirectResponse("/ops", status_code=303)
+        return _ops_render(request, section)
 
     @app.post("/ops/login", include_in_schema=False)
     async def ops_login(request: Request):
         if not ADMIN_API_KEY:
+            _log_login(request, "ingen nyckel")
             return RedirectResponse("/ops?fel=ingen-nyckel", status_code=303)
         if not ops.same_origin(request):
+            _log_login(request, "fel ursprung")
             raise HTTPException(status_code=403, detail="cross-origin request refused")
         who = ops.client_id(request)
         if ops.LOGINS.locked(who):
+            _log_login(request, "spärrad")
             return RedirectResponse("/ops?fel=last", status_code=303)
         from urllib.parse import parse_qs
         body = (await request.body()).decode("utf-8", errors="replace")
         key = (parse_qs(body).get("key") or [""])[0].strip()
         if not key or not hmac.compare_digest(key, ADMIN_API_KEY):
             ops.LOGINS.fail(who)
+            _log_login(request, "fel nyckel")
             LOG.warning("ops: failed login")
             return RedirectResponse("/ops?fel=nyckel", status_code=303)
         ops.LOGINS.succeed(who)
+        _log_login(request, "inloggad")
         resp = RedirectResponse("/ops", status_code=303)
         resp.set_cookie(ops.COOKIE, ops.make_session(ADMIN_API_KEY), max_age=ops.SESSION_SECONDS,
                         httponly=True, secure=True, samesite="strict", path="/")
         return resp
 
     @app.post("/ops/logout", include_in_schema=False)
-    def ops_logout():
+    def ops_logout(request: Request):
+        if _ops_authed(request):
+            _log_login(request, "utloggad")
         resp = RedirectResponse("/", status_code=303)
         resp.delete_cookie(ops.COOKIE, path="/", secure=True, httponly=True, samesite="strict")
         return resp
 
     @app.get("/api/ops", include_in_schema=False)
     def api_ops(request: Request):
-        """The ops snapshot as JSON. X-Admin-Key or a logged-in session."""
+        """The ops central as JSON. X-Admin-Key or a logged-in session."""
         _require_admin(request)
         return _ops_snapshot()
 

@@ -1,0 +1,32 @@
+{% extends "ops_base.html" %}
+{% block ops %}
+{% set m = d.machine %}{% set st = d.storage %}
+<div class="grid">
+  <div class="card"><h2>Appen</h2>
+    <div class="big">{{ m.container_cpu_pct if m.container_cpu_pct is not none else '—' }} %</div>
+    <div class="small">CPU, andel av hela servern ({{ m.cpus }} kärnor), mätt över en halv sekund</div>
+    <div class="kv" style="margin-top:10px">
+      <div>Minne</div><div>{{ m.container_mem_bytes|bytes }}{% if m.container_mem_limit %} av {{ m.container_mem_limit|bytes }}{% else %} (ingen gräns satt){% endif %}</div>
+    </div>
+  </div>
+  <div class="card"><h2>Servern <span class="pill muted">hela värden</span></h2>
+    <div class="big">{{ (m.host_load or ['—'])|join(' · ') }}</div>
+    <div class="small">Last, 1 · 5 · 15 minuter</div>
+    <div class="kv" style="margin-top:10px">
+      <div>Ledigt minne</div><div>{{ m.host_mem_available|bytes }} av {{ m.host_mem_total|bytes }}</div>
+    </div>
+  </div>
+  <div class="card"><h2>Lagring</h2>
+    <div class="big">{{ st.disk_free|bytes }}</div>
+    <div class="small">ledigt av {{ st.disk_total|bytes }}</div>
+    <div class="kv" style="margin-top:10px">
+      <div>Databas</div><div>{{ st.db_bytes|bytes }}</div>
+      <div>WAL</div><div>{{ st.wal_bytes|bytes }}</div>
+    </div>
+  </div>
+</div>
+<div class="card"><h2>Rader per tabell</h2>
+  <table><tbody>{% for t, n in st.rows.items() %}<tr><td class="mono">{{ t }}</td><td class="num">{{ n|format_num if n is not none else '—' }}</td></tr>{% endfor %}</tbody></table>
+</div>
+<div class="note">Appens siffror kommer från dess cgroup. Last och minne för servern är hela värdens. Andra containrar syns inte här, med flit: det skulle kräva Docker-socketen, och den ska ingen publik app ha.</div>
+{% endblock %}
