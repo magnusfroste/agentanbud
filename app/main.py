@@ -1035,6 +1035,26 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         finally:
             conn.close()
 
+    # ---- Usage summary, cached briefly ----
+    # usage_summary scans all of usage_log (about 2 s on a month of data) and
+    # is behind /analytics, /api/analytics and /ops, which crawlers hit too.
+    # With one worker a minute's staleness is a far better trade than a 2 s
+    # stall on every visit. Recomputed at most once a minute per period.
+    _usage_cache: dict = {}
+
+    def _usage(days: Optional[int] = None) -> dict:
+        now = _time.monotonic()
+        hit = _usage_cache.get(days)
+        if hit and now - hit[0] < 60:
+            return hit[1]
+        conn = connect(db)
+        try:
+            summary = usage_summary(conn, days=days)
+        finally:
+            conn.close()
+        _usage_cache[days] = (now, summary)
+        return summary
+
     # ---- Operations (/ops): logged in, never public ----
     # See app/ops.py for what lives here and why. Login is ADMIN_API_KEY,
     # typed once; the session is an HttpOnly signed cookie.
@@ -1048,7 +1068,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             syncs = [dict(r) for r in conn.execute(
                 "SELECT source, run_at, count, status, message FROM sync_log ORDER BY run_at DESC LIMIT 30"
             ).fetchall()]
-            usage = usage_summary(conn, days=7)
+            usage = _usage(7)
             nr = next_run()
             return {
                 "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -1130,7 +1150,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         """
         conn = connect(db)
         try:
-            s = usage_summary(conn)
+            s = _usage(None)
 
             colors = ["#2563eb", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444",
                       "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6",
@@ -1205,7 +1225,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         """
         conn = connect(db)
         try:
-            return usage_summary(conn, days=days)
+            return _usage(days)
         finally:
             conn.close()
 
