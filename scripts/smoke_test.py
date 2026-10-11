@@ -323,6 +323,16 @@ def main() -> int:
     st_q, _ = post_json(base, "/api/admin/query", {"sql": "SELECT 1"})
     check("POST /api/admin/query utan nyckel avvisas", st_q in (401, 403), f"HTTP {st_q}")
 
+    # /ops is the logged-in operations page. Logged out it must show only
+    # the login form, and its JSON must refuse.
+    st_o, body_o, _ = get(base, "/ops")
+    page_o = (body_o or b"").decode("utf-8", errors="replace")
+    check("GET /ops utan inloggning visar bara inloggningen",
+          st_o == 200 and "/ops/login" in page_o and "Driftsättningar" not in page_o,
+          f"HTTP {st_o}")
+    st_a, _ = get_json(base, "/api/ops")
+    check("GET /api/ops utan nyckel avvisas", st_a in (401, 403), f"HTTP {st_a}")
+
     if not writes_open:
         check("POST /api/blog utan nyckel avvisas", st in (401, 403), f"HTTP {st}")
         for path in ["/api/sync", "/api/reset-ted", "/api/repair-links",

@@ -29,6 +29,7 @@ from .db import (
     record_post_event,
 )
 from .version import build_info, version_string, started_at
+from . import ops
 from .insights import usage_summary, REAL_SEARCH
 from .search import (build_match, match_subquery, like_floor_sql,
                      rank_order_sql)
@@ -120,8 +121,31 @@ def _require_admin(request: Request) -> None:
                    "Set ADMIN_API_KEY, or ALLOW_OPEN_ADMIN=true for local development.",
         )
     supplied = request.headers.get("x-admin-key", "")
-    if not hmac.compare_digest(supplied, ADMIN_API_KEY):
-        raise HTTPException(status_code=401, detail="missing or invalid X-Admin-Key")
+    if supplied:
+        if not hmac.compare_digest(supplied, ADMIN_API_KEY):
+            raise HTTPException(status_code=401, detail="missing or invalid X-Admin-Key")
+        return
+    # A logged-in /ops session counts too, so the dashboard's buttons work
+    # without the key ever reaching the browser. A write on the cookie must
+    # come from this site's own pages.
+    if ops.session_valid(request.cookies.get(ops.COOKIE), ADMIN_API_KEY):
+        if request.method not in ("GET", "HEAD") and not ops.same_origin(request):
+            raise HTTPException(status_code=403, detail="cross-origin request refused")
+        return
+    raise HTTPException(status_code=401, detail="missing or invalid X-Admin-Key")
+
+
+def _bytes(n) -> str:
+    """1536 -> '1.5 KB'. For the ops page."""
+    try:
+        n = float(n)
+    except (TypeError, ValueError):
+        return "—"     # None, or a value the container could not read
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"
 
 
 def _num(n) -> str:
@@ -238,8 +262,18 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
     # in the scraper orchestrator instead (see scraper/orchestrator.py).
 
     app = FastAPI(title="Agentanbud", version=version_string())
+    try:
+        _c = connect(db)
+        try:
+            ops.record_deploy(_c, build_info(), started_at())
+        finally:
+            _c.close()
+    except Exception as exc:
+        LOG.warning("deploy record failed: %s", exc)
+    ops.install(db, connect)
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=True)
     env.filters["format_num"] = _num
+    env.filters["bytes"] = _bytes
     # Python builtins used in templates (Jinja doesn't expose these by default).
     env.globals.update(abs=abs, min=min, max=max)
     # Build stamp for the footer — lets anyone (including us) see which commit
@@ -278,7 +312,8 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
 
     # ---- Pageview logging (for /analytics) ----
     _PAGEVIEW_SKIP_PREFIXES = ("/static", "/api", "/mcp", "/openapi", "/docs",
-                               "/redoc", "/favicon", "/robots", "/sitemap", "/llms")
+                               "/redoc", "/favicon", "/robots", "/sitemap", "/llms",
+                               "/ops")
 
     def _write_pageview(path: str, is_bot: bool) -> None:
         conn = connect(db)
@@ -313,6 +348,25 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
             LOG.exception("pageview logging failed")
         return response
 
+    # ---- Request counters for /ops ----
+    # In memory, flushed once a minute by ops.install's thread: no database
+    # write on the request path.
+    import time as _time
+
+    @app.middleware("http")
+    async def _count_requests(request: Request, call_next):
+        t0 = _time.perf_counter()
+        status = 500
+        try:
+            response = await call_next(request)
+            status = response.status_code
+            return response
+        finally:
+            try:
+                ops.STATS.record(request.url.path, status, (_time.perf_counter() - t0) * 1000)
+            except Exception:
+                pass
+
     # ---- Security headers ----
     # Deliberate CSP: allows our own inline <script>/<style> (copy buttons,
     # theme toggle, blog beacon) but blocks all external sources, framing
@@ -343,6 +397,9 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
         h.setdefault("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
         if not request.url.path.startswith(_CSP_SKIP):
             h.setdefault("Content-Security-Policy", _CSP)
+        if request.url.path.startswith(("/ops", "/api/ops")):
+            h["Cache-Control"] = "no-store"
+            h["X-Robots-Tag"] = "noindex, nofollow"
         return response
 
     # ---- Discovery files: robots.txt, llms.txt, sitemap.xml ----
@@ -363,7 +420,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
         # Plain /browse and all real pages stay open. NOTE: a crawler that
         # matches a specific User-agent group ignores the * group, so the
         # Disallow must be repeated in every group.
-        group_rules = ["Allow: /", "Disallow: /browse?"]
+        group_rules = ["Allow: /", "Disallow: /browse?", "Disallow: /ops"]
         lines = [
             "# Agentanbud — öppen upphandlingsdata. AI-agenter och crawlers välkomna.",
             "# /browse?* (filterkombinationer) undanbedes — indexera /tenders/{id} istället.",
@@ -971,6 +1028,88 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             return HTMLResponse(render("system.html", health=health, syncs=syncs, sources=sources, request=request))
         finally:
             conn.close()
+
+    # ---- Operations (/ops): logged in, never public ----
+    # See app/ops.py for what lives here and why. Login is ADMIN_API_KEY,
+    # typed once; the session is an HttpOnly signed cookie.
+    def _ops_authed(request: Request) -> bool:
+        return ops.session_valid(request.cookies.get(ops.COOKIE), ADMIN_API_KEY)
+
+    def _ops_snapshot() -> dict:
+        conn = connect(db)
+        try:
+            ops.STATS.flush(conn)
+            syncs = [dict(r) for r in conn.execute(
+                "SELECT source, run_at, count, status, message FROM sync_log ORDER BY run_at DESC LIMIT 30"
+            ).fetchall()]
+            usage = usage_summary(conn, days=7)
+            nr = next_run()
+            return {
+                "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "build": build_info(),
+                "started_at": started_at(),
+                "machine": ops.machine(),
+                "storage": ops.storage(db, conn),
+                "requests": ops.requests_by_hour(conn, 48),
+                "recent_5xx": list(ops.STATS.recent_5xx)[::-1],
+                "errors": list(ops.ERRORS.items)[::-1],
+                "deploys": ops.deploys(conn),
+                "syncs": syncs,
+                "cron_schedule": get_schedule(),
+                "next_run": nr.strftime("%Y-%m-%d %H:%M UTC") if nr else None,
+                "cron_log": ops.cron_log_tail(),
+                "mcp": {
+                    "clients": usage.get("mcp_clients", []),
+                    "tools": usage.get("mcp_tools", []),
+                    "recent": ops.recent_mcp_calls(conn),
+                },
+                "config": ops.config_status(ADMIN_API_KEY, ALLOW_OPEN_ADMIN),
+            }
+        finally:
+            conn.close()
+
+    @app.get("/ops", include_in_schema=False)
+    def ops_page(request: Request, fel: Optional[str] = None):
+        if not _ops_authed(request):
+            return HTMLResponse(render("ops_login.html", request=request, error=fel,
+                                       configured=bool(ADMIN_API_KEY)))
+        snap = _ops_snapshot()
+        peak = max((h["total"] for h in snap["requests"]), default=0)
+        return HTMLResponse(render("ops.html", request=request, s=snap, peak=peak))
+
+    @app.post("/ops/login", include_in_schema=False)
+    async def ops_login(request: Request):
+        if not ADMIN_API_KEY:
+            return RedirectResponse("/ops?fel=ingen-nyckel", status_code=303)
+        if not ops.same_origin(request):
+            raise HTTPException(status_code=403, detail="cross-origin request refused")
+        who = ops.client_id(request)
+        if ops.LOGINS.locked(who):
+            return RedirectResponse("/ops?fel=last", status_code=303)
+        from urllib.parse import parse_qs
+        body = (await request.body()).decode("utf-8", errors="replace")
+        key = (parse_qs(body).get("key") or [""])[0].strip()
+        if not key or not hmac.compare_digest(key, ADMIN_API_KEY):
+            ops.LOGINS.fail(who)
+            LOG.warning("ops: failed login")
+            return RedirectResponse("/ops?fel=nyckel", status_code=303)
+        ops.LOGINS.succeed(who)
+        resp = RedirectResponse("/ops", status_code=303)
+        resp.set_cookie(ops.COOKIE, ops.make_session(ADMIN_API_KEY), max_age=ops.SESSION_SECONDS,
+                        httponly=True, secure=True, samesite="strict", path="/")
+        return resp
+
+    @app.post("/ops/logout", include_in_schema=False)
+    def ops_logout():
+        resp = RedirectResponse("/", status_code=303)
+        resp.delete_cookie(ops.COOKIE, path="/", secure=True, httponly=True, samesite="strict")
+        return resp
+
+    @app.get("/api/ops", include_in_schema=False)
+    def api_ops(request: Request):
+        """The ops snapshot as JSON. X-Admin-Key or a logged-in session."""
+        _require_admin(request)
+        return _ops_snapshot()
 
     @app.get("/analytics", include_in_schema=False)
     def analytics(request: Request):
