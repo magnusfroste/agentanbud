@@ -1,0 +1,17 @@
+{% extends "ops_base.html" %}
+{% block ops %}
+{% set c = d.config %}{% set vh = d.visitor_header %}
+<div class="card"><h2>Säkerhet</h2>
+  <table><tbody>
+    <tr><td>Admin-nyckel</td><td><span class="pill {{ 'ok' if c.admin_key_defined else 'critical' }}">{{ 'definierad' if c.admin_key_defined else 'saknas' }}</span></td></tr>
+    <tr><td>Öppen admin (endast utveckling)</td><td><span class="pill {{ 'critical' if c.open_admin else 'ok' }}">{{ 'PÅ' if c.open_admin else 'av' }}</span></td></tr>
+    <tr><td>Besökaradress från Cloudflare</td><td><span class="pill {{ 'critical' if vh.missing and not vh.seen else 'ok' if vh.seen else 'muted' }}">{{ vh.seen }} med · {{ vh.missing }} utan</span></td></tr>
+  </tbody></table>
+  <div class="note">Vad som är satt, aldrig med vad. Nycklar ligger i serverns miljö och visas inte här.</div></div>
+<div class="grid">
+  <div class="card"><h2>Synk</h2><div class="kv"><div>Schema</div><div class="mono">{{ c.cron_schedule }}</div><div>Loggnivå</div><div>{{ c.log_level }}</div></div></div>
+  <div class="card"><h2>Källor</h2><table><tbody>
+    {% for k, on in c.scrapers.items() %}<tr><td class="mono">{{ k }}</td><td><span class="pill {{ 'ok' if on else 'muted' }}">{{ 'på' if on else 'av' }}</span></td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

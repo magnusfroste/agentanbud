@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{ title }} · Ops · Agentanbud</title>
+<style>
+  /* The ops central is its own small app, not a page of the public site:
+     a side panel, a top bar, cards. Same accent as the site. */
+  :root { --bg:#f4f5f7; --panel:#fff; --side:#fff; --ink:#15181d; --muted:#5d6672; --faint:#8b939d;
+          --line:#e3e6ea; --hover:#eef1f4; --accent:#2563eb; --accent-soft:#e3ecfd;
+          --ok:#1a7f37; --warn:#9a6700; --crit:#cf222e; --ok-soft:#dafbe1; --warn-soft:#fff3cd; --crit-soft:#ffebe9; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0b0d10; --panel:#14181d; --side:#101317; --ink:#e6e9ed; --muted:#97a1ad; --faint:#6b7480;
+            --line:#252b32; --hover:#1b2026; --accent:#60a5fa; --accent-soft:#132339;
+            --ok:#3fb950; --warn:#d29922; --crit:#f85149; --ok-soft:#12261a; --warn-soft:#2a2110; --crit-soft:#2d1214; }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; }
+  body { background:var(--bg); color:var(--ink); font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  a { color:var(--accent); text-decoration:none; } a:hover { text-decoration:underline; }
+  code, pre, .mono { font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  svg.i { width:18px; height:18px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+
+  /* shell */
+  .app { display:grid; grid-template-columns:240px minmax(0,1fr); min-height:100vh; }
+  aside { background:var(--side); border-right:1px solid var(--line); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .brand { display:flex; align-items:center; gap:10px; padding:16px 18px; border-bottom:1px solid var(--line); color:var(--ink); }
+  .brand:hover { text-decoration:none; }
+  .logo { width:30px; height:30px; border-radius:8px; background:var(--accent); display:grid; place-items:center; }
+  .logo svg { stroke:#fff; }
+  .brand b { display:block; font-size:15px; } .brand span { display:block; font-size:12px; color:var(--muted); }
+  nav { padding:6px 10px; flex:1; }
+  .group { font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--faint); padding:14px 10px 6px; }
+  nav a { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px; color:var(--ink); }
+  nav a:hover { background:var(--hover); text-decoration:none; }
+  nav a.active { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  nav a .count { margin-left:auto; font-size:11px; font-weight:600; min-width:20px; height:20px; padding:0 6px; border-radius:10px; display:grid; place-items:center; }
+  .count.warning { background:var(--warn-soft); color:var(--warn); } .count.critical { background:var(--crit-soft); color:var(--crit); }
+  .build { border-top:1px solid var(--line); padding:14px 18px 18px; font-size:12px; color:var(--muted); }
+  .build h4 { margin:0 0 8px; font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--faint); font-weight:600; }
+  .build .row { display:flex; justify-content:space-between; gap:8px; padding:2px 0; }
+  .build .row span:last-child { color:var(--ink); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+
+  header.top { position:sticky; top:0; z-index:5; background:color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter:blur(8px);
+               border-bottom:1px solid var(--line); display:flex; align-items:center; gap:12px; padding:10px 24px; min-height:60px; }
+  .title { min-width:0; } .title h1 { margin:0; font-size:18px; }
+  .title div { font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tools { margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .btn { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 10px; border-radius:8px; border:1px solid var(--line);
+         background:var(--panel); color:var(--ink); font:inherit; font-size:13px; cursor:pointer; }
+  .btn:hover { background:var(--hover); text-decoration:none; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn:disabled { opacity:.5; cursor:default; }
+  #burger { display:none; }
+  .scrim { display:none; }
+  main { padding:24px; max-width:1280px; }
+
+  /* content */
+  .grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 18px; min-width:0; overflow-x:auto; margin-bottom:16px; }
+  .grid .card { margin-bottom:0; } .grid + .card, .card + .grid { margin-top:16px; }
+  a.card { display:block; color:inherit; } a.card:hover { border-color:var(--accent); text-decoration:none; }
+  .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:0 0 12px; font-weight:600;
+             display:flex; align-items:center; gap:8px; }
+  .card h2 .pill { margin-left:auto; text-transform:none; letter-spacing:0; }
+  .big { font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; line-height:1.15; }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; font-variant-numeric:tabular-nums; }
+  .kv > div:nth-child(odd) { color:var(--muted); }
+  .small, .note { font-size:12px; color:var(--muted); } .note { margin-top:10px; }
+  .pill { display:inline-block; font-size:11px; font-weight:600; padding:1px 8px; border-radius:10px; white-space:nowrap; }
+  .pill.ok { background:var(--ok-soft); color:var(--ok); } .pill.warning { background:var(--warn-soft); color:var(--warn); }
+  .pill.critical { background:var(--crit-soft); color:var(--crit); } .pill.muted { background:var(--hover); color:var(--muted); }
+  .att { list-style:none; margin:0; padding:0; }
+  .att li { display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--line); }
+  .att li:first-child { border-top:0; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th { text-align:left; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); font-weight:600; padding:6px 8px; border-bottom:1px solid var(--line); }
+  td { padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr:last-child td { border-bottom:0; }
+  td.num, th.num { text-align:right; }
+  pre { background:var(--hover); border-radius:8px; padding:10px 12px; overflow:auto; max-height:28em; margin:0; }
+  .chart svg { display:block; width:100%; height:auto; }
+  .chart text { fill:var(--muted); font-size:10px; }
+  .actions { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .empty { padding:18px; text-align:center; color:var(--muted); }
+
+  @media (max-width: 900px) {
+    .app { grid-template-columns:minmax(0,1fr); }
+    aside { position:fixed; left:0; top:0; bottom:0; width:270px; z-index:20; transform:translateX(-100%); transition:transform .2s; }
+    body.nav-open aside { transform:none; }
+    body.nav-open .scrim { display:block; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:15; }
+    #burger { display:inline-flex; }
+    header.top { padding:10px 16px; }
+    main { padding:16px; }
+    .tools .lbl { display:none; }
+  }
+  @media (prefers-reduced-motion: reduce) { aside { transition:none; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v4h-4M6 21v-4h4"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9 17h6"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 12V3h9l9 9-9 9z"/><path d="M7.5 7.5h.01"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7L20 8"/><path d="M20 3v5h-5"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H3"/></symbol>
+  <symbol id="i-site" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+</svg>
+
+{% set icons = {"": "home", "maskinen": "cpu", "trafik": "chart", "fel": "alert", "synk": "sync",
+                "agenter": "bot", "inloggningar": "key", "versioner": "tag", "konfiguration": "gear"} %}
+{% set groups = [("", [""]), ("Drift", ["maskinen", "trafik", "fel"]), ("Data", ["synk", "agenter"]),
+                 ("Säkerhet", ["inloggningar", "konfiguration"]), ("Release", ["versioner"])] %}
+{% set names = dict(sections) %}
+<div class="app">
+  <aside>
+    <a class="brand" href="/ops">
+      <div class="logo"><svg class="i"><use href="#i-chart"/></svg></div>
+      <div><b>Agentanbud</b><span>Ops Central</span></div>
+    </a>
+    <nav>
+      {% for label, slugs in groups %}
+        {% if label %}<div class="group">{{ label }}</div>{% endif %}
+        {% for slug in slugs %}
+          <a href="/ops{{ '/' ~ slug if slug else '' }}" class="{{ 'active' if slug == section else '' }}">
+            <svg class="i"><use href="#i-{{ icons[slug] }}"/></svg>{{ names[slug] }}
+            {% if nav.get(slug) %}<span class="count {{ 'critical' if slug == 'fel' else 'warning' }}">{{ nav[slug] }}</span>{% endif %}
+          </a>
+        {% endfor %}
+      {% endfor %}
+    </nav>
+    <div class="build">
+      <h4>Kör nu</h4>
+      <div class="row"><span>Version</span><span>{{ BUILD.version }}</span></div>
+      <div class="row"><span>Commit</span><span>{{ BUILD.commit_short }}</span></div>
+      <div class="row"><span>Byggd</span><span>{{ (BUILD.built_at or '')[:10] }}</span></div>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <div>
+    <header class="top">
+      <button class="btn" id="burger" aria-label="Meny"><svg class="i"><use href="#i-menu"/></svg></button>
+      <div class="title"><h1>{{ title }}</h1><div>{% block subtitle %}Hämtad {{ generated_at }} UTC{% endblock %}</div></div>
+      <div class="tools">
+        <a class="btn" href="" title="Hämta på nytt"><svg class="i"><use href="#i-refresh"/></svg><span class="lbl">Uppdatera</span></a>
+        <a class="btn" href="/" title="Den publika sajten"><svg class="i"><use href="#i-site"/></svg><span class="lbl">Sajten</span></a>
+        <form method="post" action="/ops/logout" style="margin:0"><button class="btn" type="submit"><svg class="i"><use href="#i-out"/></svg><span class="lbl">Logga ut</span></button></form>
+      </div>
+    </header>
+    <main>
+      {% block ops %}{% endblock %}
+    </main>
+  </div>
+</div>
+<script>
+  try { localStorage.removeItem('ot-admin-key'); } catch (e) {}
+  document.getElementById('burger').addEventListener('click', () => document.body.classList.toggle('nav-open'));
+  document.getElementById('scrim').addEventListener('click', () => document.body.classList.remove('nav-open'));
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

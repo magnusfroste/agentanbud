@@ -1,0 +1,48 @@
+{% extends "ops_base.html" %}
+{% block ops %}
+<div class="card"><h2>Kör</h2>
+  <div class="actions">
+    <button class="btn primary" data-post="/api/sync" data-label="Synk">Kör synk nu</button>
+    <button class="btn" data-post="/api/backfill?days=90" data-label="Backfill TED, 90 dagar">Backfill TED (90 dagar)</button>
+    <button class="btn" data-post="/api/repair-links" data-label="Laga länkar">Laga länkar</button>
+    <button class="btn" data-post="/api/reclassify-buyers" data-label="Klassa om köpare">Klassa om köpare</button>
+    <button class="btn" data-post="/api/reset-ted?days=180" data-label="Återställ TED" data-confirm="ÅTERSTÄLL">Återställ TED (180 dagar)</button>
+  </div>
+  <div id="action-result" class="small" aria-live="polite"></div>
+  <div class="kv" style="margin-top:10px"><div>Schema</div><div class="mono">{{ d.cron_schedule }}</div><div>Nästa körning</div><div>{{ d.next_run or '—' }}</div></div>
+</div>
+<div class="card"><h2>Historik</h2>
+  <table><thead><tr><th>Källa</th><th>Tid (UTC)</th><th class="num">Antal</th><th>Status</th><th>Meddelande</th></tr></thead><tbody>
+  {% for x in d.syncs %}<tr><td>{{ x.source }}</td><td>{{ (x.run_at or '')[:16] }}</td><td class="num">{{ x.count }}</td>
+    <td><span class="pill {{ 'ok' if x.status == 'ok' else 'critical' }}">{{ x.status }}</span></td><td class="small">{{ x.message or '' }}</td></tr>{% endfor %}
+  </tbody></table></div>
+{% if d.cron_log %}<div class="card"><h2>Synkloggen, sista raderna</h2><pre>{% for l in d.cron_log %}{{ l }}
+{% endfor %}</pre></div>{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  document.querySelectorAll('[data-post]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const out = document.getElementById('action-result');
+      const label = btn.dataset.label;
+      if (btn.dataset.confirm) {
+        const typed = prompt(`${label} raderar data och hämtar om den. Skriv ${btn.dataset.confirm} för att fortsätta.`);
+        if (typed !== btn.dataset.confirm) { out.textContent = 'Avbrutet.'; return; }
+      }
+      btn.disabled = true;
+      out.textContent = `${label} startar…`;
+      try {
+        // Same-origin fetch: the session cookie goes along, the key never reaches the page.
+        const r = await fetch(btn.dataset.post, { method: 'POST', credentials: 'same-origin' });
+        let detail = '';
+        try { const d = await r.json(); detail = d.message || d.detail || d.error || ''; } catch (e) {}
+        if (r.status === 202 || r.ok) out.textContent = `${label}: startad. ${detail}`;
+        else if (r.status === 409) out.textContent = `${label}: körs redan.`;
+        else if (r.status === 401) { out.textContent = 'Inloggningen har gått ut. Laddar om…'; setTimeout(() => location.reload(), 1500); }
+        else out.textContent = `${label}: fel ${r.status}. ${detail}`;
+      } catch (e) { out.textContent = `${label}: ${e}`; }
+      finally { btn.disabled = false; }
+    });
+  });
+</script>
+{% endblock %}

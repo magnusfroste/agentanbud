@@ -1,0 +1,16 @@
+{% extends "ops_base.html" %}
+{% block ops %}
+<div class="grid">
+  <div class="card"><h2>Senaste 7 dagarna</h2><div class="big">{{ (d.agent_calls or 0)|format_num }}</div><div class="small">verktygsanrop · {{ d.agent_sessions }} agenter per dag, summerat</div></div>
+  <div class="card"><h2>Verktyg</h2><table><tbody>{% for t in d.mcp.tools %}<tr><td class="mono">{{ t.tool }}</td><td class="num">{{ t.n|format_num }}</td></tr>{% endfor %}</tbody></table></div>
+</div>
+<div class="card"><h2>Klienter som gjort handskakning</h2>
+  <table><thead><tr><th>Klient</th><th class="num">Sessioner</th><th class="num">Anslutningar</th></tr></thead><tbody>
+  {% for c in d.mcp.clients %}<tr><td>{{ c.client }}</td><td class="num">{{ c.sessions }}</td><td class="num">{{ c.handshakes }}</td></tr>{% endfor %}
+  </tbody></table>
+  <div class="note">Många agenter anropar verktyg utan handskakning och syns därför inte här, bara i anropen nedan.</div></div>
+<div class="card"><h2>Senaste verktygsanropen</h2>
+  <table><thead><tr><th>Tid (UTC)</th><th>Verktyg</th><th>Fråga</th><th>Session</th></tr></thead><tbody>
+  {% for c in d.mcp.recent %}<tr><td>{{ c.at[:16] }}</td><td class="mono">{{ c.tool }}</td><td>{{ c.query or '' }}</td><td class="small mono">{{ c.session or '' }}</td></tr>{% endfor %}
+  </tbody></table></div>
+{% endblock %}

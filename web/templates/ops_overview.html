@@ -1,0 +1,94 @@
+{% extends "ops_base.html" %}
+{% block subtitle %}Allt viktigt på en sida · hämtad {{ generated_at }} UTC{% endblock %}
+{% block ops %}
+{% set m = d.machine %}{% set st = d.storage %}{% set t = d.t24 %}
+
+<div class="card">
+  <h2>Behöver uppmärksamhet
+    <span class="pill {{ 'ok' if not d.warnings else 'warning' }}">{{ 'Allt ser bra ut' if not d.warnings else d.warnings|length ~ ' sak' ~ ('er' if d.warnings|length > 1 else '') }}</span></h2>
+  {% if d.warnings %}
+  <ul class="att">
+    {% for slug, text in d.warnings %}
+    <li><span class="pill {{ 'critical' if slug in ('fel', 'konfiguration') else 'warning' }}">{{ dict(sections)[slug] }}</span>
+        <span>{{ text }}</span><a href="/ops/{{ slug }}" style="margin-left:auto;white-space:nowrap">Visa →</a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="small">Inga fel, alla källor synkade, inga misslyckade inloggningar, nyckeln är definierad och besökaradressen kommer fram.</div>
+  {% endif %}
+</div>
+
+<div class="grid">
+  <a class="card" href="/ops/maskinen">
+    <h2>Maskinen <span class="pill {{ 'warning' if d.disk_low else 'ok' }}">{{ 'Lite disk' if d.disk_low else 'OK' }}</span></h2>
+    <div class="big">{{ m.container_cpu_pct if m.container_cpu_pct is not none else '—' }} %</div>
+    <div class="small">CPU för appen, av hela servern</div>
+    <div class="kv" style="margin-top:10px">
+      <div>Minne, appen</div><div>{{ m.container_mem_bytes|bytes }}</div>
+      <div>Last, servern</div><div>{{ (m.host_load or ['—'])|join(' · ') }}</div>
+      <div>Ledig disk</div><div>{{ st.disk_free|bytes }}</div>
+      <div>Databas</div><div>{{ st.db_bytes|bytes }}</div>
+    </div>
+  </a>
+
+  <a class="card" href="/ops/trafik">
+    <h2>Trafik, 24 h <span class="pill {{ 'critical' if t.errors else 'ok' }}">{{ t.errors ~ ' serverfel' if t.errors else 'Inga serverfel' }}</span></h2>
+    <div class="big">{{ t.total|format_num }}</div>
+    <div class="small">anrop</div>
+    <div class="kv" style="margin-top:10px">
+      <div>Sidor · API · MCP</div><div>{{ t.page|format_num }} · {{ t.api|format_num }} · {{ t.mcp|format_num }}</div>
+      <div>Snittid</div><div>{{ t.avg_ms }} ms</div>
+      <div>Unika besökare i dag</div><div>{{ d.visitors.today if d.visitors else '—' }}</div>
+    </div>
+  </a>
+
+  <a class="card" href="/ops/fel">
+    <h2>Fel <span class="pill {{ 'critical' if d.errors else 'ok' }}">{{ 'Finns' if d.errors else 'Inga' }}</span></h2>
+    <div class="big">{{ d.errors }}</div>
+    <div class="small">loggade fel och serverfel sedan start ({{ d.uptime }} sedan)</div>
+  </a>
+
+  <a class="card" href="/ops/synk">
+    <h2>Synk <span class="pill {{ 'warning' if d.sync_errors else 'ok' }}">{{ d.sync_errors ~ ' misslyckade' if d.sync_errors else 'OK' }}</span></h2>
+    <div class="kv">
+      <div>Senaste</div><div>{{ d.syncs_last or '—' }}</div>
+      <div>Nästa</div><div>{{ d.next_run or '—' }}</div>
+    </div>
+  </a>
+
+  <a class="card" href="/ops/agenter">
+    <h2>Agenter, 7 d</h2>
+    <div class="big">{{ (d.agent_calls_7d or 0)|format_num }}</div>
+    <div class="small">verktygsanrop via MCP</div>
+    {% if d.agents %}<div class="kv" style="margin-top:10px">
+      {% for c in d.agents %}<div>{{ c.client }}</div><div>{{ c.sessions }} sessioner</div>{% endfor %}
+    </div>{% endif %}
+  </a>
+
+  <a class="card" href="/ops/inloggningar">
+    {% set lg = d.logins %}
+    <h2>Inloggningar, 24 h <span class="pill {{ 'warning' if lg.failed else 'ok' }}">{{ lg.failed ~ ' misslyckade' if lg.failed else 'Inga misslyckade' }}</span></h2>
+    <div class="kv">
+      <div>Lyckade</div><div>{{ lg.ok }}</div>
+      <div>Misslyckade</div><div>{{ lg.failed }}</div>
+      <div>Senast inloggad</div><div>{{ (lg.last_ok.at ~ (' · ' ~ lg.last_ok.country if lg.last_ok.country else '')) if lg.last_ok else '—' }}</div>
+    </div>
+  </a>
+
+  <a class="card" href="/ops/versioner">
+    <h2>Versioner</h2>
+    <div class="big mono" style="font-size:22px">{{ d.build.commit_short }}</div>
+    <div class="small">version {{ d.build.version }} · uppe i {{ d.uptime }}</div>
+  </a>
+
+  <a class="card" href="/ops/konfiguration">
+    {% set c = d.config %}
+    <h2>Konfiguration <span class="pill {{ 'ok' if c.admin_key_defined and not c.open_admin else 'critical' }}">{{ 'OK' if c.admin_key_defined and not c.open_admin else 'Åtgärda' }}</span></h2>
+    <div class="kv">
+      <div>Admin-nyckel</div><div>{{ 'definierad' if c.admin_key_defined else 'saknas' }}</div>
+      <div>Öppen admin</div><div>{{ 'PÅ' if c.open_admin else 'av' }}</div>
+      <div>Källor på</div><div>{{ c.scrapers.values()|select|list|length }} av {{ c.scrapers|length }}</div>
+    </div>
+  </a>
+</div>
+{% endblock %}
