@@ -180,3 +180,11 @@ CREATE TABLE IF NOT EXISTS request_hourly (
     ms_total    REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (hour, kind, status)
 );
+
+-- One random salt per UTC day for the visitor id (app/visitors.py). The row
+-- for an earlier day is deleted as soon as today's exists, so an id from a
+-- past day cannot be recomputed by anyone.
+CREATE TABLE IF NOT EXISTS visitor_salt (
+    day   TEXT PRIMARY KEY,
+    salt  TEXT NOT NULL
+);

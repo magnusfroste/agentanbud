@@ -142,6 +142,11 @@
     <tr><td>Öppen admin (endast utveckling)</td><td class="{{ 'sync-error' if s.config.open_admin else 'sync-ok' }}">{{ 'PÅ' if s.config.open_admin else 'av' }}</td></tr>
     <tr><td>Synkschema</td><td><code>{{ s.config.cron_schedule }}</code></td></tr>
     <tr><td>Loggnivå</td><td>{{ s.config.log_level }}</td></tr>
+    {% set vh = s.visitor_header %}
+    <tr><td>Besökarens adress från Cloudflare (sedan start)</td>
+        <td class="{{ 'sync-error' if vh and vh.missing and not vh.seen else 'sync-ok' if vh and vh.seen else 'muted' }}">
+          {% if vh %}{{ vh.seen }} med · {{ vh.missing }} utan{% else %}—{% endif %}
+          {% if vh and vh.missing and not vh.seen %} — unika besökare kan inte räknas{% endif %}</td></tr>
     {% for k, on in s.config.scrapers.items() %}<tr><td>Källa: {{ k }}</td><td class="{{ 'sync-ok' if on else 'muted' }}">{{ 'på' if on else 'av' }}</td></tr>{% endfor %}
   </tbody></table>
 </section>

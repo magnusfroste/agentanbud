@@ -29,7 +29,7 @@ from .db import (
     record_post_event,
 )
 from .version import build_info, version_string, started_at
-from . import ops
+from . import ops, visitors
 from .insights import usage_summary, REAL_SEARCH
 from .search import (build_match, match_subquery, like_floor_sql,
                      rank_order_sql)
@@ -315,7 +315,8 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                                "/redoc", "/favicon", "/robots", "/sitemap", "/llms",
                                "/ops")
 
-    def _write_pageview(path: str, is_bot: bool) -> None:
+    def _write_pageview(path: str, is_bot: bool, address: Optional[str] = None,
+                        user_agent: Optional[str] = None) -> None:
         conn = connect(db)
         try:
             if is_bot:
@@ -324,7 +325,8 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 bump_daily_counter(conn, "bot_view")
             else:
                 _log_usage_safe(conn, "browser", "view", query=path,
-                                meta={"bot": 0})
+                                meta={"bot": 0,
+                                      "v": visitors.visitor_id(conn, address, user_agent)})
         finally:
             conn.close()
 
@@ -338,12 +340,14 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
             if (request.method == "GET"
                     and 200 <= response.status_code < 300
                     and not path.startswith(_PAGEVIEW_SKIP_PREFIXES)):
-                is_bot = _looks_like_bot(request.headers.get("user-agent", ""))
+                ua = request.headers.get("user-agent", "")
+                is_bot = _looks_like_bot(ua)
                 # In a thread, not on the event loop: sqlite3 blocks while it
                 # waits for a lock (up to its 5 s timeout), and doing that in
                 # an async middleware stalled every request on the server, not
                 # just this one.
-                await run_in_threadpool(_write_pageview, path, is_bot)
+                await run_in_threadpool(_write_pageview, path, is_bot,
+                                        None if is_bot else visitors.address_of(request.headers), ua)
         except Exception:
             LOG.exception("pageview logging failed")
         return response
@@ -898,6 +902,8 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 _log_usage_safe(conn, "browser", "search", query=q or None,
                                 meta={"source": source, "authority": authority,
                                       "cpv": cpv, "status": status, "bot": 0,
+                                      "v": visitors.visitor_id(conn, visitors.address_of(request.headers),
+                                                               request.headers.get("user-agent")),
                                       "segment": _segment_for(q, cpv),
                                       "results": total, "results_all": results_all})
 
@@ -1029,6 +1035,26 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         finally:
             conn.close()
 
+    # ---- Usage summary, cached briefly ----
+    # usage_summary scans all of usage_log (about 2 s on a month of data) and
+    # is behind /analytics, /api/analytics and /ops, which crawlers hit too.
+    # With one worker a minute's staleness is a far better trade than a 2 s
+    # stall on every visit. Recomputed at most once a minute per period.
+    _usage_cache: dict = {}
+
+    def _usage(days: Optional[int] = None) -> dict:
+        now = _time.monotonic()
+        hit = _usage_cache.get(days)
+        if hit and now - hit[0] < 60:
+            return hit[1]
+        conn = connect(db)
+        try:
+            summary = usage_summary(conn, days=days)
+        finally:
+            conn.close()
+        _usage_cache[days] = (now, summary)
+        return summary
+
     # ---- Operations (/ops): logged in, never public ----
     # See app/ops.py for what lives here and why. Login is ADMIN_API_KEY,
     # typed once; the session is an HttpOnly signed cookie.
@@ -1042,7 +1068,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             syncs = [dict(r) for r in conn.execute(
                 "SELECT source, run_at, count, status, message FROM sync_log ORDER BY run_at DESC LIMIT 30"
             ).fetchall()]
-            usage = usage_summary(conn, days=7)
+            usage = _usage(7)
             nr = next_run()
             return {
                 "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -1064,6 +1090,9 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                     "recent": ops.recent_mcp_calls(conn),
                 },
                 "config": ops.config_status(ADMIN_API_KEY, ALLOW_OPEN_ADMIN),
+                # CF-Connecting-IP seen/missing since start. If Cloudflare stops
+                # sending it, every visitor becomes unknown and the count reads 0.
+                "visitor_header": dict(visitors.HEADER),
             }
         finally:
             conn.close()
@@ -1121,7 +1150,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         """
         conn = connect(db)
         try:
-            s = usage_summary(conn)
+            s = _usage(None)
 
             colors = ["#2563eb", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444",
                       "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6",
@@ -1141,7 +1170,8 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                     "searches": s["searches"], "web_searches": s["web_searches"],
                     "api_searches": s["api_searches"], "agent_calls": s["agent_calls"],
                     "agent_sessions": s["agent_sessions"],
-                    "operator_calls": s["operator_calls"]}
+                    "operator_calls": s["operator_calls"],
+                    "visitors": s["visitors"]}
 
             usage_types = [
                 {"label": "Sidvisningar", "n": v["total"], "color": "#2563eb"},
@@ -1195,7 +1225,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         """
         conn = connect(db)
         try:
-            return usage_summary(conn, days=days)
+            return _usage(days)
         finally:
             conn.close()
 
@@ -1573,6 +1603,7 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
 
     @app.get("/api/tenders")
     def list_tenders(
+        request: Request,
         source: Optional[str] = Query(default=None),
         authority: Optional[str] = Query(default=None),
         q: Optional[str] = Query(default=None),
@@ -1631,6 +1662,8 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
                 _log_usage_safe(conn, "api", "search", query=q,
                                 meta={"source": source, "authority": authority,
                                       "cpv": cpv, "bot": 0,
+                                      "v": visitors.visitor_id(conn, visitors.address_of(request.headers),
+                                                               request.headers.get("user-agent")),
                                       "segment": _segment_for(q, cpv),
                                       # No deadline filter on this route, so the
                                       # visible count IS the unfiltered one.

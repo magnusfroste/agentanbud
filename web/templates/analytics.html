@@ -45,9 +45,15 @@
     <div class="v">{{ "{:,}".format(kpis.human_views).replace(",", " ") }}</div>
     <div class="l">👤 Människor (webb)</div>
   </div>
+  {% if kpis.visitors and kpis.visitors.avg_7d is not none %}
+  <div class="insight-kpi green">
+    <div class="v">{{ kpis.visitors.avg_7d }}</div>
+    <div class="l">🧑 Unika besökare per dag (snitt {{ kpis.visitors.measured_days }} d · {{ kpis.visitors.today }} i dag)</div>
+  </div>
+  {% endif %}
   <div class="insight-kpi green">
     <div class="v">{{ "{:,}".format(kpis.agent_sessions).replace(",", " ") }}</div>
-    <div class="l">🤖 Agenter (unika sessioner · {{ kpis.agent_calls }} anrop)</div>
+    <div class="l">🤖 Agenter (unika per dag, summerat · {{ kpis.agent_calls }} anrop)</div>
   </div>
   <div class="insight-kpi highlight">
     <div class="v">{{ "{:,}".format(kpis.web_searches).replace(",", " ") }}</div>
@@ -159,7 +165,7 @@
 {% if top_terms %}
 <section class="insight-section">
   <h2>Vad söks det på?</h2>
-  <p class="muted">Vanligaste söktermerna, alla kanaler (webb + agenter).</p>
+  <p class="muted">Vanligaste söktermerna, alla kanaler (webb + agenter). Räknat per sökande och dag: en agent som ställer samma fråga hundra gånger räknas en gång.</p>
   <div class="bar-chart">
     {% for t in top_terms %}
     <div class="bar-row">
