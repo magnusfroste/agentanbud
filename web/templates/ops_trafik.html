@@ -11,6 +11,14 @@
     <div class="big">{{ vh.seen|format_num }}</div><div class="small">anrop med adress sedan start · {{ vh.missing }} utan</div>
     <div class="note">Utan den kan unika besökare inte räknas. Ingen adress sparas: bara en hash som byter salt varje dygn.</div></div>
 </div>
+{% if d.spikes %}
+<div class="card"><h2>Toppar senaste dygnet <span class="pill warning">{{ d.spikes|length }} timm{{ 'ar' if d.spikes|length > 1 else 'e' }}</span></h2>
+  <div class="small">Timmar med över {{ d.spike_factor }}× mediantimmen för de senaste 48 timmarna ({{ d.spikes[0].median|format_num }} anrop).</div>
+  <table style="margin-top:8px"><thead><tr><th>Timme (UTC)</th><th class="num">Anrop</th><th class="num">× normalt</th><th class="num">MCP</th><th class="num">varav verktygsanrop</th><th class="num">API</th></tr></thead><tbody>
+  {% for h in d.spikes|reverse %}<tr><td>{{ h.hour }}</td><td class="num">{{ h.total|format_num }}</td><td class="num">{{ h.factor }}×</td><td class="num">{{ h.mcp|format_num }}</td><td class="num">{{ h.mcp_tools|format_num }}</td><td class="num">{{ h.api|format_num }}</td></tr>{% endfor %}
+  </tbody></table>
+  <div class="note">Många MCP-anrop men få verktygsanrop betyder uppkopplingar som inte gör något — som när en klient kopplar upp sig i en loop.</div></div>
+{% endif %}
 <div class="card"><h2>Anrop per timme, 48 h</h2>
   {% if d.requests %}{% set w = 18 %}{% set hmax = 140 %}{% set peak = d.peak %}
   <div class="chart"><svg viewBox="0 0 {{ d.slots|length * w + 44 }} {{ hmax + 30 }}" role="img" aria-label="Anrop per timme, senaste 48 timmarna">
@@ -18,14 +26,14 @@
     <line x1="44" x2="{{ d.slots|length * w + 44 }}" y1="15" y2="15" stroke="var(--line)" stroke-dasharray="3 3"/>
     <text x="0" y="19">{{ peak|format_num }}</text><text x="0" y="{{ 15 + hmax }}">0</text>
     {% for h in d.slots %}{% set bh = (h.total / peak * hmax) if peak else 0 %}{% set eh = (h.errors / peak * hmax) if peak else 0 %}
-      <rect x="{{ 44 + loop.index0 * w }}" y="{{ 15 + hmax - bh }}" width="{{ w - 2 }}" height="{{ bh }}" rx="1.5" fill="var(--accent)" opacity="0.55"><title>{{ h.hour }}:00 — {{ h.total }} anrop (sidor {{ h.page }}, API {{ h.api }}, MCP {{ h.mcp }}), {{ h.errors }} serverfel, snitt {{ h.avg_ms }} ms</title></rect>
+      <rect x="{{ 44 + loop.index0 * w }}" y="{{ 15 + hmax - bh }}" width="{{ w - 2 }}" height="{{ bh }}" rx="1.5" fill="{{ 'var(--warn)' if h.hour in d.spike_hours else 'var(--accent)' }}" opacity="{{ '0.8' if h.hour in d.spike_hours else '0.55' }}"><title>{{ h.hour }}:00 — {{ h.total }} anrop (sidor {{ h.page }}, API {{ h.api }}, MCP {{ h.mcp }}: {{ h.mcp_tools }} verktygsanrop, {{ h.mcp_handshakes }} handskakningar, {{ h.mcp_stream }} ström, {{ h.mcp_other }} övrigt), {{ h.errors }} serverfel, snitt {{ h.avg_ms }} ms</title></rect>
       {% if eh > 0 %}<rect x="{{ 44 + loop.index0 * w }}" y="{{ 15 + hmax - eh }}" width="{{ w - 2 }}" height="{{ eh }}" fill="var(--crit)"></rect>{% endif %}
     {% endfor %}
     <text x="44" y="{{ hmax + 28 }}">{{ d.slots[0].hour[5:].replace('T', ' ') }}:00</text>
     <text x="{{ d.slots|length * w + 44 }}" y="{{ hmax + 28 }}" text-anchor="end">nu</text>
   </svg></div>
-  <table style="margin-top:12px"><thead><tr><th>Timme (UTC)</th><th class="num">Totalt</th><th class="num">Sidor</th><th class="num">API</th><th class="num">MCP</th><th class="num">Filer</th><th class="num">Serverfel</th><th class="num">Snitt</th></tr></thead><tbody>
-    {% for h in d.requests|reverse %}{% if loop.index <= 12 %}<tr><td>{{ h.hour }}</td><td class="num">{{ h.total }}</td><td class="num">{{ h.page }}</td><td class="num">{{ h.api }}</td><td class="num">{{ h.mcp }}</td><td class="num">{{ h.asset }}</td><td class="num">{% if h.errors %}<span class="pill critical">{{ h.errors }}</span>{% else %}0{% endif %}</td><td class="num">{{ h.avg_ms }} ms</td></tr>{% endif %}{% endfor %}
+  <table style="margin-top:12px"><thead><tr><th>Timme (UTC)</th><th class="num">Totalt</th><th class="num">Sidor</th><th class="num">API</th><th class="num">MCP</th><th class="num" title="Anrop av ett verktyg, t.ex. search_tenders">· verktyg</th><th class="num" title="initialize">· handskak.</th><th class="num" title="GET med Accept: text/event-stream, besvaras med 405">· ström</th><th class="num" title="Verktygslistor, notiser, vanliga GET och allt annat">· övrigt</th><th class="num">Filer</th><th class="num">Serverfel</th><th class="num">Snitt</th></tr></thead><tbody>
+    {% for h in d.requests|reverse %}{% if loop.index <= 12 %}<tr{% if h.hour in d.spike_hours %} style="background:var(--warn-soft)"{% endif %}><td>{{ h.hour }}</td><td class="num">{{ h.total }}</td><td class="num">{{ h.page }}</td><td class="num">{{ h.api }}</td><td class="num">{{ h.mcp }}</td><td class="num">{{ h.mcp_tools }}</td><td class="num">{{ h.mcp_handshakes }}</td><td class="num">{{ h.mcp_stream }}</td><td class="num">{% if h.mcp_other > 1000 and h.mcp_other > 10 * (h.mcp_tools + 1) %}<span class="pill warning">{{ h.mcp_other }}</span>{% else %}{{ h.mcp_other }}{% endif %}</td><td class="num">{{ h.asset }}</td><td class="num">{% if h.errors %}<span class="pill critical">{{ h.errors }}</span>{% else %}0{% endif %}</td><td class="num">{{ h.avg_ms }} ms</td></tr>{% endif %}{% endfor %}
   </tbody></table>
   {% else %}<div class="empty">Inga mätvärden ännu. Räknarna skrivs en gång i minuten efter start.</div>{% endif %}
 </div>
