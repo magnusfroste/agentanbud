@@ -7,7 +7,7 @@
 {% set c = d.callers %}
 <div class="card"><h2>Största anropare, 24 h <span class="pill muted">{{ c.visitors }} besökare · {{ c.total|format_num }} sökningar och verktygsanrop</span></h2>
   {% if c.callers %}
-  <table><thead><tr><th>Besökare</th><th>Klient</th><th class="num">Anrop</th><th class="num">Andel</th><th class="num">Unika frågor</th><th>Vanligast</th><th>Rytm</th><th>Kanal</th><th>Tid (UTC)</th></tr></thead><tbody>
+  <table><thead><tr><th>Besökare</th><th>Klient</th><th class="num">Anrop</th><th class="num">Andel</th><th class="num">Unika frågor/filter</th><th>Vanligast</th><th>Rytm</th><th>Kanal</th><th>Tid (UTC)</th></tr></thead><tbody>
   {% for x in c.callers %}<tr>
     <td class="small mono">{{ x.v }}</td><td>{{ x.client or '—' }}</td>
     <td class="num">{{ x.n|format_num }}</td>
@@ -18,7 +18,7 @@
     <td class="small">{{ x.channels|join(', ') }}</td>
     <td class="small">{{ x.first }}–{{ x.last }}</td></tr>{% endfor %}
   </tbody></table>
-  <div class="note">Grupperat på besöks-id, som är detsamma för en anropare hela dygnet men byts nästa dag. Många frågor men få unika, med jämn rytm, är en loop.</div>
+  <div class="note">Grupperat på besöks-id, som är detsamma för en anropare hela dygnet men byts nästa dag. Många frågor men få unika, med jämn rytm, är en loop. Inom hakparentes: en sökning utan sökord, med de filter den använde.</div>
   {% else %}<div class="empty">Inga sökningar eller verktygsanrop med besöks-id senaste dygnet.</div>{% endif %}
 </div>
 <div class="card"><h2>Klienter som gjort handskakning</h2>

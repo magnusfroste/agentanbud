@@ -44,6 +44,10 @@ CASES = [
      False, "narrowed to one CPV code"),
 
     ("kvantkryptografi",
+     {"bot": 0, "results": 0, "results_all": 0, "buyer_type": "municipal"},
+     False, "narrowed to one kind of buyer"),
+
+    ("kvantkryptografi",
      {"bot": 1, "results": 0, "results_all": 0},
      False, "a crawler walking filter links is not demand"),
 ]

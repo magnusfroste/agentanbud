@@ -139,6 +139,25 @@ recent = ops.recent_mcp_calls(conn, 3)
 check("senaste anropen visar besöks-id, inte bara session",
       all(r["visitor"] == "loopvisitor1" for r in recent))
 
+print("\nSökningar utan sökord visar sina filter")
+check("sökord vinner", ops.describe_call("klimatdata", {"cpv": "72"}) == "klimatdata")
+check("filter i hakparentes", ops.describe_call(None, {"cpv": "45", "source": "mercell"}) == "[källa mercell, cpv 45]",
+      ops.describe_call(None, {"cpv": "45", "source": "mercell"}))
+check("ingenting alls", ops.describe_call(None, {"bot": 0}) == "[inga filter]")
+check("MCP-argument med samma namn", ops.describe_call("", {"authority": "Trafikverket", "_sid": "x"}) == "[köpare Trafikverket]")
+conn.execute("DELETE FROM usage_log")
+conn.executemany("INSERT INTO usage_log (channel, action, query, meta, created_at) VALUES (?, ?, ?, ?, ?)",
+                 [("api", "search", None, json.dumps({"v": "watcher00001", "cpv": "45", "source": "mercell", "bot": 0}),
+                   ts(3, 5 * i)) for i in range(12)])
+conn.commit()
+w = ops.top_callers(conn, 24)["callers"][0]
+check("bevakaren utan sökord visar vad den följer",
+      w["top"] and w["top"][0]["q"] == "[källa mercell, cpv 45]" and w["distinct"] == 1, f"{w['top']}")
+c.get("/api/tenders?buyer_type=municipal", headers={"cf-connecting-ip": "203.0.113.9"})
+logged = conn.execute("SELECT meta FROM usage_log WHERE channel = 'api' ORDER BY id DESC LIMIT 1").fetchone()
+check("API-loggen sparar köpartyp", logged and json.loads(logged[0]).get("buyer_type") == "municipal",
+      logged and logged[0])
+
 print("\nSidorna renderas")
 c.post("/ops/login", data={"key": KEY}, headers={"origin": "https://testserver"}, follow_redirects=False)
 t = c.get("/ops/trafik")
