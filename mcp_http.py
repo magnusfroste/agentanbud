@@ -454,7 +454,19 @@ async def mcp_options():
 
 @mcp_router.get("/mcp")
 async def mcp_get(request: Request):
-    """MCP server info — clients call this to discover capabilities."""
+    """MCP server info for a person or a plain GET; 405 for a stream request.
+
+    A Streamable HTTP client may GET /mcp with Accept: text/event-stream to
+    open a stream for messages from the server. The spec gives the server two
+    answers: a text/event-stream response, or 405 Method Not Allowed. This
+    server sends nothing unprompted, so 405 is the honest one. It used to
+    answer 200 with the JSON below; a client read that as a stream that had
+    ended, reconnected at once, and did so about eight times a second for
+    four hours (Oct 2026): 118,000 requests in a day that carried no tool
+    call at all.
+    """
+    if "text/event-stream" in (request.headers.get("accept") or "").lower():
+        return Response(status_code=405, headers={**_cors_headers(), "Allow": "POST, DELETE"})
     _evict_expired_sessions()
     return JSONResponse({
         "name": "agentanbud",
