@@ -4,13 +4,30 @@
   <div class="card"><h2>Senaste 7 dagarna</h2><div class="big">{{ (d.agent_calls or 0)|format_num }}</div><div class="small">verktygsanrop · {{ d.agent_sessions }} agenter per dag, summerat</div></div>
   <div class="card"><h2>Verktyg</h2><table><tbody>{% for t in d.mcp.tools %}<tr><td class="mono">{{ t.tool }}</td><td class="num">{{ t.n|format_num }}</td></tr>{% endfor %}</tbody></table></div>
 </div>
+{% set c = d.callers %}
+<div class="card"><h2>Största anropare, 24 h <span class="pill muted">{{ c.visitors }} besökare · {{ c.total|format_num }} sökningar och verktygsanrop</span></h2>
+  {% if c.callers %}
+  <table><thead><tr><th>Besökare</th><th>Klient</th><th class="num">Anrop</th><th class="num">Andel</th><th class="num">Unika frågor</th><th>Vanligast</th><th>Rytm</th><th>Kanal</th><th>Tid (UTC)</th></tr></thead><tbody>
+  {% for x in c.callers %}<tr>
+    <td class="small mono">{{ x.v }}</td><td>{{ x.client or '—' }}</td>
+    <td class="num">{{ x.n|format_num }}</td>
+    <td class="num">{% if x.share_pct >= 30 %}<span class="pill warning">{{ x.share_pct }} %</span>{% else %}{{ x.share_pct }} %{% endif %}</td>
+    <td class="num">{{ x.distinct }}</td>
+    <td class="small">{% for t in x.top %}{{ t.q }} ({{ t.n }}){% if not loop.last %} · {% endif %}{% endfor %}</td>
+    <td class="small">{{ 'var ' ~ x.rhythm_min ~ ' min' if x.rhythm_min else '—' }}</td>
+    <td class="small">{{ x.channels|join(', ') }}</td>
+    <td class="small">{{ x.first }}–{{ x.last }}</td></tr>{% endfor %}
+  </tbody></table>
+  <div class="note">Grupperat på besöks-id, som är detsamma för en anropare hela dygnet men byts nästa dag. Många frågor men få unika, med jämn rytm, är en loop.</div>
+  {% else %}<div class="empty">Inga sökningar eller verktygsanrop med besöks-id senaste dygnet.</div>{% endif %}
+</div>
 <div class="card"><h2>Klienter som gjort handskakning</h2>
   <table><thead><tr><th>Klient</th><th class="num">Sessioner</th><th class="num">Anslutningar</th></tr></thead><tbody>
   {% for c in d.mcp.clients %}<tr><td>{{ c.client }}</td><td class="num">{{ c.sessions }}</td><td class="num">{{ c.handshakes }}</td></tr>{% endfor %}
   </tbody></table>
   <div class="note">Många agenter anropar verktyg utan handskakning och syns därför inte här, bara i anropen nedan.</div></div>
 <div class="card"><h2>Senaste verktygsanropen</h2>
-  <table><thead><tr><th>Tid (UTC)</th><th>Verktyg</th><th>Fråga</th><th>Session</th></tr></thead><tbody>
-  {% for c in d.mcp.recent %}<tr><td>{{ c.at[:16] }}</td><td class="mono">{{ c.tool }}</td><td>{{ c.query or '' }}</td><td class="small mono">{{ c.session or '' }}</td></tr>{% endfor %}
+  <table><thead><tr><th>Tid (UTC)</th><th>Verktyg</th><th>Fråga</th><th>Besökare</th></tr></thead><tbody>
+  {% for c in d.mcp.recent %}<tr><td>{{ c.at[:16] }}</td><td class="mono">{{ c.tool }}</td><td>{{ c.query or '' }}</td><td class="small mono">{{ c.visitor or '—' }}</td></tr>{% endfor %}
   </tbody></table></div>
 {% endblock %}

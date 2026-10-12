@@ -129,10 +129,16 @@ class LoginGuard:
 _ASSET_EXT = (".js", ".css", ".png", ".svg", ".ico", ".woff", ".woff2", ".webp", ".jpg", ".jpeg", ".gif")
 
 
-def request_kind(path: str) -> str:
+def request_kind(path: str, method: str = "GET", accept: str = "") -> str:
     if path.startswith("/static") or path.endswith(_ASSET_EXT):
         return "asset"
     if path.startswith("/mcp"):
+        # A client opening a server-to-client stream: answered 405 since #49.
+        # Counted on its own because a client that misreads the answer
+        # reconnects in a loop — 118,000 of these in a day once, all filed
+        # under "MCP" and indistinguishable from real tool calls.
+        if method == "GET" and "text/event-stream" in (accept or "").lower():
+            return "mcp_stream"
         return "mcp"
     if path.startswith("/ops") or path.startswith("/api/ops"):
         return "ops"
@@ -149,9 +155,10 @@ class RequestStats:
         self._buf: dict[tuple, list] = defaultdict(lambda: [0, 0.0])
         self.recent_5xx: deque = deque(maxlen=30)
 
-    def record(self, path: str, status: int, ms: float) -> None:
+    def record(self, path: str, status: int, ms: float,
+               method: str = "GET", accept: str = "") -> None:
         hour = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
-        key = (hour, request_kind(path), status // 100)
+        key = (hour, request_kind(path, method, accept), status // 100)
         with self._lock:
             b = self._buf[key]
             b[0] += 1
@@ -334,6 +341,11 @@ def storage(db_path: str, conn) -> dict:
     return out
 
 
+def _empty_hour(hour: str) -> dict:
+    return {"hour": hour, "total": 0, "errors": 0, "ms": 0.0, "page": 0, "api": 0,
+            "mcp": 0, "mcp_stream": 0, "asset": 0, "ops": 0}
+
+
 def requests_by_hour(conn, hours: int = 48) -> list[dict]:
     rows = conn.execute(
         "SELECT hour, kind, status, n, ms_total FROM request_hourly "
@@ -342,9 +354,11 @@ def requests_by_hour(conn, hours: int = 48) -> list[dict]:
     ).fetchall()
     by_hour: dict[str, dict] = {}
     for r in rows:
-        h = by_hour.setdefault(r["hour"], {"hour": r["hour"], "total": 0, "errors": 0, "ms": 0.0,
-                                           "page": 0, "api": 0, "mcp": 0, "asset": 0, "ops": 0})
+        h = by_hour.setdefault(r["hour"], _empty_hour(r["hour"]))
         h["total"] += r["n"]
+        if r["kind"] == "mcp_stream":
+            # Part of MCP, and also shown on its own.
+            h["mcp"] += r["n"]
         h[r["kind"]] = h.get(r["kind"], 0) + r["n"]
         h["ms"] += r["ms_total"]
         if r["status"] == 5:
@@ -385,12 +399,14 @@ def deploys(conn, limit: int = 15) -> list[dict]:
 
 def recent_mcp_calls(conn, limit: int = 30) -> list[dict]:
     rows = conn.execute(
-        "SELECT created_at AS ts, action, query, json_extract(meta, '$._sid') AS sid FROM usage_log "
+        "SELECT created_at AS ts, action, query, json_extract(meta, '$._sid') AS sid, "
+        "json_extract(meta, '$.v') AS v FROM usage_log "
         "WHERE channel = 'mcp' AND action LIKE 'tool:%' ORDER BY id DESC LIMIT ?",
         (limit,),
     ).fetchall()
-    return [{"at": (r["ts"] or "")[:19], "tool": r["action"][5:], "query": r["query"], "session": r["sid"]}
-            for r in rows]
+    # `visitor` is the useful column: many clients open a new session per call.
+    return [{"at": (r["ts"] or "")[:19], "tool": r["action"][5:], "query": r["query"],
+             "session": r["sid"], "visitor": r["v"]} for r in rows]
 
 
 def config_status(admin_key: str, allow_open_admin: bool) -> dict:
@@ -490,6 +506,130 @@ def hour_slots(rows: list[dict], hours: int = 48) -> list[dict]:
     out = []
     for i in range(hours - 1, -1, -1):
         h = (now - timedelta(hours=i)).strftime("%Y-%m-%dT%H")
-        out.append(by.get(h) or {"hour": h, "total": 0, "errors": 0, "avg_ms": 0,
-                                 "page": 0, "api": 0, "mcp": 0, "asset": 0, "ops": 0})
+        if h in by:
+            out.append(by[h])
+        else:
+            e = _empty_hour(h)
+            del e["ms"]
+            e.update(avg_ms=0, mcp_tools=0, mcp_handshakes=0, mcp_other=0)
+            out.append(e)
     return out
+
+
+# ---------------------------------------------------------------------------
+# What the MCP requests were, per hour
+# ---------------------------------------------------------------------------
+def with_mcp_breakdown(conn, rows: list[dict], hours: int = 48) -> list[dict]:
+    """Split each hour's MCP requests into tool calls, handshakes, stream
+    requests and the rest (tool listings, notifications, plain GETs).
+
+    The request counter only sees paths. Tool calls and handshakes come from
+    usage_log, which records both — so this also works for hours counted
+    before stream requests had a kind of their own: a storm of empty
+    reconnects shows as thousands of MCP requests and almost no tool calls.
+    """
+    counts = {r["hour"]: r for r in conn.execute(
+        "SELECT strftime('%Y-%m-%dT%H', created_at) AS hour, "
+        "SUM(action LIKE 'tool:%') AS tools, SUM(action = 'mcp:connect') AS handshakes "
+        "FROM usage_log WHERE channel = 'mcp' AND created_at >= datetime('now', ?) GROUP BY hour",
+        (f"-{hours} hours",)).fetchall()}
+    for h in rows:
+        c = counts.get(h["hour"])
+        tools = (c["tools"] if c else 0) or 0
+        hand = (c["handshakes"] if c else 0) or 0
+        h["mcp_tools"], h["mcp_handshakes"] = tools, hand
+        h["mcp_other"] = max(0, h.get("mcp", 0) - tools - hand - h.get("mcp_stream", 0))
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Traffic spikes
+# ---------------------------------------------------------------------------
+SPIKE_FACTOR = 5        # an hour this many times the median hour is a spike
+SPIKE_FLOOR = 2000      # ...but never below this, or a quiet night flags a busy morning
+
+
+def traffic_spikes(slots: list[dict]) -> list[dict]:
+    """Hours in the last 24 well above the 48-hour median.
+
+    The warnings used to watch errors, syncs, logins and disk — not volume.
+    On 12 October MCP requests ran at ~31,000 an hour for four hours, about
+    40 times normal, and the overview said "Allt ser bra ut".
+    """
+    totals = sorted(s["total"] for s in slots if s["total"])
+    if len(totals) < 6:
+        return []  # too little history to call anything unusual
+    median = totals[len(totals) // 2]
+    limit = max(SPIKE_FACTOR * median, SPIKE_FLOOR)
+    return [{**s, "factor": round(s["total"] / median) if median else None, "median": median}
+            for s in slots[-24:] if s["total"] > limit]
+
+
+def spike_warning(spikes: list[dict]) -> Optional[str]:
+    if not spikes:
+        return None
+    worst = max(spikes, key=lambda s: s["total"])
+    what = ""
+    mcp, total = worst.get("mcp", 0), worst["total"] or 1
+    if mcp / total > 0.8:
+        empty = worst.get("mcp_other", 0) + worst.get("mcp_stream", 0)
+        what = (" — nästan bara MCP utan verktygsanrop" if empty / max(mcp, 1) > 0.9
+                else " — mest MCP")
+    elif worst.get("api", 0) / total > 0.8:
+        what = " — mest API"
+    hours = f"{len(spikes)} timmar" if len(spikes) > 1 else "1 timme"
+    n = f"{worst['total']:,}".replace(",", "\u202f")
+    return (f"Ovanligt mycket trafik ({hours} senaste dygnet): {n} anrop kl. "
+            f"{worst['hour'][11:13]} UTC, {worst['factor']}× normalt{what}")
+
+
+# ---------------------------------------------------------------------------
+# Who is calling
+# ---------------------------------------------------------------------------
+def top_callers(conn, hours: int = 24, limit: int = 10) -> dict:
+    """Searches and tool calls per visitor id over the last `hours`.
+
+    The recent-calls table showed a loop — the same eight questions every
+    five minutes — but not who: every call opened a new MCP session, so the
+    session column said nothing. The visitor id (app/visitors.py) is the
+    same for one caller all day, so grouping on it shows the loop as one row.
+    """
+    rows = conn.execute(
+        "SELECT json_extract(meta, '$.v') AS v, channel, LOWER(TRIM(query)) AS q, created_at "
+        "FROM usage_log WHERE created_at >= datetime('now', ?) "
+        "AND json_extract(meta, '$.v') IS NOT NULL AND (action LIKE 'tool:%' OR action = 'search') "
+        "ORDER BY created_at", (f"-{hours} hours",)).fetchall()
+    clients: dict[str, str] = {}
+    for r in conn.execute(
+            "SELECT json_extract(meta, '$.v') AS v, json_extract(meta, '$.client') AS client "
+            "FROM usage_log WHERE action = 'mcp:connect' AND created_at >= datetime('now', ?) "
+            "AND json_extract(meta, '$.v') IS NOT NULL ORDER BY id", (f"-{hours} hours",)):
+        if r["client"]:
+            clients[r["v"]] = r["client"]
+    by: dict[str, dict] = {}
+    for r in rows:
+        b = by.setdefault(r["v"], {"v": r["v"], "n": 0, "channels": set(), "queries": defaultdict(int),
+                                   "times": []})
+        b["n"] += 1
+        b["channels"].add(r["channel"])
+        if r["q"]:
+            b["queries"][r["q"]] += 1
+        b["times"].append(r["created_at"])
+    total = sum(b["n"] for b in by.values())
+    out = []
+    for b in sorted(by.values(), key=lambda b: -b["n"])[:limit]:
+        ts = [datetime.strptime(t[:19], "%Y-%m-%d %H:%M:%S") for t in b["times"] if t]
+        # Calls in one burst sit seconds apart; the rhythm is the gap between
+        # bursts, so only gaps of a minute or more count. A loop asking eight
+        # questions every five minutes has seven tiny gaps per real one.
+        between = sorted(g for g in ((ts[i] - ts[i - 1]).total_seconds() for i in range(1, len(ts)))
+                         if g >= 60)
+        rhythm = between[len(between) // 2] if len(between) >= 3 else None
+        top = sorted(b["queries"].items(), key=lambda kv: -kv[1])[:3]
+        out.append({"v": b["v"], "client": clients.get(b["v"]), "n": b["n"],
+                    "share_pct": round(100 * b["n"] / total) if total else 0,
+                    "channels": sorted(b["channels"]), "distinct": len(b["queries"]),
+                    "top": [{"q": q, "n": n} for q, n in top],
+                    "first": b["times"][0][11:16], "last": b["times"][-1][11:16],
+                    "rhythm_min": round(rhythm / 60) if rhythm else None})
+    return {"callers": out, "total": total, "visitors": len(by), "hours": hours}

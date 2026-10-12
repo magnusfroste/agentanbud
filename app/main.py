@@ -367,7 +367,8 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
             return response
         finally:
             try:
-                ops.STATS.record(request.url.path, status, (_time.perf_counter() - t0) * 1000)
+                ops.STATS.record(request.url.path, status, (_time.perf_counter() - t0) * 1000,
+                                 request.method, request.headers.get("accept", ""))
             except Exception:
                 pass
 
@@ -1087,10 +1088,12 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         if section == "maskinen":
             return {"machine": ops.machine(), "storage": ops.storage(db, conn)}
         if section == "trafik":
-            rows = ops.requests_by_hour(conn, 48)
+            rows = ops.with_mcp_breakdown(conn, ops.requests_by_hour(conn, 48))
             slots = ops.hour_slots(rows, 48)
+            spikes = ops.traffic_spikes(slots)
             return {"requests": rows, "slots": slots, "peak": max((h["total"] for h in slots), default=0),
-                    "t24": ops.traffic(slots[-24:]), "visitor_header": dict(visitors.HEADER)}
+                    "t24": ops.traffic(slots[-24:]), "visitor_header": dict(visitors.HEADER),
+                    "spikes": spikes, "spike_hours": [s["hour"] for s in spikes], "spike_factor": ops.SPIKE_FACTOR}
         if section == "fel":
             return {"errors": list(ops.ERRORS.items)[::-1], "recent_5xx": list(ops.STATS.recent_5xx)[::-1]}
         if section == "synk":
@@ -1100,6 +1103,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             usage = _usage(7)
             return {"mcp": {"clients": usage.get("mcp_clients", []), "tools": usage.get("mcp_tools", []),
                             "recent": ops.recent_mcp_calls(conn)},
+                    "callers": ops.top_callers(conn, 24),
                     "agent_calls": usage.get("agent_calls"), "agent_sessions": usage.get("agent_sessions")}
         if section == "inloggningar":
             return {"logins": ops.logins(conn), "summary": ops.login_summary(conn, 24),
@@ -1114,8 +1118,9 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
     def _overview(conn) -> dict:
         m = ops.machine()
         st = ops.storage(db, conn)
-        rows = ops.requests_by_hour(conn, 24)
-        t24 = ops.traffic(rows)
+        slots = ops.hour_slots(ops.with_mcp_breakdown(conn, ops.requests_by_hour(conn, 48)), 48)
+        t24 = ops.traffic(slots[-24:])
+        spike = ops.spike_warning(ops.traffic_spikes(slots))
         syncs = _syncs(conn, 12)
         last_run = syncs[0]["run_at"][:16] if syncs else None
         sync_errors = [s for s in syncs if s["status"] != "ok" and (s["run_at"] or "")[:10] == (syncs[0]["run_at"] or "")[:10]]
@@ -1141,6 +1146,8 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             warnings.append(("trafik", "Cloudflare skickar ingen besökaradress"))
         if disk_low:
             warnings.append(("maskinen", "Lite ledig disk"))
+        if spike:
+            warnings.append(("trafik", spike))
         return {"build": build_info(), "uptime": ops.uptime(started_at()), "machine": m, "storage": st,
                 "t24": t24, "errors": errors, "syncs_last": last_run, "sync_errors": len(sync_errors),
                 "next_run": _next_run(), "agents": usage.get("mcp_clients", [])[:3],
