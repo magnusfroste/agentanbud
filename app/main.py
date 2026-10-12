@@ -1766,7 +1766,7 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
                 # real usage, so flag bot:0 to survive the analytics filter.
                 _log_usage_safe(conn, "api", "search", query=q,
                                 meta={"source": source, "authority": authority,
-                                      "cpv": cpv, "bot": 0,
+                                      "cpv": cpv, "buyer_type": buyer_type, "bot": 0,
                                       "v": visitors.visitor_id(conn, visitors.address_of(request.headers),
                                                                request.headers.get("user-agent")),
                                       "segment": _segment_for(q, cpv),

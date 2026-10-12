@@ -24,6 +24,7 @@ would count its own share.
 from __future__ import annotations
 
 import hashlib
+import json
 import hmac
 import logging
 import os
@@ -586,6 +587,23 @@ def spike_warning(spikes: list[dict]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 # Who is calling
 # ---------------------------------------------------------------------------
+# Filters a search can carry instead of (or as well as) a search word, as
+# labels for the ops page. API searches log source/authority/cpv/buyer_type;
+# MCP tool calls log their arguments, which use the same names.
+_FILTERS = (("source", "källa"), ("cpv", "cpv"), ("authority", "köpare"),
+            ("buyer_type", "köpartyp"), ("region", "region"))
+
+
+def describe_call(query: Optional[str], meta: dict) -> str:
+    """What one search asked for: the search word, else its filters in
+    brackets. Two watchers polled the API every five minutes with no search
+    word at all, and the page could only say they asked "nothing"."""
+    if query:
+        return query
+    parts = [f"{label} {meta[k]}" for k, label in _FILTERS if meta.get(k)]
+    return "[" + ", ".join(parts) + "]" if parts else "[inga filter]"
+
+
 def top_callers(conn, hours: int = 24, limit: int = 10) -> dict:
     """Searches and tool calls per visitor id over the last `hours`.
 
@@ -595,7 +613,7 @@ def top_callers(conn, hours: int = 24, limit: int = 10) -> dict:
     same for one caller all day, so grouping on it shows the loop as one row.
     """
     rows = conn.execute(
-        "SELECT json_extract(meta, '$.v') AS v, channel, LOWER(TRIM(query)) AS q, created_at "
+        "SELECT json_extract(meta, '$.v') AS v, channel, LOWER(TRIM(query)) AS q, meta, created_at "
         "FROM usage_log WHERE created_at >= datetime('now', ?) "
         "AND json_extract(meta, '$.v') IS NOT NULL AND (action LIKE 'tool:%' OR action = 'search') "
         "ORDER BY created_at", (f"-{hours} hours",)).fetchall()
@@ -612,8 +630,11 @@ def top_callers(conn, hours: int = 24, limit: int = 10) -> dict:
                                    "times": []})
         b["n"] += 1
         b["channels"].add(r["channel"])
-        if r["q"]:
-            b["queries"][r["q"]] += 1
+        try:
+            meta = json.loads(r["meta"] or "{}")
+        except ValueError:
+            meta = {}
+        b["queries"][describe_call(r["q"], meta)] += 1
         b["times"].append(r["created_at"])
     total = sum(b["n"] for b in by.values())
     out = []

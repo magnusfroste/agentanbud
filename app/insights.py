@@ -323,7 +323,7 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     #   results_all  — 0 after the status filter is not a gap if the matches
     #                  merely closed. Rows logged before results_all existed
     #                  carry NULL and pass to the live check below.
-    #   no narrowing — a query combined with a source/authority/CPV filter can
+    #   no narrowing — a query combined with a source/authority/CPV/buyer-type filter can
     #                  return 0 while the term itself has plenty of data.
     gap_rows = rows(
         "SELECT LOWER(TRIM(query)) AS term, COUNT(*) AS n FROM usage_log "
@@ -334,6 +334,7 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
                + " AND COALESCE(json_extract(meta, '$.source'), '') = ''"
                + " AND COALESCE(json_extract(meta, '$.authority'), '') = ''"
                + " AND COALESCE(json_extract(meta, '$.cpv'), '') = ''"
+               + " AND COALESCE(json_extract(meta, '$.buyer_type'), '') = ''"
                + " AND query IS NOT NULL AND TRIM(query) != ''")
         + " GROUP BY term ORDER BY n DESC LIMIT ?", [top * 4])
 
