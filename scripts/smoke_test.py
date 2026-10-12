@@ -353,6 +353,10 @@ def main() -> int:
     st, info = get_json(base, "/mcp")
     tools_count = (info or {}).get("tools_count", 0)
     check("GET /mcp svarar", st == 200, f"HTTP {st}")
+    # A stream request must get a stream or 405, never 200 JSON: a client that
+    # got 200 reconnected about eight times a second for hours.
+    st_s, _, _ = get(base, "/mcp", headers={"Accept": "text/event-stream"})
+    check("GET /mcp som ström-begäran ger 405", st_s == 405, f"HTTP {st_s}")
     check("verktyg exponeras", tools_count >= 10, f"{tools_count} verktyg")
 
     def rpc(payload, session=None):
