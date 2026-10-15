@@ -234,12 +234,18 @@ def install(db_path: str, connect) -> None:
     logging.getLogger().addHandler(ERRORS)
 
     def _loop() -> None:
+        last_rollup = 0.0
         while True:
             time.sleep(60)
             try:
                 conn = connect(db_path)
                 try:
                     STATS.flush(conn)
+                    # Days for the growth page: at start, then hourly. Off the
+                    # request path: it groups all of usage_log.
+                    if time.monotonic() - last_rollup > 3600:
+                        rollup_daily(conn)
+                        last_rollup = time.monotonic()
                 finally:
                     conn.close()
             except Exception:
@@ -491,6 +497,7 @@ SECTIONS = [
     ("trafik", "Trafik"),
     ("fel", "Fel"),
     ("synk", "Synk"),
+    ("tillvaxt", "Tillväxt"),
     ("agenter", "Agenter"),
     ("inloggningar", "Inloggningar"),
     ("versioner", "Versioner"),
@@ -654,3 +661,114 @@ def top_callers(conn, hours: int = 24, limit: int = 10) -> dict:
                     "first": b["times"][0][11:16], "last": b["times"][-1][11:16],
                     "rhythm_min": round(rhythm / 60) if rhythm else None})
     return {"callers": out, "total": total, "visitors": len(by), "hours": hours}
+
+
+# ---------------------------------------------------------------------------
+# Growth: one summary row per day, kept after usage_log forgets the day
+# ---------------------------------------------------------------------------
+_DAY_SQL = """
+SELECT DATE(created_at) AS day,
+  COUNT(DISTINCT CASE WHEN action = 'view' AND json_extract(meta, '$.bot') = 0
+                      THEN json_extract(meta, '$.v') END) AS visitors,
+  SUM(action = 'view' AND COALESCE(json_extract(meta, '$.bot'), 0) = 0) AS human_views,
+  SUM(action = 'search' AND channel = 'browser') AS web_searches,
+  SUM(action = 'search' AND channel = 'api') AS api_searches,
+  SUM(action LIKE 'tool:%') AS agent_calls,
+  json_group_array(DISTINCT CASE WHEN action = 'mcp:connect'
+                                 THEN json_extract(meta, '$.client') END) AS clients
+FROM usage_log WHERE created_at >= ? AND created_at < ? GROUP BY day
+"""
+
+
+def _day_rows(conn, start: str, end: str) -> list[dict]:
+    out = []
+    for r in conn.execute(_DAY_SQL, (start, end)).fetchall():
+        names = sorted({c for c in json.loads(r["clients"] or "[]") if c})
+        out.append({"day": r["day"], "visitors": r["visitors"] or 0, "human_views": r["human_views"] or 0,
+                    "web_searches": r["web_searches"] or 0, "api_searches": r["api_searches"] or 0,
+                    "agent_calls": r["agent_calls"] or 0, "agent_clients": names})
+    return out
+
+
+def rollup_daily(conn, today: Optional[str] = None) -> int:
+    """Summarise every finished day still in usage_log that is not stored yet,
+    and yesterday again in case it was written to late. Never today (still
+    running; computed live) and never deletes: a day that has left usage_log
+    keeps its row."""
+    today = today or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    yesterday = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+    first = conn.execute("SELECT MIN(DATE(created_at)) FROM usage_log").fetchone()[0]
+    if not first or first >= today:
+        return 0
+    stored = {r[0] for r in conn.execute("SELECT day FROM daily_usage")}
+    if all(d in stored for d in _days(first, yesterday)) and yesterday in stored:
+        start = yesterday
+    else:
+        start = first
+    rows = [r for r in _day_rows(conn, start, today) if r["day"] not in stored or r["day"] >= yesterday]
+    conn.executemany(
+        "INSERT OR REPLACE INTO daily_usage (day, visitors, human_views, web_searches, api_searches, "
+        "agent_calls, agent_clients) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [(r["day"], r["visitors"], r["human_views"], r["web_searches"], r["api_searches"],
+          r["agent_calls"], json.dumps(r["agent_clients"])) for r in rows])
+    conn.commit()
+    return len(rows)
+
+
+def _days(first: str, last: str) -> list[str]:
+    d0 = datetime.strptime(first, "%Y-%m-%d")
+    d1 = datetime.strptime(last, "%Y-%m-%d")
+    return [(d0 + timedelta(days=i)).strftime("%Y-%m-%d") for i in range((d1 - d0).days + 1)]
+
+
+def weekly(conn, weeks: int = 12, today: Optional[str] = None) -> list[dict]:
+    """Monday-to-Sunday weeks, oldest first, the current one marked partial.
+    Visitors are averaged over the days that had visitor ids: ids change every
+    day, so a week's unique visitors cannot be counted, only its days'."""
+    today = today or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    days = {r["day"]: dict(r) for r in conn.execute("SELECT * FROM daily_usage").fetchall()}
+    for r in days.values():
+        r["agent_clients"] = json.loads(r["agent_clients"] or "[]")
+    tomorrow = (datetime.strptime(today, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    for r in _day_rows(conn, today, tomorrow):
+        days[r["day"]] = r
+    t = datetime.strptime(today, "%Y-%m-%d").date()
+    this_monday = t - timedelta(days=t.weekday())
+    out = []
+    for i in range(weeks - 1, -1, -1):
+        mon = this_monday - timedelta(weeks=i)
+        ds = [days.get((mon + timedelta(days=k)).isoformat()) for k in range(7)]
+        ds = [d for d in ds if d]
+        measured = [d["visitors"] for d in ds if d["visitors"]]
+        clients = set()
+        for d in ds:
+            clients.update(d["agent_clients"])
+        # Our own monitoring connects on a schedule whether anyone uses the
+        # site or not; /analytics leaves it out, and so does breadth here.
+        from .insights import SELF_REFERENTIAL_CLIENTS
+        clients -= set(SELF_REFERENTIAL_CLIENTS)
+        out.append({
+            "week": f"v{mon.isocalendar()[1]}", "monday": mon.isoformat(), "days": len(ds),
+            "partial": i == 0, "has_data": bool(ds),
+            "visitors_per_day": round(sum(measured) / len(measured)) if measured else None,
+            "visitor_days": len(measured),
+            "human_views": sum(d["human_views"] for d in ds),
+            "web_searches": sum(d["web_searches"] for d in ds),
+            "api_searches": sum(d["api_searches"] for d in ds),
+            "agent_calls": sum(d["agent_calls"] for d in ds),
+            "agent_clients": len(clients),
+            "agent_client_names": sorted(clients),
+        })
+    return out
+
+
+def growth_change(weeks: list[dict], key: str) -> Optional[int]:
+    """Percent change, last complete week against the one before. Per-day
+    figures for visitors; totals otherwise, and only between full weeks."""
+    full = [w for w in weeks if not w["partial"] and w["has_data"]]
+    if len(full) < 2:
+        return None
+    a, b = full[-2].get(key), full[-1].get(key)
+    if not a or b is None:
+        return None
+    return round((b - a) / a * 100)

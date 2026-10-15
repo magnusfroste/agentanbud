@@ -56,6 +56,18 @@
     </div>
   </a>
 
+  <a class="card" href="/ops/tillvaxt">
+    {% set g = d.growth %}{% set tw = g.this if g else none %}{% set lw = g.last if g else none %}
+    <h2>Tillväxt, denna vecka <span class="pill muted">{{ tw.week if tw else '' }}{{ ' · hittills' if tw and tw.partial else '' }}</span></h2>
+    <div class="big">{{ tw.visitors_per_day if tw and tw.visitors_per_day is not none else '—' }}</div>
+    <div class="small">unika besökare per dag i snitt{% if lw and lw.visitors_per_day %} · förra veckan {{ lw.visitors_per_day }}{% endif %}</div>
+    <div class="kv" style="margin-top:10px">
+      <div>Sidvisningar, människor</div><div>{{ (tw.human_views if tw else 0)|format_num }}</div>
+      <div>Sökningar, webb · API</div><div>{{ (tw.web_searches if tw else 0)|format_num }} · {{ (tw.api_searches if tw else 0)|format_num }}</div>
+      <div>Olika agentklienter</div><div>{{ tw.agent_clients if tw else 0 }}</div>
+    </div>
+  </a>
+
   <a class="card" href="/ops/agenter">
     <h2>Agenter, 7 d</h2>
     <div class="big">{{ (d.agent_calls_7d or 0)|format_num }}</div>

@@ -1099,6 +1099,22 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         if section == "synk":
             return {"syncs": _syncs(conn), "cron_schedule": get_schedule(), "next_run": _next_run(),
                     "cron_log": ops.cron_log_tail()}
+        if section == "tillvaxt":
+            # The flusher fills daily_usage a minute after start; a first visit
+            # before that summarises the days itself, once.
+            if not conn.execute("SELECT 1 FROM daily_usage LIMIT 1").fetchone():
+                ops.rollup_daily(conn)
+            weeks = ops.weekly(conn, 12)
+            # Start at the first week with data: empty weeks before it only
+            # squeeze the charts. The curve grows a bar a week from here.
+            first = next((i for i, w in enumerate(weeks) if w["has_data"]), len(weeks) - 1)
+            weeks = weeks[first:]
+            return {"weeks": weeks,
+                    "change": {k: ops.growth_change(weeks, k) for k in
+                               ("visitors_per_day", "human_views", "web_searches", "api_searches",
+                                "agent_calls", "agent_clients")},
+                    "peaks": {k: max((w[k] or 0) for w in weeks) for k in
+                              ("visitors_per_day", "human_views", "web_searches", "agent_clients")}}
         if section == "agenter":
             usage = _usage(7)
             return {"mcp": {"clients": usage.get("mcp_clients", []), "tools": usage.get("mcp_tools", []),
@@ -1148,7 +1164,13 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             warnings.append(("maskinen", "Lite ledig disk"))
         if spike:
             warnings.append(("trafik", spike))
-        return {"build": build_info(), "uptime": ops.uptime(started_at()), "machine": m, "storage": st,
+        try:
+            weeks = ops.weekly(conn, 2)
+        except Exception:
+            weeks = []
+        growth = {"this": weeks[-1] if weeks else None,
+                  "last": weeks[-2] if len(weeks) > 1 else None}
+        return {"build": build_info(), "uptime": ops.uptime(started_at()), "machine": m, "storage": st, "growth": growth,
                 "t24": t24, "errors": errors, "syncs_last": last_run, "sync_errors": len(sync_errors),
                 "next_run": _next_run(), "agents": usage.get("mcp_clients", [])[:3],
                 "agent_calls_7d": usage.get("agent_calls"), "visitors": usage.get("visitors"),

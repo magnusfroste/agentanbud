@@ -1,0 +1,56 @@
+{% extends "ops_base.html" %}
+{% block subtitle %}Vecka för vecka, måndag till söndag · hämtad {{ generated_at }} UTC{% endblock %}
+{% block ops %}
+{% set W = d.weeks %}{% set C = d.change %}
+
+{% macro delta(v) -%}
+  {%- if v is none %}<span class="pill muted">för få veckor</span>
+  {%- elif v > 0 %}<span class="pill ok">+{{ v }} %</span>
+  {%- elif v < 0 %}<span class="pill critical">{{ v }} %</span>
+  {%- else %}<span class="pill muted">±0 %</span>{%- endif %}
+{%- endmacro %}
+
+{% macro bars(key, peak, label, fmt='') -%}
+  {% set w = 46 %}{% set hmax = 110 %}
+  <div class="chart"><svg viewBox="0 0 {{ W|length * w + 10 }} {{ hmax + 44 }}" role="img" aria-label="{{ label }} per vecka">
+    <line x1="0" x2="{{ W|length * w + 10 }}" y1="{{ 18 + hmax }}" y2="{{ 18 + hmax }}" stroke="var(--line)"/>
+    {% for x in W %}
+      {% set v = x[key] or 0 %}{% set bh = (v / peak * hmax) if peak else 0 %}
+      {% if x.has_data %}
+      <rect x="{{ 6 + loop.index0 * w }}" y="{{ 18 + hmax - bh }}" width="{{ w - 12 }}" height="{{ bh }}" rx="2"
+            fill="var(--accent)" opacity="{{ '0.3' if x.partial else '0.75' }}"><title>{{ x.week }} (från {{ x.monday }}{{ ', hittills, ' ~ x.days ~ ' dagar' if x.partial else '' }}): {{ v }}</title></rect>
+      <text x="{{ 6 + loop.index0 * w + (w - 12) / 2 }}" y="{{ 14 + hmax - bh }}" text-anchor="middle">{{ v|format_num if x[key] is not none else '' }}</text>
+      {% endif %}
+      <text x="{{ 6 + loop.index0 * w + (w - 12) / 2 }}" y="{{ hmax + 34 }}" text-anchor="middle">{{ x.week }}</text>
+    {% endfor %}
+  </svg></div>
+{%- endmacro %}
+
+<div class="grid">
+  <div class="card"><h2>Unika besökare per dag {{ delta(C.visitors_per_day) }}</h2>
+    {{ bars('visitors_per_day', d.peaks.visitors_per_day, 'Unika besökare per dag') }}
+    <div class="note">Snitt per dag över veckans dagar med mätning. Besöks-id:t byter salt varje dygn, med flit, så samma person räknas en gång per dag och kan inte följas mellan dagar. Därför finns inget "unika per vecka" och inga "återkommande besökare". Mätningen började 11 oktober.</div></div>
+  <div class="card"><h2>Sidvisningar, människor {{ delta(C.human_views) }}</h2>
+    {{ bars('human_views', d.peaks.human_views, 'Mänskliga sidvisningar') }}
+    <div class="note">Webbläsare som inte säger sig vara robotar. Robotar som utger sig för att vara webbläsare räknas tyvärr hit.</div></div>
+  <div class="card"><h2>Sökningar på webben {{ delta(C.web_searches) }}</h2>
+    {{ bars('web_searches', d.peaks.web_searches, 'Sökningar på webben') }}
+    <div class="note">Människor som söker på sajten. Sökningar via API:t står i tabellen nedan; de görs mest av skript.</div></div>
+  <div class="card"><h2>Olika agentklienter {{ delta(C.agent_clients) }}</h2>
+    {{ bars('agent_clients', d.peaks.agent_clients, 'Olika agentklienter') }}
+    <div class="note">Klientnamn som gjort en MCP-handskakning under veckan. Ett mått på bredd, inte på mängd: fler olika verktyg som kopplar in agentanbud.</div></div>
+</div>
+
+<div class="card"><h2>Veckor</h2>
+  <table><thead><tr><th>Vecka</th><th>Från</th><th class="num">Besökare/dag</th><th class="num">Sidvisningar</th><th class="num">Webbsök</th><th class="num">API-sök</th><th class="num">Agentanrop</th><th>Agentklienter</th></tr></thead><tbody>
+  {% for x in W|reverse %}{% if x.has_data %}
+    <tr><td class="nowrap">{{ x.week }}{% if x.partial %} <span class="pill muted">hittills</span>{% endif %}</td><td class="small nowrap">{{ x.monday }}</td>
+      <td class="num">{{ x.visitors_per_day if x.visitors_per_day is not none else '—' }}</td>
+      <td class="num">{{ x.human_views|format_num }}</td><td class="num">{{ x.web_searches|format_num }}</td>
+      <td class="num">{{ x.api_searches|format_num }}</td><td class="num">{{ x.agent_calls|format_num }}</td>
+      <td class="small">{{ x.agent_client_names|join(', ') if x.agent_client_names else '—' }}</td></tr>
+  {% endif %}{% endfor %}
+  </tbody></table>
+  <div class="note">Ändringen i rubrikerna jämför de två senaste hela veckorna. Användningsloggen sparas i 30 dagar, men varje avslutad dag sammanfattas och sparas för alltid, så kurvan blir längre för varje vecka som går.</div>
+</div>
+{% endblock %}
