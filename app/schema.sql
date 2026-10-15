@@ -201,3 +201,17 @@ CREATE TABLE IF NOT EXISTS ops_logins (
     user_agent  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ops_logins_at ON ops_logins(at DESC);
+
+-- One row per day of usage, for the growth page on /ops. usage_log keeps 30
+-- days; growth needs longer memory, so each finished day is summarised here
+-- and kept. Small: one row a day. Visitor ids change every day by design, so
+-- a week's visitors can only be averaged per day, never counted as unique.
+CREATE TABLE IF NOT EXISTS daily_usage (
+    day             TEXT PRIMARY KEY,   -- YYYY-MM-DD, UTC
+    visitors        INTEGER NOT NULL DEFAULT 0,   -- unique that day (0 before ids existed)
+    human_views     INTEGER NOT NULL DEFAULT 0,
+    web_searches    INTEGER NOT NULL DEFAULT 0,
+    api_searches    INTEGER NOT NULL DEFAULT 0,
+    agent_calls     INTEGER NOT NULL DEFAULT 0,
+    agent_clients   TEXT                          -- JSON list of client names that did a handshake
+);
