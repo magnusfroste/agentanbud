@@ -2,6 +2,10 @@
 {% block ops %}
 <div class="grid">
   <div class="card"><h2>Senaste 7 dagarna</h2><div class="big">{{ (d.agent_calls or 0)|format_num }}</div><div class="small">verktygsanrop · {{ d.agent_sessions }} agenter per dag, summerat</div></div>
+  {% set sc = d.search_cache %}
+  <div class="card"><h2>Sökcache <span class="pill {{ 'ok' if sc and sc.hit_pct else 'muted' }}">{{ (sc.hit_pct ~ ' % ur cachen') if sc and sc.hit_pct is not none else 'inga sökningar ännu' }}</span></h2>
+    {% if sc %}<div class="kv"><div>Ur cachen</div><div>{{ sc.hits|format_num }}</div><div>Sökta på riktigt</div><div>{{ sc.misses|format_num }}</div><div>Sparade svar</div><div>{{ sc.entries|format_num }}</div></div>
+    <div class="note">search_tenders med samma argument inom {{ (sc.ttl_s // 60) }} minuter får samma svar ur minnet. Sedan start.</div>{% else %}<div class="small">—</div>{% endif %}</div>
   <div class="card"><h2>Verktyg</h2><table><tbody>{% for t in d.mcp.tools %}<tr><td class="mono">{{ t.tool }}</td><td class="num">{{ t.n|format_num }}</td></tr>{% endfor %}</tbody></table></div>
 </div>
 {% set c = d.callers %}

@@ -1082,6 +1082,13 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         nr = next_run()
         return nr.strftime("%Y-%m-%d %H:%M UTC") if nr else None
 
+    def _search_cache_stats() -> Optional[dict]:
+        try:
+            import mcp_server  # noqa: PLC0415
+            return mcp_server.SEARCH_CACHE.stats()
+        except Exception:
+            return None
+
     def _section_data(section: str, conn) -> dict:
         """Only what one page shows: the machine probe alone takes half a
         second, so the other pages do not pay for it."""
@@ -1120,6 +1127,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             return {"mcp": {"clients": usage.get("mcp_clients", []), "tools": usage.get("mcp_tools", []),
                             "recent": ops.recent_mcp_calls(conn)},
                     "callers": ops.top_callers(conn, 24),
+                    "search_cache": _search_cache_stats(),
                     "agent_calls": usage.get("agent_calls"), "agent_sessions": usage.get("agent_sessions")}
         if section == "inloggningar":
             return {"logins": ops.logins(conn), "summary": ops.login_summary(conn, 24),
