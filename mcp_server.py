@@ -226,7 +226,9 @@ def _tool_objects() -> list[types.Tool]:
                 "Search Swedish public procurement tenders. "
                 "Examples: query='IT-konsult stockholm', cpv='72' (IT), cpv='45' (construction), "
                 "source='ted' (EU-thresholds only), open_only=false (include closed). "
-                "Returns title, buyer, deadline with days-until, value, CPV, and a deep link."
+                "Returns title, buyer, deadline with days-until, value, CPV, and a deep link. "
+                "Data is refreshed once a day (sync starts 06:00 UTC); repeating a search before "
+                "then returns the same results, so for monitoring ask once a day, after 07:00 UTC."
             ),
             inputSchema={
                 "type": "object",
@@ -454,7 +456,8 @@ def _tool_objects() -> list[types.Tool]:
             name="match_profile",
             description=(
                 "Find tenders matching a profile (keywords + CPV prefixes + regions). "
-                "Use this for monitoring/saved searches. "
+                "Use this for monitoring/saved searches; the data is refreshed once a day "
+                "(06:00 UTC), so one call a day per profile is enough. "
                 "Examples: keywords=['IT', 'digitalisering'], cpv_prefixes=['72'], regions=['Stockholms län']."
             ),
             inputSchema={
@@ -729,6 +732,15 @@ class SearchCache:
 SEARCH_CACHE = SearchCache()
 
 
+def _with_freshness(conn, contents: list) -> list:
+    """Append when the data next changes, so a polling agent can slow down."""
+    try:
+        note = mcp_shared.freshness_note(conn)
+    except Exception:
+        return contents
+    return [*contents, types.TextContent(type="text", text=note)]
+
+
 async def _search_tenders(conn, args: dict) -> list[types.Content]:
     """search_tenders, answered from SEARCH_CACHE when the same arguments were
     asked within the last few minutes."""
@@ -737,10 +749,10 @@ async def _search_tenders(conn, args: dict) -> list[types.Content]:
     now = time.monotonic()
     hit = SEARCH_CACHE.get(key, now)
     if hit is not None:
-        return hit
+        return _with_freshness(conn, hit)
     result = await _search_tenders_uncached(conn, args)
     SEARCH_CACHE.put(key, result, now)
-    return result
+    return _with_freshness(conn, result)
 
 
 async def _search_tenders_uncached(conn, args: dict) -> list[types.Content]:
@@ -1154,9 +1166,9 @@ async def _deadline_calendar(conn, args: dict) -> list[types.Content]:
     ]))
     scope_str = f" ({scope})" if scope else ""
     if not rows:
-        return [types.TextContent(
+        return _with_freshness(conn, [types.TextContent(
             type="text",
-            text=f"Inga upphandlingar stänger inom {days} dagar{scope_str}.")]
+            text=f"Inga upphandlingar stänger inom {days} dagar{scope_str}.")])
 
     week = month = 0
     tender_lines = []
@@ -1181,7 +1193,7 @@ async def _deadline_calendar(conn, args: dict) -> list[types.Content]:
         "",
         *tender_lines,
     ]
-    return [types.TextContent(type="text", text="\n".join(lines))]
+    return _with_freshness(conn, [types.TextContent(type="text", text="\n".join(lines))])
 
 
 # ----- Blog tools -----------------------------------------------------------
@@ -1343,11 +1355,12 @@ async def _match_profile(conn, args: dict) -> list[types.Content]:
             f"cpv={cpv_prefixes}" if cpv_prefixes else "",
             f"regions={regions}" if regions else "",
         ]))
-        return [types.TextContent(type="text", text=f"Inga matchande upphandlingar för {profile_str}.")]
+        return _with_freshness(conn, [types.TextContent(
+            type="text", text=f"Inga matchande upphandlingar för {profile_str}.")])
 
     header = f"**{len(items)} matchande upphandlingar** (profil: {args})"
     body = "\n\n---\n\n".join(_format_tender(t) for t in items)
-    return [types.TextContent(type="text", text=f"{header}\n\n{body}")]
+    return _with_freshness(conn, [types.TextContent(type="text", text=f"{header}\n\n{body}")])
 
 
 def _format_knowledge(k: dict) -> str:
