@@ -22,6 +22,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 from jinja2 import Environment, FileSystemLoader
 
+import mcp_shared
+
 from .cron import get_schedule, next_run
 from .db import (
     connect, init_db, log_usage, bump_daily_counter,
@@ -462,6 +464,12 @@ Inte för att konkurrera med plattformarna, utan för att hjälpa marknaden fung
   get_stats, list_providers, list_regions, list_cpv_top, search_knowledge,
   get_knowledge, list_posts, get_post, get_post_stats.
 - Inga API-nycklar krävs för läsning. Anslut med bara URL:en.
+- Datan hämtas en gång per dygn, med start klockan 06 UTC. Samma fråga
+  före nästa hämtning ger samma svar: för bevakning räcker en fråga per
+  dygn, efter klockan 07 UTC. Varje svar från search_tenders, match_profile
+  och deadline_calendar säger när nästa hämtning startar; REST-svaren har
+  fälten data_updated och next_update (och huvudena X-Data-Updated,
+  X-Next-Update).
 
 ## REST API (öppet, ingen auth)
 
@@ -1739,6 +1747,7 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
     @app.get("/api/tenders")
     def list_tenders(
         request: Request,
+        response: Response,
         source: Optional[str] = Query(default=None),
         authority: Optional[str] = Query(default=None),
         q: Optional[str] = Query(default=None),
@@ -1822,7 +1831,16 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
                     except Exception:
                         d["cpv_codes"] = []
                 items.append(d)
-            return {"items": items, "page": page, "page_size": page_size, "total": total}
+            # When the data changes next, in the body (what an AI agent reads)
+            # and in headers (what a script can check cheaply). See
+            # mcp_shared.data_freshness for why.
+            fresh = mcp_shared.data_freshness(conn)
+            if fresh["updated_at"]:
+                response.headers["X-Data-Updated"] = fresh["updated_at"]
+            if fresh["next_update"]:
+                response.headers["X-Next-Update"] = fresh["next_update"]
+            return {"items": items, "page": page, "page_size": page_size, "total": total,
+                    "data_updated": fresh["updated_at"], "next_update": fresh["next_update"]}
         finally:
             conn.close()
 

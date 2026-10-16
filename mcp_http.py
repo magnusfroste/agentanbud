@@ -213,7 +213,7 @@ def _tool_list(include_write: bool = False) -> list[dict]:
     tools = [
         {
             "name": "search_tenders",
-            "description": "Search Swedish public procurement tenders. Examples: query='IT-konsult stockholm', cpv='72' (IT), cpv='45' (construction), source='ted' (EU-thresholds only), open_only=false (include closed). Returns title, buyer, deadline with days-until, value, CPV, and a deep link.",
+            "description": "Search Swedish public procurement tenders. Examples: query='IT-konsult stockholm', cpv='72' (IT), cpv='45' (construction), source='ted' (EU-thresholds only), open_only=false (include closed). Returns title, buyer, deadline with days-until, value, CPV, and a deep link. Data is refreshed once a day (sync starts 06:00 UTC); repeating a search before then returns the same results, so for monitoring ask once a day, after 07:00 UTC.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -291,7 +291,7 @@ def _tool_list(include_write: bool = False) -> list[dict]:
         },
         {
             "name": "match_profile",
-            "description": "Match tenders against a profile (keywords + CPV prefixes + regions).",
+            "description": "Match tenders against a profile (keywords + CPV prefixes + regions). Use this for monitoring; the data is refreshed once a day (06:00 UTC), so one call a day per profile is enough.",
             "inputSchema": {
                 "type": "object",
                 "properties": {

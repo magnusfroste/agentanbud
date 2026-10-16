@@ -137,3 +137,45 @@ def aggregate_winners(conn, authority: str = "", cpv: str = "") -> dict:
     return {"wins": Counter({label[k]: v for k, v in wins.items()}),
             "value_by_winner": {label[k]: v for k, v in value_by_winner.items()},
             "contracts": contracts}
+
+
+# How often a question can usefully be asked. Tenders arrive once a day, in
+# one sync run starting at the cron hour; a search repeated before the next run
+# gets the same answer. On 2026-10-16 one agent asked the same 177 searches
+# every two minutes, ~28,000 times in a day. Telling agents when the data
+# changes, in every answer, lets a well-built one poll once a day instead.
+
+def data_freshness(conn) -> dict:
+    """{'updated_at', 'next_update'} as ISO-8601 UTC strings (or None).
+
+    updated_at is the last successful sync of a tender source; next_update is
+    when the next sync run starts (it takes ~15 minutes to finish).
+    """
+    from datetime import datetime, timezone
+    from app.cron import next_run
+
+    placeholders = ",".join("?" * len(SOURCES))
+    row = conn.execute(
+        f"SELECT MAX(run_at) FROM sync_log WHERE status = 'ok' AND source IN ({placeholders})",
+        SOURCES).fetchone()
+    updated = None
+    if row and row[0]:
+        # sync_log.run_at is UTC, stored as 'YYYY-MM-DD HH:MM:SS'
+        updated = str(row[0])[:19].replace(" ", "T") + "Z"
+    nxt = next_run(datetime.now(timezone.utc))
+    return {"updated_at": updated,
+            "next_update": nxt.strftime("%Y-%m-%dT%H:%M:%SZ") if nxt else None}
+
+
+def freshness_note(conn) -> str:
+    """One line for the end of an MCP answer: when the data changes next."""
+    f = data_freshness(conn)
+    when = lambda iso: iso[:16].replace("T", " ") + " UTC"  # noqa: E731
+    parts = []
+    if f["updated_at"]:
+        parts.append(f"senast hämtad {when(f['updated_at'])}")
+    if f["next_update"]:
+        parts.append(f"nästa hämtning startar {when(f['next_update'])}")
+    detail = f" ({', '.join(parts)})" if parts else ""
+    return (f"_Datan uppdateras en gång per dygn{detail}. Samma fråga före dess ger samma svar; "
+            f"för bevakning räcker en fråga per dygn, efter klockan 07 UTC._")
