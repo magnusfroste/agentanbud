@@ -6,7 +6,9 @@ and the MCP `get_usage_stats` tool an operator agent uses to write about
 traffic. Two copies of these rules would drift the moment one is tuned.
 
 Everything returned here is aggregate and non-identifying. What is stored:
-no IP addresses and no user-agent strings, ever. Rows do carry a visitor id
+no IP addresses and no browser user-agent strings, ever. API rows from a
+non-browser program carry the program's own name (program_name: the first
+token, e.g. "python-requests/2.31"). Rows do carry a visitor id
 (app/visitors.py) — a hash of a salt that is deleted after a day, the address
 and the user agent — so a visitor can be counted once per day but not
 followed across days, and not recomputed once the salt is gone. The id never
@@ -17,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -74,12 +77,35 @@ _BOT_UA_MARKERS = ("bot", "crawler", "spider", "slurp", "bingpreview", "facebook
 
 def looks_like_bot(user_agent: str) -> bool:
     """Coarse bot detection from the UA string. We store only this boolean —
-    never the UA itself — so no fingerprinting, but sponsors still get an
-    honest human-vs-automated traffic split."""
+    never the UA itself (program_name keeps a non-browser program's name, no
+    more) — so no fingerprinting, but sponsors still get an honest
+    human-vs-automated traffic split."""
     ua = (user_agent or "").lower()
     if not ua:
         return True  # no UA at all → almost certainly automated
     return any(m in ua for m in _BOT_UA_MARKERS)
+
+
+_PROGRAM_CHARS = re.compile(r"[^A-Za-z0-9._/+-]")
+
+
+def program_name(user_agent: str) -> Optional[str]:
+    """The program's own name from a non-browser user agent, or None.
+
+    A script or service calling the API names itself first in its user agent
+    ("MyAgents/1.0 (info@…)", "python-requests/2.31"). That first token is
+    kept so the ops callers table can say who a REST caller is, the way MCP
+    clients name themselves in their handshake. Nothing that describes a
+    person's browser is kept: anything starting with "Mozilla/" (every
+    browser, and the crawlers that imitate one) gives None, and the rest of
+    the string — versions of the OS, contact details in parentheses — is
+    dropped.
+    """
+    ua = (user_agent or "").strip()
+    if not ua or ua.lower().startswith("mozilla/"):
+        return None
+    name = _PROGRAM_CHARS.sub("", ua.split()[0])[:40]
+    return name if re.search(r"[A-Za-z]", name) else None
 
 
 

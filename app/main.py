@@ -32,7 +32,7 @@ from .db import (
 )
 from .version import build_info, version_string, started_at
 from . import ops, visitors
-from .insights import usage_summary, REAL_SEARCH
+from .insights import program_name, usage_summary, REAL_SEARCH
 from .search import (build_match, match_subquery, like_floor_sql,
                      rank_order_sql)
 
@@ -1809,6 +1809,9 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
                                       "v": visitors.visitor_id(conn, visitors.address_of(request.headers),
                                                                request.headers.get("user-agent")),
                                       "segment": _segment_for(q, cpv),
+                                      # A script's own name (never a browser's),
+                                      # so ops can say who a REST caller is.
+                                      "program": program_name(request.headers.get("user-agent")),
                                       # No deadline filter on this route, so the
                                       # visible count IS the unfiltered one.
                                       "results": total, "results_all": total})

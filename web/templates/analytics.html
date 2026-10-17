@@ -32,6 +32,10 @@
     När en agent ansluter via MCP sparar vi dessutom det
     <em>klientnamn och den version</em> agenten själv uppger (t.ex.
     "claude-code 1.2.0") — det beskriver programvaran, inte användaren.
+    På samma sätt sparar vi, när ett program söker via REST-API:t,
+    programmets eget namn: första ordet i dess User-Agent, t.ex.
+    "python-requests/2.31". Aldrig för en webbläsare, och aldrig resten av
+    strängen.
     Den enda cookien på sajten är inloggningen till vår egen driftpanel.
   </p>
 </section>
