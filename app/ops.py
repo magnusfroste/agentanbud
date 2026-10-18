@@ -634,7 +634,7 @@ def top_callers(conn, hours: int = 24, limit: int = 10) -> dict:
     by: dict[str, dict] = {}
     for r in rows:
         b = by.setdefault(r["v"], {"v": r["v"], "n": 0, "channels": set(), "queries": defaultdict(int),
-                                   "times": []})
+                                   "times": [], "programs": defaultdict(int)})
         b["n"] += 1
         b["channels"].add(r["channel"])
         try:
@@ -642,6 +642,8 @@ def top_callers(conn, hours: int = 24, limit: int = 10) -> dict:
         except ValueError:
             meta = {}
         b["queries"][describe_call(r["q"], meta)] += 1
+        if meta.get("program"):
+            b["programs"][meta["program"]] += 1
         b["times"].append(r["created_at"])
     total = sum(b["n"] for b in by.values())
     out = []
@@ -654,7 +656,10 @@ def top_callers(conn, hours: int = 24, limit: int = 10) -> dict:
                          if g >= 60)
         rhythm = between[len(between) // 2] if len(between) >= 3 else None
         top = sorted(b["queries"].items(), key=lambda kv: -kv[1])[:3]
-        out.append({"v": b["v"], "client": clients.get(b["v"]), "n": b["n"],
+        # MCP clients name themselves in the handshake; REST callers only in
+        # their user agent, of which a non-browser program's name is logged.
+        program = max(b["programs"].items(), key=lambda kv: kv[1])[0] if b["programs"] else None
+        out.append({"v": b["v"], "client": clients.get(b["v"]) or program, "n": b["n"],
                     "share_pct": round(100 * b["n"] / total) if total else 0,
                     "channels": sorted(b["channels"]), "distinct": len(b["queries"]),
                     "top": [{"q": q, "n": n} for q, n in top],

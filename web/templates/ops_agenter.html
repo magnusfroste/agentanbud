@@ -22,7 +22,7 @@
     <td class="small">{{ x.channels|join(', ') }}</td>
     <td class="small">{{ x.first }}–{{ x.last }}</td></tr>{% endfor %}
   </tbody></table>
-  <div class="note">Grupperat på besöks-id, som är detsamma för en anropare hela dygnet men byts nästa dag. Många frågor men få unika, med jämn rytm, är en loop. Inom hakparentes: en sökning utan sökord, med de filter den använde.</div>
+  <div class="note">Grupperat på besöks-id, som är detsamma för en anropare hela dygnet men byts nästa dag. Många frågor men få unika, med jämn rytm, är en loop. Inom hakparentes: en sökning utan sökord, med de filter den använde. Klient: namnet en MCP-klient uppger, eller för REST det program som står först i User-Agent (aldrig en webbläsare).</div>
   {% else %}<div class="empty">Inga sökningar eller verktygsanrop med besöks-id senaste dygnet.</div>{% endif %}
 </div>
 <div class="card"><h2>Klienter som gjort handskakning</h2>

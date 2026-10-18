@@ -167,6 +167,31 @@ check("/ops/agenter", a.status_code == 200 and "Största anropare" in a.text and
 o = c.get("/ops")
 check("/ops översikt visar varningen", o.status_code == 200 and "Ovanligt mycket trafik" in o.text)
 
+print("\nREST-anropare har ett programnamn, webbläsare inget")
+from app.insights import program_name  # noqa: E402
+check("MyAgents med kontakt: bara namnet", program_name("MyAgents/1.0 (info@myagents.se)") == "MyAgents/1.0")
+check("python-requests", program_name("python-requests/2.31.0") == "python-requests/2.31.0")
+check("webbläsare: ingenting", program_name(
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Safari/605.1.15") is None)
+check("crawler som låtsas vara webbläsare: ingenting",
+      program_name("Mozilla/5.0 (compatible; GPTBot/1.0; +https://openai.com/gptbot)") is None)
+check("tomt och skräp: ingenting", program_name("") is None and program_name(None) is None
+      and program_name("12345 (x)") is None)
+check("tecken som inte hör till ett namn tas bort och längden begränsas",
+      program_name("<script>alert(1)</script>/" + "x" * 80) == "scriptalert1/script/" + "x" * 20)
+conn.execute("DELETE FROM usage_log")
+conn.commit()
+c.get("/api/tenders?q=ventilation", headers={"cf-connecting-ip": "203.0.113.20",
+                                              "user-agent": "MyAgents/1.0 (info@myagents.se)"})
+c.get("/api/tenders?q=ventilation", headers={"cf-connecting-ip": "203.0.113.21",
+                                              "user-agent": "Mozilla/5.0 (X11; Linux x86_64) Firefox/131.0"})
+metas = [json.loads(r[0]) for r in conn.execute(
+    "SELECT meta FROM usage_log WHERE channel = 'api' ORDER BY id").fetchall()]
+check("API-loggen sparar programnamnet", metas[0].get("program") == "MyAgents/1.0", metas[0])
+check("…men inte webbläsarens", metas[1].get("program") is None and "Firefox" not in json.dumps(metas[1]))
+named = [x for x in ops.top_callers(conn, 24)["callers"] if x["client"]]
+check("tabellen visar programmet som klient", [x["client"] for x in named] == ["MyAgents/1.0"], named)
+
 if failures:
     print(f"\n{failures} fall misslyckades")
     sys.exit(1)
