@@ -68,6 +68,9 @@
   <div class="insight-kpi green">
     <div class="v">{{ "{:,}".format(kpis.agent_sessions).replace(",", " ") }}</div>
     <div class="l">🤖 Agenter (unika per dag, summerat · {{ kpis.agent_calls }} anrop)</div>
+    {%- if kpis.automated_calls %}
+    <div class="l muted">+ {{ "{:,}".format(kpis.automated_calls).replace(",", " ") }} anrop från automatiserade loopar, borträknade</div>
+    {%- endif %}
   </div>
   <div class="insight-kpi highlight">
     <div class="v">{{ "{:,}".format(kpis.web_searches).replace(",", " ") }}</div>

@@ -254,6 +254,17 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     ).fetchone()[0] or 0
     api_calls = scalar("channel = 'api'")
 
+    # Behaviour, not name. SELF_REFERENTIAL_CLIENTS catches what calls itself
+    # "smoke"; it cannot catch a caller that opens a new session for every one
+    # of 19 782 calls and cycles 139 search terms — which was 99% of
+    # agent_calls in October 2026 and read as adoption. app/conduct.py
+    # classifies each caller-day from how it behaved; "loop" is reported as
+    # automated and taken out of the headline, not hidden.
+    from app.conduct import classify_log
+    conduct_kinds = classify_log(conn, (" AND " + where[6:]) if where else "", list(args))
+    automated_calls = conduct_kinds["loop"]["calls"]
+    agent_calls = max(agent_calls - automated_calls, 0)
+
     # --- MCP adoption: who is connecting, not just how much ---------------
     # Every MCP client self-identifies in the initialize handshake. Counting
     # distinct sessions per client name answers "which agents are people
@@ -426,6 +437,8 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
                      for l, n in seg_counter.most_common()],
         "top_terms": term_rows,
         "visitors": visitors,
+        "automated_calls": automated_calls,
+        "conduct": conduct_kinds,
         "unmet_demand": unmet,
         "unclassified": [{"term": t, "n": n} for t, n in other_counter.most_common(top)],
         "other_share_pct": int(seg_counter[SEGMENT_OTHER] / seg_total * 100),

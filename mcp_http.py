@@ -38,6 +38,8 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
 from app.db import connect, log_usage
+from app import conduct
+from mcp import types
 from app import visitors
 import mcp_shared
 import mcp_server
@@ -157,47 +159,71 @@ async def _dispatch_tool(name: str, arguments: dict, session_id: str | None = No
                       query=_extract_query(name, arguments), meta=meta or None)
         except Exception:
             LOG.exception("log_usage failed for MCP tool %s", name)
-        if name == "search_tenders":
-            return await mcp_server._search_tenders(conn, arguments or {})
-        if name == "get_tender":
-            return await mcp_server._get_tender(conn, arguments or {})
-        if name == "get_stats":
-            return await mcp_server._get_stats(conn, arguments or {})
-        if name == "list_providers":
-            return await mcp_server._list_providers(conn, arguments or {})
-        if name == "list_regions":
-            return await mcp_server._list_regions(conn, arguments or {})
-        if name == "list_cpv_top":
-            return await mcp_server._list_cpv_top(conn, arguments or {})
-        if name == "get_authority":
-            return await mcp_server._get_authority(conn, arguments or {})
-        if name == "match_profile":
-            return await mcp_server._match_profile(conn, arguments or {})
-        if name == "search_knowledge":
-            return await mcp_server._search_knowledge(conn, arguments or {})
-        if name == "get_knowledge":
-            return await mcp_server._get_knowledge(conn, arguments or {})
-        if name == "get_usage_stats":
-            return await mcp_server._get_usage_stats(conn, arguments or {})
-        if name == "get_winner_history":
-            return await mcp_server._get_winner_history(conn, arguments or {})
-        if name == "similar_tenders":
-            return await mcp_server._similar_tenders(conn, arguments or {})
-        if name == "deadline_calendar":
-            return await mcp_server._deadline_calendar(conn, arguments or {})
-        if name == "list_posts":
-            return await mcp_server._list_posts(conn, arguments or {})
-        if name == "get_post":
-            return await mcp_server._get_post(conn, arguments or {})
-        if name == "get_post_stats":
-            return await mcp_server._get_post_stats(conn, arguments or {})
-        if name == "create_post":
-            return await mcp_server._create_post(conn, arguments or {})
-        if name == "update_post":
-            return await mcp_server._update_post(conn, arguments or {})
-        raise ValueError(f"Unknown tool: {name}")
+            v = None
+        # How this caller has behaved today (app/conduct.py). Recorded before
+        # the tool runs so a paused call is counted as attempted; the pause
+        # itself is raised here and answered by the handler with a retry time.
+        entry = None
+        try:
+            fresh = mcp_shared.data_freshness(conn)
+            entry = conduct.LEDGER.record(v, meta.get("_sid"), _extract_query(name, arguments),
+                                          fresh.get("updated_at"))
+            conduct.check_pause(entry, fresh.get("next_update"))
+        except conduct.Paused:
+            raise
+        except Exception:
+            LOG.exception("conduct failed for MCP tool %s", name)
+        content = await _run_tool(conn, name, arguments)
+        # Guidance rides as its own text block after the answer, like the
+        # freshness note: the answer is never altered, only followed.
+        for line in conduct.guidance(entry):
+            content = [*content, types.TextContent(type="text", text=line)]
+        return content
     finally:
         conn.close()
+
+
+async def _run_tool(conn, name: str, arguments: dict) -> list:
+    """The tool itself, with no logging or conduct around it."""
+    if name == "search_tenders":
+        return await mcp_server._search_tenders(conn, arguments or {})
+    if name == "get_tender":
+        return await mcp_server._get_tender(conn, arguments or {})
+    if name == "get_stats":
+        return await mcp_server._get_stats(conn, arguments or {})
+    if name == "list_providers":
+        return await mcp_server._list_providers(conn, arguments or {})
+    if name == "list_regions":
+        return await mcp_server._list_regions(conn, arguments or {})
+    if name == "list_cpv_top":
+        return await mcp_server._list_cpv_top(conn, arguments or {})
+    if name == "get_authority":
+        return await mcp_server._get_authority(conn, arguments or {})
+    if name == "match_profile":
+        return await mcp_server._match_profile(conn, arguments or {})
+    if name == "search_knowledge":
+        return await mcp_server._search_knowledge(conn, arguments or {})
+    if name == "get_knowledge":
+        return await mcp_server._get_knowledge(conn, arguments or {})
+    if name == "get_usage_stats":
+        return await mcp_server._get_usage_stats(conn, arguments or {})
+    if name == "get_winner_history":
+        return await mcp_server._get_winner_history(conn, arguments or {})
+    if name == "similar_tenders":
+        return await mcp_server._similar_tenders(conn, arguments or {})
+    if name == "deadline_calendar":
+        return await mcp_server._deadline_calendar(conn, arguments or {})
+    if name == "list_posts":
+        return await mcp_server._list_posts(conn, arguments or {})
+    if name == "get_post":
+        return await mcp_server._get_post(conn, arguments or {})
+    if name == "get_post_stats":
+        return await mcp_server._get_post_stats(conn, arguments or {})
+    if name == "create_post":
+        return await mcp_server._create_post(conn, arguments or {})
+    if name == "update_post":
+        return await mcp_server._update_post(conn, arguments or {})
+    raise ValueError(f"Unknown tool: {name}")
 
 
 def _tool_list(include_write: bool = False) -> list[dict]:
@@ -560,9 +586,22 @@ async def mcp_post(request: Request):
                     status_code=401,
                     headers={**_cors_headers(), "mcp-session-id": session_id},
                 )
-            content = await _dispatch_tool(name, arguments, session_id,
-                                           visitors.address_of(request.headers),
-                                           request.headers.get("user-agent"))
+            try:
+                content = await _dispatch_tool(name, arguments, session_id,
+                                               visitors.address_of(request.headers),
+                                               request.headers.get("user-agent"))
+            except conduct.Paused as p:
+                # Not a refusal: a pause with its end time, in the body an
+                # agent reads and in the header a client library honours.
+                return JSONResponse(
+                    {"jsonrpc": "2.0", "id": rpc_id,
+                     "error": {"code": -32029, "message": p.message(),
+                               "data": {"retryAfterSeconds": p.retry_after,
+                                        "nextDataUpdate": p.next_update}}},
+                    status_code=429,
+                    headers={**_cors_headers(), "mcp-session-id": session_id,
+                             "Retry-After": str(p.retry_after)},
+                )
             result = _format_result(content)
         else:
             return JSONResponse(
