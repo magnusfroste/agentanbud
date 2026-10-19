@@ -1312,6 +1312,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                     "bot_views": v["bot"], "human_pct": v["human_pct"],
                     "searches": s["searches"], "web_searches": s["web_searches"],
                     "api_searches": s["api_searches"], "agent_calls": s["agent_calls"],
+                    "automated_calls": s.get("automated_calls", 0),
                     "agent_sessions": s["agent_sessions"],
                     "operator_calls": s["operator_calls"],
                     "visitors": s["visitors"]}
