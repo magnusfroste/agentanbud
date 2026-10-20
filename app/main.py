@@ -31,7 +31,7 @@ from .db import (
     record_post_event,
 )
 from .version import build_info, version_string, started_at
-from . import ops, visitors
+from . import ops, seo, visitors
 from .insights import program_name, usage_summary, REAL_SEARCH
 from .search import (build_match, match_subquery, like_floor_sql,
                      rank_order_sql)
@@ -450,7 +450,8 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
 
 > Fri, öppen tillgång till svenska offentliga upphandlingar. Sök, bevaka och
 > bygg ovanpå — via webb, REST API och MCP för AI-agenter. Data speglas från
-> Mercell och TED EU. Ingen inloggning, inga nycklar för läsning.
+> TED EU, Mercell, Kommersannons och Upphandlingsmyndigheten. Ingen
+> inloggning, inga nycklar för läsning.
 
 Agentanbuds syfte: göra det enklare för svenska företag — särskilt småföretag — att
 hitta och offerera offentliga upphandlingar. Öppna data, öppen kod, öppen matchning.
@@ -500,7 +501,8 @@ siffrorna finns strukturerat på båda ställena ovan.
 
 ## Datakällor
 
-- Mercell (publikt sök-API), TED EU (Contract Notices, Awards, PIN),
+- TED EU (Contract Notices, Awards, PIN), Mercell (publikt sök-API),
+  Kommersannons (kommunala upphandlingar under tröskelvärdena),
   Upphandlingsmyndigheten (LOV + hållbarhetskriterier).
 - Vi respekterar robots.txt och speglar bara publik data. Länkar alltid
   tillbaka till originalannonsen.
@@ -513,6 +515,8 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         return PlainTextResponse(body, media_type="text/markdown; charset=utf-8",
                                  headers={"Cache-Control": "public, max-age=3600"})
 
+    _ISO_DAY = _re.compile(r"\d{4}-\d{2}-\d{2}")
+
     @app.get("/sitemap.xml", include_in_schema=False)
     def sitemap_xml():
         conn = connect(db)
@@ -524,7 +528,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 "ORDER BY published_at DESC"
             ).fetchall()
             tenders = conn.execute(
-                "SELECT id FROM tenders ORDER BY id DESC"
+                "SELECT id, published_at FROM tenders ORDER BY id DESC"
             ).fetchall()
         finally:
             conn.close()
@@ -538,7 +542,11 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             lm = f"<lastmod>{lastmod}</lastmod>" if lastmod else ""
             parts.append(f"<url><loc>{SITE_URL}/blogg/{r['slug']}</loc>{lm}</url>")
         for r in tenders:
-            parts.append(f"<url><loc>{SITE_URL}/tenders/{r['id']}</loc></url>")
+            # A notice rarely changes after it is published, so the publish
+            # date is the honest lastmod; fetched_at moves on every daily sync.
+            day = (r["published_at"] or "")[:10]
+            lm = f"<lastmod>{day}</lastmod>" if _ISO_DAY.fullmatch(day) else ""
+            parts.append(f"<url><loc>{SITE_URL}/tenders/{r['id']}</loc>{lm}</url>")
         parts.append("</urlset>")
         return Response("\n".join(parts), media_type="application/xml",
                         headers={"Cache-Control": "public, max-age=3600"})
@@ -1009,7 +1017,12 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                     d["raw_json_pretty"] = ""
             except Exception:
                 d["raw_json_pretty"] = str(raw) if raw else ""
-            return HTMLResponse(render("detail.html", t=d, request=request))
+            return HTMLResponse(render(
+                "detail.html", t=d, request=request,
+                seo_title=seo.tender_title(d), seo_description=seo.tender_description(d),
+                jsonld=[seo.jsonld(seo.breadcrumbs(
+                    ("Agentanbud", "/"), ("Sök upphandlingar", "/browse"),
+                    (seo.tender_title(d), f"/tenders/{d['id']}")))]))
         except HTTPException:
             raise
         except Exception as exc:
@@ -1418,7 +1431,11 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 p["tags"] = []
             p["date"] = (p.get("published_at") or "")[:10]
             p["body_html"] = render_markdown(p.get("body_md") or "")
-            return HTMLResponse(render("blog_post.html", post=p, request=request))
+            return HTMLResponse(render(
+                "blog_post.html", post=p, request=request,
+                jsonld=[seo.jsonld(seo.blog_posting(p)),
+                        seo.jsonld(seo.breadcrumbs(("Agentanbud", "/"), ("Blogg", "/blogg"),
+                                                   (p["title"], f"/blogg/{p['slug']}")))]))
         finally:
             conn.close()
 
