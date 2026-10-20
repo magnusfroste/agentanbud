@@ -683,11 +683,17 @@ class SearchCache:
     still gets exactly what it asked for and the database does the work once
     per round instead of every call.
 
-    Five minutes, so a deadline that passes or a sync that lands shows up
-    within minutes. Bounded, oldest out first. In memory, per process: the
-    site runs one worker.
+    Thirty minutes. Five was too short: by 18 October the agent had slowed
+    to exactly one round every five minutes, so each answer expired just
+    before the same question came back, and 1 of 1 099 searches was served
+    from the cache. A sync that lands does not wait for the TTL: the key
+    carries the time of the last sync (_search_tenders), so the first search
+    after it is done for real. What the TTL still bounds is a deadline
+    passing during the day — open_only drops it at most thirty minutes late.
+    Bounded, oldest out first. In memory, per process: the site runs one
+    worker.
     """
-    TTL_S = 300
+    TTL_S = 1800
     MAX_ENTRIES = 2000
 
     def __init__(self) -> None:
@@ -743,9 +749,15 @@ def _with_freshness(conn, contents: list) -> list:
 
 async def _search_tenders(conn, args: dict) -> list[types.Content]:
     """search_tenders, answered from SEARCH_CACHE when the same arguments were
-    asked within the last few minutes."""
+    asked within TTL_S and no sync has landed since."""
     import time
-    key = SearchCache.key(args)
+    # The syncs run in their own process, so they cannot clear this cache;
+    # keying on the last sync time means a new sync is simply a new key.
+    try:
+        synced = mcp_shared.data_freshness(conn)["updated_at"] or ""
+    except Exception:
+        synced = ""
+    key = synced + "|" + SearchCache.key(args)
     now = time.monotonic()
     hit = SEARCH_CACHE.get(key, now)
     if hit is not None:
