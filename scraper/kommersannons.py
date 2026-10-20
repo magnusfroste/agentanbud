@@ -269,6 +269,16 @@ def run(db_path: str) -> int:
                 conn.commit()
                 written += 1
         conn.commit()
+        if not seen:
+            # The list always holds a few hundred notices. None at all means
+            # the site was down or changed, not that Sweden stopped buying:
+            # on 18 October a 26-second run found nothing, was logged "ok",
+            # and ops said nothing. Logged as an error, it warns.
+            msg = ("kommersannons.se: listan var tom, inga annonser lästes – sajten var nere "
+                   "eller har ändrat utseende. Inget uppdaterades; tidigare annonser ligger kvar.")
+            log_sync(conn, source="kommersannons", status="error", count=0, message=msg)
+            LOG.warning(msg)
+            return 0
         msg = (f"kommersannons.se: {written} sparade, {skipped_dup} fanns redan i annan källa, "
                f"{skipped_kind} efterannonser hoppades över")
         log_sync(conn, source="kommersannons", status="ok", count=written, message=msg)

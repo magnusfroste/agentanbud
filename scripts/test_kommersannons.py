@@ -119,6 +119,38 @@ check("samma titel, annan köpare räknas inte som dubblett",
       (k._norm("Manuella rullstolar"), k._norm("Ale kommun")[:10]) in known, False)
 check("egna rader räknas inte", (k._norm("Egen annons"), k._norm("Ale kommun")[:10]) in known, False)
 
+print("\nEn tom lista är ett fel, inte en lyckad körning")
+from app.db import init_db  # noqa: E402
+
+
+class _NoClient:
+    def __init__(self, *a, **kw): pass
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+
+
+def _run_with(rows_out):
+    db_ = tempfile.mktemp(suffix=".db")
+    init_db(db_)
+    orig = k.httpx.Client, k.walk_list
+    k.httpx.Client, k.walk_list = _NoClient, lambda client: iter(rows_out)
+    try:
+        n_ = k.run(db_)
+    finally:
+        k.httpx.Client, k.walk_list = orig
+    c_ = sqlite3.connect(db_)
+    last = c_.execute("SELECT status, count, message FROM sync_log ORDER BY id DESC LIMIT 1").fetchone()
+    c_.close()
+    return n_, last
+
+
+n_empty, last = _run_with([])
+check("ingenting lästes: 0 sparade", n_empty, 0)
+check("…loggas som fel, så att ops varnar", last[0], "error")
+check("…med en förklaring", "listan var tom" in last[2], True)
+n_award, last = _run_with([{**rows[0], "kind": "Efterannons"}])
+check("bara efterannonser är inte tomt: det är en lyckad körning", last[0], "ok")
+
 if failures:
     print(f"\n{len(failures)} fall misslyckades")
     sys.exit(1)

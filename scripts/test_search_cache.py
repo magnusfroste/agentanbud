@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""search_tenders answers come from a five-minute cache for identical
-arguments, every call is still logged, and the cache is bounded. Offline.
+"""search_tenders answers come from a thirty-minute cache for identical
+arguments, a sync that lands starts over, every call is still logged, and the
+cache is bounded. Offline.
 
 Run: python3 scripts/test_search_cache.py
 """
@@ -17,7 +18,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 import app.main as m  # noqa: E402
 import mcp_server  # noqa: E402
-from app.db import connect  # noqa: E402
+from app.db import connect, log_sync  # noqa: E402
 
 DB = tempfile.mktemp(suffix=".db")
 APP = m.create_app(DB)
@@ -59,10 +60,22 @@ finally:
     conn.close()
 check("every call is still logged, cached or not", n == 4, f"{n}")
 
+conn = connect(DB)
+try:
+    log_sync(conn, source="mercell", status="ok", count=1, message="")
+finally:
+    conn.close()
+h1, m1 = cache.hits, cache.misses
+call({"query": "ventilation", "limit": 5}, 5)
+check("a sync that lands means a fresh search, not a cached one", cache.misses == m1 + 1 and cache.hits == h1)
+call({"query": "ventilation", "limit": 5}, 6)
+check("…which is then cached again", cache.hits == h1 + 1)
+
 k = mcp_server.SearchCache.key({"query": "x"})
 cache.put(k, ["answer"], now=1000.0)
-check("an answer is served within five minutes", cache.get(k, now=1000.0 + 299) == ["answer"])
-check("…and not after", cache.get(k, now=1000.0 + 301) is None)
+check("an answer asked every five minutes is served from the cache", cache.get(k, now=1000.0 + 300) == ["answer"])
+check("…for thirty minutes", cache.get(k, now=1000.0 + 1799) == ["answer"])
+check("…and not after", cache.get(k, now=1000.0 + 1801) is None)
 
 small = mcp_server.SearchCache()
 small.MAX_ENTRIES = 3
