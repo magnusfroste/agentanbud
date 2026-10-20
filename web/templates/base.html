@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{% block title %}Agentanbud{% endblock %} — Svenska upphandlingar</title>
+  <title>{% block full_title %}{% block title %}Svenska offentliga upphandlingar{% endblock %} | Agentanbud{% endblock %}</title>
 
   <!-- SEO — canonical/og:url follow the current path so each page is its own
        document (not a duplicate of the homepage). Pages can override the
        description/og blocks for richer per-page metadata. -->
   {% set _path = (request.url.path if request else '/') %}
-  <meta name="description" content="{% block description %}Agentanbud — fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och utforska upphandlingar från Mercell, TED EU och fler källor. Öppet API, MCP för AI-agenter. Infrastruktur för demokrati.{% endblock %}" />
+  <meta name="description" content="{% block description %}Agentanbud — fri tillgång till svenska offentliga upphandlingar. Sök, bevaka och utforska upphandlingar från TED, Mercell, Kommersannons och Upphandlingsmyndigheten. Öppet API, MCP för AI-agenter. Infrastruktur för demokrati.{% endblock %}" />
   <meta name="keywords" content="upphandling, offentlig upphandling, Sverige, anbud, offentlig, Mercell, TED, LOU, direktupphandling, ramavtal, CPV, upphandlingsmyndigheten, fri data, öppen data" />
   <meta name="author" content="Agentanbud" />
   <meta name="robots" content="index, follow" />
@@ -34,7 +34,11 @@
   <meta name="twitter:image" content="{{ self.og_image() }}" />
   <meta name="twitter:image:alt" content="{{ self.og_image_alt() }}" />
 
-  <!-- AEO (Answer Engine Optimization) — för AI-crawlers -->
+  <!-- AEO (Answer Engine Optimization) — för AI-crawlers. The site-level
+       blocks describe Agentanbud itself, so they belong on the front page
+       only: repeated on 23,000 tender pages they said nothing about any of
+       them. Pages add their own through `jsonld` (app/seo.py). -->
+  {% if _path == '/' %}
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -83,6 +87,10 @@
     ]
   }
   </script>
+  {% endif %}
+  {% for block in jsonld or [] %}
+  <script type="application/ld+json">{{ block|safe }}</script>
+  {% endfor %}
 
   <!-- Favicon (inline SVG, Swedish flag) -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 12'%3E%3Crect width='16' height='12' fill='%23006aa7'/%3E%3Crect y='4' width='16' height='4' fill='%23fecc00'/%3E%3Crect x='5' width='4' height='12' fill='%23fecc00'/%3E%3C/svg%3E" />
