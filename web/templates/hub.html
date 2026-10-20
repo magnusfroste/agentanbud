@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Öppna upphandlingar {{ hub.phrase }}{% endblock %}
+{% block description %}{{ answer_text[:300] }}{% endblock %}
+{% block og_title %}Öppna upphandlingar {{ hub.phrase }}{% endblock %}
+{% block og_description %}{{ answer_text[:300] }}{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb">
+  <a href="/">Agentanbud</a><span class="sep">/</span>
+  <a href="/upphandlingar">Upphandlingar</a><span class="sep">/</span>
+  <span class="current">{{ hub.name }}</span>
+</nav>
+
+<section class="insight-section">
+  <h1>Öppna upphandlingar {{ hub.phrase }}</h1>
+  <p class="lead">{{ answer_text }}</p>
+  {% if hub.kind == 'lan' %}
+  <p class="muted small">Här finns upphandlingar som anger {{ hub.name }} som region (från Mercell och Kommersannons).
+    EU-upphandlingar från TED anger bara köparens ort, som ofta är ett huvudkontor, och är därför inte med —
+    hitta dem via <a href="/upphandlingar">branschsidorna</a>.</p>
+  {% endif %}
+</section>
+
+<section class="insight-section">
+  {% if items %}
+  <h2>{% if shown < total %}De {{ shown }} som stänger först{% else %}Alla {{ total }}, sorterade efter sista anbudsdag{% endif %}</h2>
+  <div class="cards">
+    {% for t in items %}
+    <a class="card-tender" href="/tenders/{{ t.id }}">
+      <div class="top-row"><h3>{{ t.title or "(utan titel)" }}</h3></div>
+      <div class="meta">
+        <span>🏛️ {{ t.authority or "—" }}</span>
+        {% if t.deadline_text %}<span>⏳ Sista anbudsdag {{ t.deadline_text }}</span>{% endif %}
+        {% if t.region and hub.kind != 'lan' %}<span>📍 {{ t.region }}</span>{% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% if shown < total %}<p class="muted">Visar {{ shown }} av {{ total }}. <a href="/browse">Sök bland alla</a>.</p>{% endif %}
+  {% else %}
+  <p>Inga öppna upphandlingar just nu. <a href="/browse">Sök bland alla upphandlingar</a>, även stängda.</p>
+  {% endif %}
+</section>
+
+{% if hub.kind == 'bransch' %}
+<section class="insight-section">
+  <h2>För din AI-agent</h2>
+  <p class="muted">Samma bransch via öppet API eller MCP, utan nyckel:
+    <code>GET /api/tenders?cpv={{ hub.match[0] }}</code> ·
+    <code>search_tenders(cpv="{{ hub.match[0] }}")</code> på <code>https://www.agentanbud.se/mcp</code>.
+    <a href="/agenter">Så kopplar du in din agent</a>.</p>
+</section>
+{% endif %}
+
+<section class="insight-section">
+  <h2>Fler {{ 'branscher' if hub.kind == 'bransch' else 'län' }}</h2>
+  <p>{% for h in siblings %}<a href="{{ h.path }}">{{ h.name }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</p>
+</section>
+{% endblock %}

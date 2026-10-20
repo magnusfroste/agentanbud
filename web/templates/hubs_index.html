@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Öppna upphandlingar per bransch och län{% endblock %}
+{% block description %}Alla öppna svenska offentliga upphandlingar, sorterade per bransch och per län. Uppdateras varje dag från TED, Mercell, Kommersannons och Upphandlingsmyndigheten.{% endblock %}
+
+{% block content %}
+<section class="insight-section">
+  <h1>Öppna upphandlingar per bransch och län</h1>
+  <p class="lead">Varje sida listar de upphandlingar som går att lämna anbud på just nu, med de som stänger först överst. Uppdateras varje morgon.</p>
+</section>
+
+<section class="insight-section">
+  <h2>Per bransch</h2>
+  <ul class="hub-list">
+    {% for h in sectors %}<li><a href="{{ h.path }}">{{ h.name }}</a> <span class="muted">({{ counts[h.path] }})</span></li>{% endfor %}
+  </ul>
+</section>
+
+<section class="insight-section">
+  <h2>Per län</h2>
+  <ul class="hub-list">
+    {% for h in counties %}<li><a href="{{ h.path }}">{{ h.name }}</a> <span class="muted">({{ counts[h.path] }})</span></li>{% endfor %}
+  </ul>
+  <p class="muted small">Länssidorna bygger på den region annonsen anger (Mercell och Kommersannons). EU-upphandlingar från TED saknar län och finns på branschsidorna. Antalen speglar alltså vilka källor som anger län, inte hur mycket varje län upphandlar.</p>
+</section>
+{% endblock %}
