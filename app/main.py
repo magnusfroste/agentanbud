@@ -31,7 +31,7 @@ from .db import (
     record_post_event,
 )
 from .version import build_info, version_string, started_at
-from . import ops, seo, visitors
+from . import hubs, ops, seo, visitors
 from .insights import program_name, usage_summary, REAL_SEARCH
 from .search import (build_match, match_subquery, like_floor_sql,
                      rank_order_sql)
@@ -522,7 +522,8 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         conn = connect(db)
         try:
             static_paths = ["/", "/browse", "/dashboard", "/providers",
-                            "/agenter", "/blogg", "/kunskap"]
+                            "/agenter", "/blogg", "/kunskap", "/upphandlingar"]
+            static_paths += [h.path for h in hubs.SECTORS + hubs.COUNTIES]
             posts = conn.execute(
                 "SELECT slug, updated_at FROM posts WHERE status = 'published' "
                 "ORDER BY published_at DESC"
@@ -825,10 +826,37 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
     # "/upphandlingar" is the address a Swedish speaker — or an agent — guesses
     # for the search page. It 404'd for a real search (?q=klimatdata, four
     # times in a day) before this. Permanent, and the query string carries over.
+    # Without a query it is the index of the industry and county pages
+    # (app/hubs.py), which search engines may index where /browse?… is not.
     @app.get("/upphandlingar", include_in_schema=False)
     def upphandlingar_redirect(request: Request):
         q = request.url.query
-        return RedirectResponse("/browse" + (f"?{q}" if q else ""), status_code=301)
+        if q:
+            return RedirectResponse(f"/browse?{q}", status_code=301)
+        conn = connect(db)
+        try:
+            counts = hubs.index_counts(conn, mcp_shared.data_freshness(conn)["updated_at"])
+            return HTMLResponse(render("hubs_index.html", request=request, sectors=hubs.SECTORS,
+                                       counties=hubs.COUNTIES, counts=counts,
+                                       jsonld=[seo.jsonld(seo.breadcrumbs(
+                                           ("Agentanbud", "/"), ("Upphandlingar", "/upphandlingar")))]))
+        finally:
+            conn.close()
+
+    @app.get("/upphandlingar/{kind}/{slug}", include_in_schema=False)
+    def upphandlingar_hub(kind: str, slug: str, request: Request):
+        hub = hubs.find(kind, slug)
+        if not hub:
+            raise HTTPException(404, "no such page")
+        conn = connect(db)
+        try:
+            page = hubs.hub_page(conn, hub)
+            text = hubs.answer(page, mcp_shared.data_freshness(conn)["updated_at"])
+            siblings = [h for h in (hubs.SECTORS if kind == "bransch" else hubs.COUNTIES) if h != hub]
+            return HTMLResponse(render("hub.html", request=request, answer_text=text, siblings=siblings,
+                                       jsonld=hubs.page_jsonld(page, text), **page))
+        finally:
+            conn.close()
 
     @app.get("/upphandlingar/{tid}", include_in_schema=False)
     def upphandling_redirect(tid: int):
@@ -1020,6 +1048,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             return HTMLResponse(render(
                 "detail.html", t=d, request=request,
                 seo_title=seo.tender_title(d), seo_description=seo.tender_description(d),
+                related_hubs=hubs.hubs_for_tender(d),
                 jsonld=[seo.jsonld(seo.breadcrumbs(
                     ("Agentanbud", "/"), ("Sök upphandlingar", "/browse"),
                     (seo.tender_title(d), f"/tenders/{d['id']}")))]))

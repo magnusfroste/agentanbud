@@ -143,6 +143,12 @@
     </p>
   </div>
 
+  {% if related_hubs %}
+  <p class="hub-related">Fler öppna upphandlingar:
+    {% for h in related_hubs %}<a href="{{ h.path }}">{{ h.phrase }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
+  {% endif %}
+
   <!-- RAW DATA (collapsible) -->
   <details class="detail-raw">
     <summary>Rådata (JSON)</summary>
