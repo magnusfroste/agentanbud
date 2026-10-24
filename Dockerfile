@@ -36,7 +36,8 @@ COPY --from=meta /meta/build_info.json /app/build_info.json
 # Cron entry — runs the orchestrator once daily.
 # Time is interpreted in the container's local timezone.
 ENV CRON_SCHEDULE="0 6 * * *"
-RUN printf 'PATH=/usr/local/bin:/usr/bin:/bin\n%s root cd /app && python -m scraper.orchestrator >> /var/log/agentanbud.log 2>&1\n' \
+# Second line: scripts/watchdog.py restarts the app when it stops answering.
+RUN printf 'PATH=/usr/local/bin:/usr/bin:/bin\n%s root cd /app && python -m scraper.orchestrator >> /var/log/agentanbud.log 2>&1\n*/2 * * * * root cd /app && python scripts/watchdog.py >> /var/log/agentanbud.log 2>&1\n' \
         "$CRON_SCHEDULE" > /etc/cron.d/agentanbud && \
     chmod 0644 /etc/cron.d/agentanbud && \
     touch /var/log/agentanbud.log
@@ -46,5 +47,6 @@ RUN mkdir -p /data
 
 EXPOSE 8080
 
-# Start cron in background, then FastAPI in foreground.
-CMD ["sh", "-c", "cron && uvicorn app.main:get_app --factory --host 0.0.0.0 --port 8080"]
+# Start cron in background, then FastAPI in the foreground as a child of
+# scripts/start.sh, so the watchdog can kill it if it hangs (see start.sh).
+CMD ["sh", "/app/scripts/start.sh"]

@@ -777,3 +777,31 @@ def growth_change(weeks: list[dict], key: str) -> Optional[int]:
     if not a or b is None:
         return None
     return round((b - a) / a * 100)
+
+
+# ---------------------------------------------------------------------------
+# Watchdog: restarts made by scripts/watchdog.py
+# ---------------------------------------------------------------------------
+def watchdog_restarts(path: str, hours: int = 24, now: Optional[datetime] = None) -> list[dict]:
+    """Restarts the watchdog logged in the last `hours`, oldest first.
+
+    The log lives next to the database on the persistent volume, so a restart
+    is still visible after the container that hung is gone. A missing or
+    unreadable log means no restarts.
+    """
+    now = now or datetime.now(timezone.utc)
+    cutoff = (now - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    out = []
+    try:
+        with open(path) as f:
+            lines = f.readlines()[-200:]
+    except OSError:
+        return []
+    for line in lines:
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if e.get("action") == "restart" and str(e.get("at", "")) >= cutoff:
+            out.append(e)
+    return out

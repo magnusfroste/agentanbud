@@ -1222,6 +1222,12 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             warnings.append(("maskinen", "Lite ledig disk"))
         if spike:
             warnings.append(("trafik", spike))
+        restarts = ops.watchdog_restarts(os.path.join(os.path.dirname(os.path.abspath(db)), "watchdog.log"))
+        if restarts:
+            last = restarts[-1]
+            warnings.append(("maskinen", f"Vakthunden startade om appen {len(restarts)} gång"
+                             f"{'er' if len(restarts) > 1 else ''} senaste dygnet, senast "
+                             f"{last['at'][11:16]} UTC: den svarade inte ({last.get('reason', '')[:80]})"))
         try:
             weeks = ops.weekly(conn, 2)
         except Exception:

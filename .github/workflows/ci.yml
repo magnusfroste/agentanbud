@@ -100,6 +100,31 @@ jobs:
           assert "create_post" not in names, "write tools exposed without a key"
           PY
 
+      - name: The watchdog restarts a server that stops answering
+        run: |
+          set -e
+          # The cron job is in the image and the app is not PID 1.
+          docker exec app grep -q 'scripts/watchdog.py' /etc/cron.d/agentanbud
+          docker exec app sh -c 'tr "\0" " " < /proc/1/cmdline' | grep -q start.sh
+          # A healthy server is left alone.
+          docker exec app python scripts/watchdog.py
+          [ "$(docker inspect -f '{{.State.Running}}' app)" = "true" ]
+          # Point the check at a port nothing answers on: three failures in a
+          # row kill uvicorn, start.sh exits, and the container stops (CI runs
+          # it without a restart policy; production restarts it).
+          for i in 1 2 3; do
+            # Own state file, so cron's own healthy run cannot reset the count.
+            docker exec -e WATCHDOG_URL=http://127.0.0.1:1/ -e WATCHDOG_STATE=/tmp/wd-ci \
+              app python scripts/watchdog.py || true
+          done
+          for i in $(seq 1 20); do
+            [ "$(docker inspect -f '{{.State.Running}}' app)" = "false" ] && break
+            sleep 1
+          done
+          [ "$(docker inspect -f '{{.State.Running}}' app)" = "false" ] || { echo "::error::container still running"; exit 1; }
+          grep -q '"action": "restart"' "$RUNNER_TEMP/data/watchdog.log"
+          cat "$RUNNER_TEMP/data/watchdog.log"
+
       - name: Container logs
         if: always()
         run: docker logs app 2>&1 | tail -50 || true
