@@ -31,8 +31,8 @@ from .db import (
     record_post_event,
 )
 from .version import build_info, version_string, started_at
-from . import hubs, ops, seo, visitors
-from .insights import program_name, usage_summary, REAL_SEARCH
+from . import hubs, ops, seo, usage_cache, visitors
+from .insights import program_name, REAL_SEARCH
 from .search import (build_match, match_subquery, like_floor_sql,
                      rank_order_sql)
 
@@ -1086,25 +1086,13 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         finally:
             conn.close()
 
-    # ---- Usage summary, cached briefly ----
-    # usage_summary scans all of usage_log (about 2 s on a month of data) and
-    # is behind /analytics, /api/analytics and /ops, which crawlers hit too.
-    # With one worker a minute's staleness is a far better trade than a 2 s
-    # stall on every visit. Recomputed at most once a minute per period.
-    _usage_cache: dict = {}
-
+    # ---- Usage summary: from memory, refreshed in the background ----
+    # usage_summary scans all of usage_log (15–40 s on the server at a month
+    # of data) and is behind /analytics, /api/analytics, /ops and the MCP
+    # tool. app/usage_cache.py computes one period at a time and serves the
+    # last answer while it refreshes; see there for the outage it prevents.
     def _usage(days: Optional[int] = None) -> dict:
-        now = _time.monotonic()
-        hit = _usage_cache.get(days)
-        if hit and now - hit[0] < 60:
-            return hit[1]
-        conn = connect(db)
-        try:
-            summary = usage_summary(conn, days=days)
-        finally:
-            conn.close()
-        _usage_cache[days] = (now, summary)
-        return summary
+        return usage_cache.for_db(db).get(days)
 
     # ---- Operations (/ops): logged in, never public ----
     # The ops central: an overview on /ops and one page per area, behind a
@@ -1412,8 +1400,10 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         not to do. Aggregate only: no IP addresses, no visitor ids, nothing
         per-person. Free to republish.
 
-        `days` limits the window: 1 for the last 24h, 7 for a week, omitted
-        for all time. The daily series always covers the last 30 days.
+        `days` limits the window: 1 for the last 24h, 7 for a week, 30 for a
+        month, omitted for all time. Other values are rounded up to one of
+        those (the log keeps 30 days). The daily series always covers the
+        last 30 days. Figures are at most about ten minutes old.
         """
         conn = connect(db)
         try:
@@ -2288,6 +2278,9 @@ def get_app():
     global _app
     if _app is None:
         _app = create_app()
+        # Production entry point (uvicorn --factory): fill the usage cache
+        # before the first reader of /analytics or /ops asks for it.
+        usage_cache.for_db(DB_PATH).warm()
     return _app
 
 
