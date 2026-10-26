@@ -36,7 +36,7 @@ from mcp.server import Server
 # Reuse Agentanbud's DB layer
 sys.path.insert(0, str(Path(__file__).parent))
 from mcp_shared import SOURCES, SOURCE_DESCRIPTION  # noqa: E402
-from app.insights import format_usage_markdown, usage_summary  # noqa: E402
+from app.insights import format_usage_markdown  # noqa: E402
 from app.search import (build_match, match_subquery, like_floor_sql,  # noqa: E402
                         rank_order_sql)
 from app.db import (  # noqa: E402
@@ -1458,7 +1458,10 @@ async def _get_usage_stats(conn, args: dict) -> list[types.Content]:
         days = None
     if days is not None:
         days = max(1, min(365, days))
-    summary = usage_summary(conn, days=days)
+    # The same cache as /analytics: a scan of usage_log takes tens of seconds,
+    # and an operator agent polling this tool must not start one per call.
+    from app import usage_cache
+    summary = usage_cache.for_db(DB_PATH).get(days)
     if not summary["events_total"]:
         return [types.TextContent(
             type="text",
