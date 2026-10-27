@@ -100,6 +100,10 @@ jobs:
           assert "create_post" not in names, "write tools exposed without a key"
           PY
 
+          # The CPV vocabulary ships in the image (a data/ path would not:
+          # .dockerignore drops data/, where the database lives).
+          docker exec app python -c "from app.related import _labels; n = len(_labels()); print(n, 'CPV labels'); assert n == 9454"
+
       - name: The watchdog restarts a server that stops answering
         run: |
           set -e

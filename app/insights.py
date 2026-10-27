@@ -72,7 +72,18 @@ def segment_for(query: Optional[str], cpv: Optional[str]) -> str:
 
 _BOT_UA_MARKERS = ("bot", "crawler", "spider", "slurp", "bingpreview", "facebookexternalhit",
                    "gptbot", "claudebot", "ccbot", "perplexity", "python-requests",
-                   "curl", "wget", "headless", "scrapy", "httpx", "go-http", "java/")
+                   "curl", "wget", "headless", "scrapy", "httpx", "go-http", "java/",
+                   # Fetchers without "bot" in their name. On 26 October 1,950
+                   # "visitors" viewed 2,189 pages — about one page each, a
+                   # crawler rotating addresses behind a browser-like name —
+                   # the day after the new industry and county pages and the
+                   # sitemap went live. Google's own tools are prime suspects.
+                   "googleother", "google-inspectiontool", "google-read-aloud",
+                   "mediapartners-google", "feedfetcher", "lighthouse", "pagespeed",
+                   "chatgpt-user", "meta-externalagent", "bytespider", "python-urllib",
+                   "aiohttp", "okhttp", "node-fetch", "axios", "libwww",
+                   # Self-identifying crawlers link their documentation; browsers do not.
+                   "+http")
 
 
 def looks_like_bot(user_agent: str) -> bool:
