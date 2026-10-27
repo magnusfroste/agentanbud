@@ -31,7 +31,7 @@ from .db import (
     record_post_event,
 )
 from .version import build_info, version_string, started_at
-from . import hubs, ops, seo, usage_cache, visitors
+from . import hubs, ops, related, seo, usage_cache, visitors
 from .insights import program_name, REAL_SEARCH
 from .search import (build_match, match_subquery, like_floor_sql,
                      rank_order_sql)
@@ -1045,8 +1045,17 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                     d["raw_json_pretty"] = ""
             except Exception:
                 d["raw_json_pretty"] = str(raw) if raw else ""
+            # What the page adds to the notice (app/related.py). A failure here
+            # costs the extras, never the page.
+            try:
+                d["cpv_named"] = related.cpv_list(d["cpv_codes_list"])
+                similar = related.similar_open(conn, d)
+                buyer = related.buyer_profile(conn, d.get("authority"))
+            except Exception:
+                LOG.exception("related data failed for tender %s", tid)
+                d["cpv_named"], similar, buyer = related.cpv_list(d["cpv_codes_list"]), [], None
             return HTMLResponse(render(
-                "detail.html", t=d, request=request,
+                "detail.html", t=d, request=request, similar=similar, buyer=buyer,
                 seo_title=seo.tender_title(d), seo_description=seo.tender_description(d),
                 related_hubs=hubs.hubs_for_tender(d),
                 jsonld=[seo.jsonld(seo.breadcrumbs(
@@ -2281,6 +2290,7 @@ def get_app():
         # Production entry point (uvicorn --factory): fill the usage cache
         # before the first reader of /analytics or /ops asks for it.
         usage_cache.for_db(DB_PATH).warm()
+        related.warm(DB_PATH)
     return _app
 
 

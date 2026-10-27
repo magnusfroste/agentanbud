@@ -94,11 +94,11 @@
       {% if t.cpv_codes_list %}
       <div class="class-group">
         <span class="label">CPV-koder</span>
-        <div class="chips">
-          {% for cpv in t.cpv_codes_list %}
-          <span class="chip chip-cpv" title="CPV {{ cpv }}">{{ cpv }}</span>
+        <ul class="cpv-list">
+          {% for c in t.cpv_named or [] %}
+          <li><span class="chip chip-cpv">{{ c.code }}</span> {{ c.label or "" }}</li>
           {% endfor %}
-        </div>
+        </ul>
       </div>
       {% endif %}
       {% if t.procedure %}
@@ -115,6 +115,41 @@
       {% endif %}
     </div>
   </div>
+
+  {% if buyer %}
+  <!-- BUYER -->
+  <div class="detail-section">
+    <h2>Om köparen</h2>
+    <p>{{ buyer.name }} har
+      {% if buyer.open %}<a href="/browse?authority={{ buyer.name|urlencode }}">{{ buyer.open }} öppna upphandling{{ 'ar' if buyer.open != 1 else '' }}</a>{% else %}inga andra öppna upphandlingar{% endif %}
+      på Agentanbud just nu, och {{ buyer.notices }} annons{{ 'er' if buyer.notices != 1 else '' }} i vår data.</p>
+    {% if buyer.usual %}
+    <p>Köper oftast: {% for u in buyer.usual %}{{ u.label }}{% if not loop.last %} · {% endif %}{% endfor %}.</p>
+    {% endif %}
+    {% if buyer.winners %}
+    <p>Har oftast tilldelat kontrakt till, enligt {{ buyer.contracts }} tilldelning{{ 'ar' if buyer.contracts != 1 else '' }} i TED:
+      {% for w in buyer.winners %}{{ w.name }} ({{ w.n }}){% if not loop.last %} · {% endif %}{% endfor %}.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if similar %}
+  <!-- SIMILAR -->
+  <div class="detail-section">
+    <h2>Liknande öppna upphandlingar</h2>
+    <div class="cards">
+      {% for s in similar %}
+      <a class="card-tender" href="/tenders/{{ s.id }}">
+        <div class="top-row"><h3>{{ s.title or "(utan titel)" }}</h3></div>
+        <div class="meta">
+          <span>🏛️ {{ s.authority or "—" }}</span>
+          {% if s.deadline_text %}<span>⏳ {{ s.deadline_text }}</span>{% endif %}
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
 
   <!-- ACTIONS -->
   <div class="detail-section">

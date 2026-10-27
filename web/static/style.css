@@ -2863,3 +2863,7 @@ pre code {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.5rem 1.5rem;
 }
 .hub-related { margin-top: 1.5rem; }
+
+/* Tender page: CPV codes with their names */
+.cpv-list { list-style: none; padding: 0; margin: 0.25rem 0 0; display: grid; gap: 0.35rem; }
+.cpv-list .chip { margin-right: 0.4rem; }
