@@ -85,6 +85,7 @@ check("vinnare hos köparen i alla skrivsätt, inte i Skåne",
       sorted(w["name"] for w in b["winners"]) == ["Bravida Sverige AB", "Caverion AB"], str(b["winners"]))
 add("Snöröjning", ["90620000"], 9, authority="ÖREBRO KOMMUN, Örebro")
 conn.commit()
+related.reset()   # the snapshot is rebuilt in the background in production
 check("versaler med Å/Ä/Ö är samma köpare", related.buyer_profile(conn, "Örebro kommun")["open"] == 1)
 check("köper oftast: med namn", b["usual"] and b["usual"][0]["label"].startswith("Anläggningsarbete"), str(b["usual"]))
 check("för korta namn ger ingen profil", related.buyer_profile(conn, "AB") is None)
@@ -99,7 +100,31 @@ check("liknande öppna länkas", "Liknande öppna upphandlingar" in h and h.coun
 check("länk till köparens öppna", "/browse?authority=Region%20Halland" in h)
 bare = add("Utan kod och köpare", [], 5, authority="")
 conn.commit()
+related.reset()
 check("en upphandling utan kod och köpare renderas ändå", c.get(f"/tenders/{bare}").status_code == 200)
+
+print("\nÖgonblicksbilden")
+import time as _t  # noqa: E402
+snap = related._snapshot(conn)
+check("samma ögonblicksbild igen, ingen ny byggs per sidvisning", related._snapshot(conn) is snap)
+add("Ny efter bilden", ["45331000"], 8)
+conn.commit()
+check("ny data under en minut: den gamla bilden används", related._snapshot(conn) is snap)
+snap.built -= related.MIN_REBUILD_S + 1
+check("efter en minut med ny data: gamla bilden svarar medan en ny byggs", related._snapshot(conn) is snap)
+for _ in range(100):
+    if related._SNAPSHOTS[related._path(conn)] is not snap:
+        break
+    _t.sleep(0.02)
+check("…och den nya tar över", related._SNAPSHOTS[related._path(conn)] is not snap
+      and "Ny efter bilden" in [x["title"] for x in related.similar_open(conn, t, limit=10)])
+gone = add("Stänger om ett ögonblick", ["45331000"], 0.00002)
+conn.commit()
+related.reset()
+related._snapshot(conn)
+_t.sleep(3)
+check("en deadline som passerar försvinner utan ombyggnad",
+      "Stänger om ett ögonblick" not in [x["title"] for x in related.similar_open(conn, t, limit=10)])
 
 print("\nBotar utan 'bot' i namnet")
 for ua in ("Mozilla/5.0 (Linux; Android 6.0.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/W.X.Y.Z Mobile Safari/537.36 (compatible; Google-InspectionTool/1.0;)",

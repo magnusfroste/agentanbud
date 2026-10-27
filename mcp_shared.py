@@ -74,17 +74,12 @@ def canonical_supplier(name: str) -> str:
     return re.sub(r"\s+", " ", n).strip()
 
 
-def aggregate_winners(conn, authority: str = "", cpv: str = "", buyer: tuple = ()) -> dict:
+def aggregate_winners(conn, authority: str = "", cpv: str = "") -> dict:
     """Count wins per supplier across award notices.
 
     winner_name holds a JSON list — framework agreements name several winners —
     so each row credits every supplier on it. Rows with an empty list are award
     notices with no named winner and are skipped, not counted as a supplier.
-
-    `authority` matches as a substring, as the API and MCP tools always have.
-    `buyer` is (full name, name without town) and matches that buyer exactly,
-    in any case, with or without the ", TOWN" suffix — for a tender page,
-    where "Region" must not mean every region.
 
     Returns {wins: Counter, value_by_winner: dict, contracts: int}.
     """
@@ -96,11 +91,6 @@ def aggregate_winners(conn, authority: str = "", cpv: str = "", buyer: tuple = (
     if authority:
         where.append("authority LIKE ?")
         params.append(f"%{authority}%")
-    if buyer:
-        from app.related import buyer_match
-        sql, args = buyer_match(conn, *buyer)
-        where.append(sql)
-        params += args
     if cpv:
         where.append("cpv_codes LIKE ?")
         params.append(f'%"{cpv}%')

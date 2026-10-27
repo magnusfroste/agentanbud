@@ -8,6 +8,15 @@ notice. The MCP tools already answered the questions a supplier asks next
 (similar_tenders, get_authority, get_winner_history); this brings the same
 answers to the page, from the same data.
 
+Performance: everything here is answered from an in-memory snapshot of the
+table, built in one pass and rebuilt in the background when the data changes
+(at most once a minute) or every hour. The first version queried the
+database on each page view — similar tenders by LIKE over every row's CPV
+list, the buyer by scanning its rows — and on 24,000 tenders that took a page
+from 6 ms to 41 ms and sixteen concurrent page views from 179 pages a second
+to 20. A crawler reads tender pages sixteen at a time. From the snapshot a
+page costs about what it did before.
+
 CPV labels are the EU's own Swedish names (CPV 2008, 9,454 codes), fetched
 from the Publications Office (data.europa.eu/cpv) into app/vocab/cpv_sv.json (not
 "data/", which git and the Docker build ignore: that is where the database
@@ -16,6 +25,9 @@ lives).
 from __future__ import annotations
 
 import json
+import logging
+import threading
+import time
 from collections import Counter
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -23,6 +35,8 @@ from pathlib import Path
 from typing import Optional
 
 from app import seo
+
+LOG = logging.getLogger(__name__)
 
 CPV_FILE = Path(__file__).parent / "vocab" / "cpv_sv.json"
 
@@ -61,7 +75,134 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-_OPEN = "source_system != 'ted_awards' AND deadline IS NOT NULL AND deadline > ?"
+class _Snapshot:
+    """Open tenders by CPV group and by buyer, and a profile per buyer.
+
+    Immutable once built; a rebuild replaces it whole. Deadlines are kept, not
+    an "open" flag, so a tender that closes during the day drops out at once.
+    """
+
+    def __init__(self, conn, version):
+        self.version, self.built = version, time.monotonic()
+        now = _now_iso()
+        self.items: dict = {}          # id -> (title, authority, deadline, region, cpv set, date text)
+        self.by_group: dict = {}       # first four CPV digits -> [ids]
+        self.by_authority: dict = {}   # authority exactly as written -> [ids]
+        self.buyers: dict = {}         # lower-cased name without town -> profile parts
+        for r in conn.execute("SELECT id, source_system, title, authority, deadline, region, cpv_codes FROM tenders"):
+            try:
+                codes = {str(c) for c in json.loads(r["cpv_codes"] or "[]") if c}
+            except (TypeError, ValueError):
+                codes = set()
+            key = seo._buyer(r["authority"]).lower()
+            if key:
+                b = self.buyers.setdefault(key, {"name": seo._buyer(r["authority"]), "deadlines": [],
+                                                 "notices": 0, "divisions": Counter(),
+                                                 "wins": Counter(), "contracts": 0})
+                b["divisions"].update({c[:2] for c in codes})
+                if r["source_system"] != "ted_awards":
+                    b["notices"] += 1
+                    if r["deadline"]:
+                        b["deadlines"].append(r["deadline"])
+            if r["source_system"] == "ted_awards" or not r["deadline"] or r["deadline"] <= now:
+                continue
+            self.items[r["id"]] = (r["title"], r["authority"], r["deadline"], r["region"], codes,
+                                   seo._swedish_date(r["deadline"]))
+            for g in {c[:4] for c in codes if len(c) >= 4}:
+                self.by_group.setdefault(g, []).append(r["id"])
+            if r["authority"]:
+                self.by_authority.setdefault(r["authority"].strip(), []).append(r["id"])
+        # Who each buyer awarded contracts to, counted as get_winner_history
+        # counts: TED republications collapsed, spellings of one supplier merged.
+        from mcp_shared import AWARD_DEDUP_KEY, canonical_supplier
+        spellings: dict = {}
+        for authority, winners_json in conn.execute(
+                "SELECT authority, winner_name FROM tenders WHERE source_system = 'ted_awards' "
+                f"AND winner_name IS NOT NULL AND winner_name != '' {AWARD_DEDUP_KEY}"):
+            b = self.buyers.get(seo._buyer(authority).lower())
+            try:
+                winners = json.loads(winners_json)
+            except (TypeError, ValueError):
+                continue
+            if b is None or not winners:
+                continue
+            b["contracts"] += 1
+            for w in winners:
+                k = canonical_supplier(w)
+                if k:
+                    b["wins"][k] += 1
+                    spellings.setdefault(k, Counter())[w] += 1
+        self.label = {k: c.most_common(1)[0][0] for k, c in spellings.items()}
+
+
+_SNAPSHOTS: dict = {}
+_LOCK = threading.Lock()
+_BUILDING: set = set()
+FRESH_S = 3600       # rebuilt in the background every hour regardless (deadlines
+                     # are checked at query time, so this is only a backstop)
+MIN_REBUILD_S = 60   # and when the data changed, but not more than once a minute
+
+
+def _version(conn) -> tuple:
+    return tuple(conn.execute("SELECT COUNT(*), MAX(id) FROM tenders").fetchone())
+
+
+def _path(conn) -> str:
+    return conn.execute("PRAGMA database_list").fetchone()[2]
+
+
+def _rebuild(path: str) -> None:
+    from app.db import connect
+    try:
+        conn = connect(path)
+        try:
+            snap = _Snapshot(conn, _version(conn))
+        finally:
+            conn.close()
+        with _LOCK:
+            _SNAPSHOTS[path] = snap
+    except Exception:
+        LOG.exception("related snapshot rebuild failed")
+    finally:
+        with _LOCK:
+            _BUILDING.discard(path)
+
+
+def _snapshot(conn) -> _Snapshot:
+    """The current snapshot; the first one is built in the request, later ones
+    in the background while the old one keeps answering."""
+    path = _path(conn)
+    with _LOCK:
+        snap = _SNAPSHOTS.get(path)
+    if snap is None:
+        with _LOCK:
+            snap = _SNAPSHOTS.get(path)
+            if snap is None:
+                snap = _SNAPSHOTS[path] = _Snapshot(conn, _version(conn))
+        return snap
+    age = time.monotonic() - snap.built
+    if age >= FRESH_S or (age >= MIN_REBUILD_S and _version(conn) != snap.version):
+        with _LOCK:
+            if path not in _BUILDING:
+                _BUILDING.add(path)
+                threading.Thread(target=_rebuild, args=(path,), daemon=True, name="related-rebuild").start()
+    return snap
+
+
+def warm(path: str) -> threading.Thread:
+    """Build the first snapshot in the background, so the first tender page
+    after a start does not pay for it (about 0.3 s at 24,000 tenders)."""
+    with _LOCK:
+        _BUILDING.add(path)
+    t = threading.Thread(target=_rebuild, args=(path,), daemon=True, name="related-warm")
+    t.start()
+    return t
+
+
+def reset() -> None:
+    """Forget every snapshot (tests change the data and look again at once)."""
+    with _LOCK:
+        _SNAPSHOTS.clear()
 
 
 def similar_open(conn, t: dict, limit: int = 5) -> list[dict]:
@@ -70,93 +211,53 @@ def similar_open(conn, t: dict, limit: int = 5) -> list[dict]:
     Scored as the MCP tool similar_tenders does: two points per shared CPV
     code, three for the same buyer; soonest deadline breaks ties.
     """
-    codes = [str(c) for c in (t.get("cpv_codes_list") or [])]
+    snap = _snapshot(conn)
+    codes = {str(c) for c in (t.get("cpv_codes_list") or [])}
     buyer = (t.get("authority") or "").strip()
-    clauses, args = [], []
-    for p in sorted({c[:4] for c in codes if len(c) >= 4}):
-        clauses.append("cpv_codes LIKE ?")
-        args.append(f'%"{p}%')
-    if buyer:
-        clauses.append("authority = ?")
-        args.append(buyer)
-    if not clauses:
-        return []
-    rows = conn.execute(
-        f"SELECT id, title, authority, deadline, region, cpv_codes FROM tenders "
-        f"WHERE ({' OR '.join(clauses)}) AND id != ? AND {_OPEN} LIMIT 400",
-        args + [t.get("id") or -1, _now_iso()]).fetchall()
-    mine = set(codes)
+    candidates = set(snap.by_authority.get(buyer, ())) if buyer else set()
+    for g in {c[:4] for c in codes if len(c) >= 4}:
+        candidates.update(snap.by_group.get(g, ()))
+    candidates.discard(t.get("id"))
+    now = _now_iso()
     scored = []
-    for r in rows:
-        try:
-            theirs = set(json.loads(r["cpv_codes"] or "[]"))
-        except ValueError:
-            theirs = set()
-        score = 2 * len(mine & {str(c) for c in theirs}) + (3 if buyer and r["authority"] == buyer else 0)
+    for i in candidates:
+        title, authority, deadline, region, theirs, _ = snap.items[i]
+        if deadline <= now:
+            continue
+        score = 2 * len(codes & theirs) + (3 if buyer and authority == buyer else 0)
         if score:
-            scored.append((-score, r["deadline"] or "", r))
-    scored.sort(key=lambda x: (x[0], x[1]))
-    return [{"id": r["id"], "title": r["title"], "authority": r["authority"], "region": r["region"],
-             "deadline_text": seo._swedish_date(r["deadline"])} for _, _, r in scored[:limit]]
-
-
-_SPELLINGS: dict = {}
-
-
-def _spellings(conn) -> dict:
-    """lower-cased buyer name (without town) → every spelling in the table.
-
-    A few thousand distinct names, read off the authority index and kept
-    until the table grows or shrinks. Matching in Python, then asking for
-    the exact spellings with IN, lets SQLite use that index; comparing every
-    row case-insensitively cost 85 ms a page.
-    """
-    size = conn.execute("SELECT COUNT(*) FROM tenders").fetchone()[0]
-    hit = _SPELLINGS.get("v")
-    if hit and hit[0] == size:
-        return hit[1]
-    by_name: dict = {}
-    for (a,) in conn.execute("SELECT DISTINCT authority FROM tenders WHERE authority IS NOT NULL"):
-        by_name.setdefault(seo._buyer(a).lower(), []).append(a)
-    _SPELLINGS["v"] = (size, by_name)
-    return by_name
-
-
-def buyer_match(conn, full: str, name: str) -> tuple[str, list]:
-    """SQL matching one buyer, any case: "Region Halland", "REGION HALLAND"
-    and "Region Halland, HALMSTAD" are one buyer. (SQLite folds case for A–Z
-    only, so Å, Ä and Ö are compared in Python.)"""
-    spellings = _spellings(conn).get(seo._buyer(name).lower(), []) or [full]
-    return f"authority IN ({','.join('?' * len(spellings))})", list(spellings)
+            scored.append((-score, deadline, i))
+    scored.sort()
+    out = []
+    for _, deadline, i in scored[:limit]:
+        title, authority, _, region, _, when = snap.items[i]
+        out.append({"id": i, "title": title, "authority": authority, "region": region,
+                    "deadline_text": when})
+    return out
 
 
 def buyer_profile(conn, authority: Optional[str]) -> Optional[dict]:
     """Open notices, usual industries and usual winners for this buyer.
 
-    The buyer is matched on its name as the sources write it, with or without
-    the ", TOWN" Mercell and TED append — not on a substring, which for a
-    name like "Region" would sweep in every region in the country.
+    The buyer is its name as the sources write it, with or without the
+    ", TOWN" Mercell and TED append and in any case — "Region Halland",
+    "REGION HALLAND" and "Region Halland, HALMSTAD" are one buyer — never a
+    substring, which for a name like "Region" would mean every region.
     """
-    full = (authority or "").strip()
-    name = seo._buyer(full)
+    name = seo._buyer(authority)
     if len(name) < 4:
         return None
-    match, margs = buyer_match(conn, full, name)
-    open_n = conn.execute(f"SELECT COUNT(*) FROM tenders WHERE {match} AND {_OPEN}",
-                          margs + [_now_iso()]).fetchone()[0]
-    total = conn.execute(f"SELECT COUNT(*) FROM tenders WHERE {match} AND source_system != 'ted_awards'",
-                         margs).fetchone()[0]
-    divisions: Counter = Counter()
-    for (raw,) in conn.execute(f"SELECT cpv_codes FROM tenders WHERE {match}", margs):
-        try:
-            for d in {str(c)[:2] for c in json.loads(raw or "[]") if c}:
-                divisions[d] += 1
-        except ValueError:
-            continue
-    usual = [{"code": d, "label": cpv_label(d + "000000") or f"CPV {d}", "n": n}
-             for d, n in divisions.most_common(3)]
-    from mcp_shared import aggregate_winners
-    agg = aggregate_winners(conn, buyer=(full, name))
-    winners = [{"name": w, "n": n} for w, n in agg["wins"].most_common(3)]
-    return {"name": name, "open": open_n, "notices": total, "usual": usual,
-            "winners": winners, "contracts": agg["contracts"]}
+    b = _snapshot(conn).buyers.get(name.lower())
+    if b is None:
+        return None
+    snap = _snapshot(conn)
+    now = _now_iso()
+    return {
+        "name": name,
+        "open": sum(1 for d in b["deadlines"] if d > now),
+        "notices": b["notices"],
+        "usual": [{"code": d, "label": cpv_label(d + "000000") or f"CPV {d}", "n": n}
+                  for d, n in b["divisions"].most_common(3)],
+        "winners": [{"name": snap.label.get(k, k), "n": n} for k, n in b["wins"].most_common(3)],
+        "contracts": b["contracts"],
+    }
