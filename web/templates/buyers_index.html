@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Offentliga köpare — vad de upphandlar och vem som vinner{% endblock %}
+{% block description %}{{ buyers|length }} svenska offentliga köpare: deras öppna upphandlingar, vad de brukar köpa och vem som brukar vinna. Uppdateras varje dag.{% endblock %}
+
+{% block content %}
+<section class="insight-section">
+  <h1>Offentliga köpare</h1>
+  <p class="lead">{{ buyers|length }} kommuner, regioner, myndigheter och bolag med minst fem annonser i vår data. Varje sida visar köparens öppna upphandlingar, vad den brukar köpa och vem som brukar vinna.</p>
+</section>
+<section class="insight-section">
+  <ul class="hub-list">
+    {% for x in buyers %}<li><a href="/kopare/{{ x.slug }}">{{ x.name }}</a> <span class="muted">({{ x.open }} öppna)</span></li>{% endfor %}
+  </ul>
+</section>
+{% endblock %}

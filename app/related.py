@@ -75,6 +75,18 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+PAGE_MIN_NOTICES = 5   # a buyer gets a page at five notices or five awards
+
+_SLUG_MAP = str.maketrans({"å": "a", "ä": "a", "ö": "o", "é": "e", "ü": "u", "æ": "ae", "ø": "o"})
+
+
+def slugify(name: str) -> str:
+    """"Västra Götalandsregionen" → "vastra-gotalandsregionen"."""
+    import re
+    s = (name or "").lower().translate(_SLUG_MAP)
+    return re.sub(r"[^a-z0-9]+", "-", s).strip("-")[:80]
+
+
 class _Snapshot:
     """Open tenders by CPV group and by buyer, and a profile per buyer.
 
@@ -96,9 +108,10 @@ class _Snapshot:
                 codes = set()
             key = seo._buyer(r["authority"]).lower()
             if key:
-                b = self.buyers.setdefault(key, {"name": seo._buyer(r["authority"]), "deadlines": [],
+                b = self.buyers.setdefault(key, {"names": Counter(), "deadlines": [], "open_ids": [],
                                                  "notices": 0, "divisions": Counter(),
                                                  "wins": Counter(), "contracts": 0})
+                b["names"][seo._buyer(r["authority"])] += 1
                 b["divisions"].update({c[:2] for c in codes})
                 if r["source_system"] != "ted_awards":
                     b["notices"] += 1
@@ -112,6 +125,8 @@ class _Snapshot:
                 self.by_group.setdefault(g, []).append(r["id"])
             if r["authority"]:
                 self.by_authority.setdefault(r["authority"].strip(), []).append(r["id"])
+            if key:
+                self.buyers[key]["open_ids"].append(r["id"])
         # Who each buyer awarded contracts to, counted as get_winner_history
         # counts: TED republications collapsed, spellings of one supplier merged.
         from mcp_shared import AWARD_DEDUP_KEY, canonical_supplier
@@ -133,6 +148,19 @@ class _Snapshot:
                     b["wins"][k] += 1
                     spellings.setdefault(k, Counter())[w] += 1
         self.label = {k: c.most_common(1)[0][0] for k, c in spellings.items()}
+        # A display name per buyer (the spelling seen most, preferring one
+        # that is not all capitals) and a page for the buyers with enough to
+        # say: a page with one notice on it is thin content, not an answer.
+        self.slugs: dict = {}
+        for key, b in sorted(self.buyers.items(), key=lambda kv: -kv[1]["notices"]):
+            names = b["names"].most_common()
+            b["name"] = next((n for n, _ in names if not n.isupper()), names[0][0])
+            b["slug"] = None
+            if b["notices"] >= PAGE_MIN_NOTICES or b["contracts"] >= PAGE_MIN_NOTICES:
+                slug = slugify(b["name"])
+                if slug and slug not in self.slugs:
+                    self.slugs[slug] = key
+                    b["slug"] = slug
 
 
 _SNAPSHOTS: dict = {}
@@ -253,7 +281,8 @@ def buyer_profile(conn, authority: Optional[str]) -> Optional[dict]:
     snap = _snapshot(conn)
     now = _now_iso()
     return {
-        "name": name,
+        "name": b.get("name") or name,
+        "slug": b.get("slug"),
         "open": sum(1 for d in b["deadlines"] if d > now),
         "notices": b["notices"],
         "usual": [{"code": d, "label": cpv_label(d + "000000") or f"CPV {d}", "n": n}
@@ -261,3 +290,90 @@ def buyer_profile(conn, authority: Optional[str]) -> Optional[dict]:
         "winners": [{"name": snap.label.get(k, k), "n": n} for k, n in b["wins"].most_common(3)],
         "contracts": b["contracts"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Buyer pages: /kopare and /kopare/{slug}
+# ---------------------------------------------------------------------------
+def _sector_for_division(division: str):
+    """The industry page (app/hubs.py) whose CPV prefix is this division, if any."""
+    from app import hubs
+    for hub in hubs.SECTORS:
+        if division in hub.match:
+            return hub
+    return None
+
+
+def buyer_page(conn, slug: str) -> Optional[dict]:
+    """Everything a buyer's page shows, from the snapshot."""
+    snap = _snapshot(conn)
+    key = snap.slugs.get(slug)
+    if key is None:
+        return None
+    b = snap.buyers[key]
+    now = _now_iso()
+    open_items = sorted((snap.items[i] + (i,) for i in b["open_ids"] if snap.items[i][2] > now),
+                        key=lambda x: x[2])
+    usual = []
+    for d, n in b["divisions"].most_common(5):
+        hub = _sector_for_division(d)
+        usual.append({"code": d, "label": cpv_label(d + "000000") or f"CPV {d}", "n": n,
+                      "hub": hub.path if hub else None})
+    return {
+        "name": b["name"], "slug": slug, "notices": b["notices"], "contracts": b["contracts"],
+        "open": [{"id": x[6], "title": x[0], "deadline_text": x[5], "region": x[3]} for x in open_items],
+        "usual": usual,
+        "winners": [{"name": snap.label.get(k, k), "n": n} for k, n in b["wins"].most_common(10)],
+    }
+
+
+def buyer_answer(page: dict) -> str:
+    """The paragraph on top of a buyer page, also its description and FAQ answer."""
+    name, n = page["name"], len(page["open"])
+    parts = [f"{name} har {n} öppna upphandling{'ar' if n != 1 else ''} på Agentanbud just nu "
+             f"och {page['notices']} annons{'er' if page['notices'] != 1 else ''} i vår data."]
+    if page["usual"]:
+        # Semicolons: CPV names have commas of their own.
+        parts.append("Köper oftast: " + "; ".join(
+            u["label"] if u["label"][1:2].isupper() else u["label"][:1].lower() + u["label"][1:]
+            for u in page["usual"][:3]) + ".")
+    if page["winners"]:
+        top = ", ".join(f"{w['name']} ({w['n']})" for w in page["winners"][:3])
+        parts.append(f"Har oftast tilldelat kontrakt till {top}, enligt {page['contracts']} "
+                     f"tilldelning{'ar' if page['contracts'] != 1 else ''} i TED.")
+    return " ".join(parts)
+
+
+def buyer_jsonld(page: dict, text: str) -> list[str]:
+    path = f"/kopare/{page['slug']}"
+    faq = {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+        {"@type": "Question", "name": f"Vad upphandlar {page['name']}?",
+         "acceptedAnswer": {"@type": "Answer", "text": text}}]}
+    if page["winners"]:
+        faq["mainEntity"].append({
+            "@type": "Question", "name": f"Vem vinner upphandlingar hos {page['name']}?",
+            "acceptedAnswer": {"@type": "Answer", "text":
+                               "Enligt tilldelningar publicerade i TED: "
+                               + ", ".join(f"{w['name']} ({w['n']})" for w in page["winners"][:5]) + "."}})
+    crumbs = seo.breadcrumbs(("Agentanbud", "/"), ("Köpare", "/kopare"), (page["name"], path))
+    return [seo.jsonld(crumbs), seo.jsonld(faq)]
+
+
+_SV_ORDER = str.maketrans({"å": "{", "ä": "|", "ö": "}"})   # å, ä, ö after z, in that order
+
+
+def buyers_index(conn) -> list[dict]:
+    """Every buyer with a page, in Swedish alphabetical order."""
+    snap = _snapshot(conn)
+    now = _now_iso()
+    out = []
+    for slug, key in snap.slugs.items():
+        b = snap.buyers[key]
+        out.append({"name": b["name"], "slug": slug, "notices": b["notices"],
+                    "open": sum(1 for d in b["deadlines"] if d > now)})
+    out.sort(key=lambda x: x["name"].lower().translate(_SV_ORDER))
+    return out
+
+
+def buyer_slugs(conn) -> list[str]:
+    return list(_snapshot(conn).slugs)
