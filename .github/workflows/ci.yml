@@ -104,6 +104,11 @@ jobs:
           # .dockerignore drops data/, where the database lives).
           docker exec app python -c "from app.related import _labels; n = len(_labels()); print(n, 'CPV labels'); assert n == 9454"
 
+          # Usage figures are computed by a separate process; it must start
+          # in the image and answer through the site.
+          docker exec -w /app app python -m app.usage_worker /data/application.db 7 | python3 -c "import json,sys; d = json.load(sys.stdin); assert d['period_days'] == 7; print('usage worker ok')"
+          curl -fsS "http://localhost:8080/api/analytics?days=7" | python3 -c "import json,sys; assert json.load(sys.stdin)['period_days'] == 7; print('analytics ok')"
+
       - name: The watchdog restarts a server that stops answering
         run: |
           set -e

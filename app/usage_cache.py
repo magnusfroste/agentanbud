@@ -122,19 +122,38 @@ _CACHES: dict[str, UsageCache] = {}
 _CACHES_LOCK = threading.Lock()
 
 
+_ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent   # holds the app package
+
+
+def _run_worker(db_path: str, days: Optional[int]) -> dict:
+    """Compute in a separate process: python -m app.usage_worker.
+
+    A scan is mostly Python looping over rows, and Python runs one thread at
+    a time: on the server, after the 28 October deploy, the start-up warm-up
+    of four periods stalled ordinary requests — buyer pages and /api/health —
+    for 10 to 24 seconds at a time for about two minutes. In its own process
+    the scan cannot take the web server's turn, and its memory is given back
+    when it exits. Starting it costs well under a second, at most once per
+    period per ten minutes. Waiting on it releases this thread's hold on the
+    interpreter.
+    """
+    import json
+    import subprocess
+    import sys
+    out = subprocess.run(
+        [sys.executable, "-m", "app.usage_worker", db_path, "all" if days is None else str(days)],
+        cwd=str(_ROOT), capture_output=True, text=True, timeout=900)
+    if out.returncode != 0:
+        raise RuntimeError(f"usage worker failed: {out.stderr.strip()[-500:]}")
+    return json.loads(out.stdout)
+
+
 def for_db(db_path: str) -> UsageCache:
     """The cache for one database, shared by the web app and the MCP tools."""
-    from app.db import connect
-    from app.insights import usage_summary
-
     with _CACHES_LOCK:
         cache = _CACHES.get(db_path)
         if cache is None:
             def compute(days: Optional[int]) -> dict:
-                conn = connect(db_path)
-                try:
-                    return usage_summary(conn, days=days)
-                finally:
-                    conn.close()
+                return _run_worker(db_path, days)
             cache = _CACHES[db_path] = UsageCache(compute)
         return cache
