@@ -524,6 +524,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             static_paths = ["/", "/browse", "/dashboard", "/providers",
                             "/agenter", "/blogg", "/kunskap", "/upphandlingar"]
             static_paths += [h.path for h in hubs.SECTORS + hubs.COUNTIES]
+            static_paths += ["/kopare"] + [f"/kopare/{s}" for s in related.buyer_slugs(conn)]
             posts = conn.execute(
                 "SELECT slug, updated_at FROM posts WHERE status = 'published' "
                 "ORDER BY published_at DESC"
@@ -842,6 +843,30 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                                            ("Agentanbud", "/"), ("Upphandlingar", "/upphandlingar")))]))
         finally:
             conn.close()
+
+    # ---- Buyer pages (app/related.py): who buys what, and who wins ----
+    @app.get("/kopare", include_in_schema=False)
+    def buyers_index(request: Request):
+        conn = connect(db)
+        try:
+            buyers = related.buyers_index(conn)
+        finally:
+            conn.close()
+        return HTMLResponse(render("buyers_index.html", request=request, buyers=buyers,
+                                   jsonld=[seo.jsonld(seo.breadcrumbs(("Agentanbud", "/"), ("Köpare", "/kopare")))]))
+
+    @app.get("/kopare/{slug}", include_in_schema=False)
+    def buyer_page(slug: str, request: Request):
+        conn = connect(db)
+        try:
+            page = related.buyer_page(conn, slug)
+        finally:
+            conn.close()
+        if not page:
+            raise HTTPException(404, "no such buyer page")
+        text = related.buyer_answer(page)
+        return HTMLResponse(render("buyer.html", request=request, b=page, answer_text=text,
+                                   jsonld=related.buyer_jsonld(page, text)))
 
     @app.get("/upphandlingar/{kind}/{slug}", include_in_schema=False)
     def upphandlingar_hub(kind: str, slug: str, request: Request):

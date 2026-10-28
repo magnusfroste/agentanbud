@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Upphandlingar från {{ b.name }}{% endblock %}
+{% block description %}{{ answer_text[:300] }}{% endblock %}
+{% block og_title %}Upphandlingar från {{ b.name }}{% endblock %}
+{% block og_description %}{{ answer_text[:300] }}{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb">
+  <a href="/">Agentanbud</a><span class="sep">/</span>
+  <a href="/kopare">Köpare</a><span class="sep">/</span>
+  <span class="current">{{ b.name }}</span>
+</nav>
+
+<section class="insight-section">
+  <h1>Upphandlingar från {{ b.name }}</h1>
+  <p class="lead">{{ answer_text }}</p>
+</section>
+
+<section class="insight-section">
+  <h2>Öppna upphandlingar</h2>
+  {% if b.open %}
+  <div class="cards">
+    {% for t in b.open %}
+    <a class="card-tender" href="/tenders/{{ t.id }}">
+      <div class="top-row"><h3>{{ t.title or "(utan titel)" }}</h3></div>
+      <div class="meta">
+        {% if t.deadline_text %}<span>⏳ Sista anbudsdag {{ t.deadline_text }}</span>{% endif %}
+        {% if t.region %}<span>📍 {{ t.region }}</span>{% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p>Inga öppna upphandlingar just nu. <a href="/browse?authority={{ b.name|urlencode }}&amp;status=all">Se tidigare annonser</a>.</p>
+  {% endif %}
+</section>
+
+{% if b.usual %}
+<section class="insight-section">
+  <h2>Vad {{ b.name }} brukar köpa</h2>
+  <ul class="hub-list">
+    {% for u in b.usual %}<li>{% if u.hub %}<a href="{{ u.hub }}">{{ u.label }}</a>{% else %}{{ u.label }}{% endif %} <span class="muted">({{ u.n }})</span></li>{% endfor %}
+  </ul>
+  <p class="muted small">Antal annonser och tilldelningar med en CPV-kod i huvudgruppen.</p>
+</section>
+{% endif %}
+
+{% if b.winners %}
+<section class="insight-section">
+  <h2>Vem vinner hos {{ b.name }}</h2>
+  <ol>
+    {% for w in b.winners %}<li>{{ w.name }} <span class="muted">— {{ w.n }} kontrakt</span></li>{% endfor %}
+  </ol>
+  <p class="muted small">Enligt {{ b.contracts }} tilldelning{{ 'ar' if b.contracts != 1 else '' }} publicerade i TED (över EU:s tröskelvärden). Ett ramavtal med flera leverantörer räknas för var och en. Upphandlingar under tröskelvärdena redovisar sällan vinnaren öppet och finns inte med.</p>
+</section>
+{% endif %}
+
+<section class="insight-section">
+  <h2>För din AI-agent</h2>
+  <p class="muted">Samma uppgifter via MCP på <code>https://www.agentanbud.se/mcp</code>:
+    <code>get_authority(name="{{ b.name }}")</code> ·
+    <code>get_winner_history(authority="{{ b.name }}")</code>.
+    <a href="/agenter">Så kopplar du in din agent</a>.</p>
+</section>
+{% endblock %}

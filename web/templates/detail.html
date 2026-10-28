@@ -120,8 +120,8 @@
   <!-- BUYER -->
   <div class="detail-section">
     <h2>Om köparen</h2>
-    <p>{{ buyer.name }} har
-      {% if buyer.open %}<a href="/browse?authority={{ buyer.name|urlencode }}">{{ buyer.open }} öppna upphandling{{ 'ar' if buyer.open != 1 else '' }}</a>{% else %}inga andra öppna upphandlingar{% endif %}
+    <p>{% if buyer.slug %}<a href="/kopare/{{ buyer.slug }}">{{ buyer.name }}</a>{% else %}{{ buyer.name }}{% endif %} har
+      {% if buyer.open %}<a href="/browse?authority={{ buyer.name|urlencode }}">{{ buyer.open }} öppna upphandling{{ 'ar' if buyer.open != 1 else '' }}</a>{% else %}inga öppna upphandlingar{% endif %}
       på Agentanbud just nu, och {{ buyer.notices }} annons{{ 'er' if buyer.notices != 1 else '' }} i vår data.</p>
     {% if buyer.usual %}
     <p>Köper oftast: {% for u in buyer.usual %}{{ u.label }}{% if not loop.last %} · {% endif %}{% endfor %}.</p>
@@ -130,6 +130,7 @@
     <p>Har oftast tilldelat kontrakt till, enligt {{ buyer.contracts }} tilldelning{{ 'ar' if buyer.contracts != 1 else '' }} i TED:
       {% for w in buyer.winners %}{{ w.name }} ({{ w.n }}){% if not loop.last %} · {% endif %}{% endfor %}.</p>
     {% endif %}
+    {% if buyer.slug %}<p><a href="/kopare/{{ buyer.slug }}">Allt om {{ buyer.name }} →</a></p>{% endif %}
   </div>
   {% endif %}
 
