@@ -2314,7 +2314,7 @@ def get_app():
         _app = create_app()
         # Production entry point (uvicorn --factory): fill the usage cache
         # before the first reader of /analytics or /ops asks for it.
-        usage_cache.for_db(DB_PATH).warm()
+        usage_cache.for_db(DB_PATH).warm(every_s=usage_cache.KEEP_FRESH_S)
         related.warm(DB_PATH)
     return _app
 

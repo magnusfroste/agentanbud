@@ -158,6 +158,21 @@ logged = conn.execute("SELECT meta FROM usage_log WHERE channel = 'api' ORDER BY
 check("API-loggen sparar köpartyp", logged and json.loads(logged[0]).get("buyer_type") == "municipal",
       logged and logged[0])
 
+print("\nMinnet: processerna och filcachen var för sig")
+cg = pathlib.Path(tempfile.mkdtemp())
+(cg / "memory.current").write_text("529530880\n")
+(cg / "memory.max").write_text("max\n")
+(cg / "memory.stat").write_text("anon 151519232\nfile 362807296\nkernel 9000\n")
+orig_cg = ops._CG
+ops._CG = cg
+try:
+    mach = ops.machine()
+finally:
+    ops._CG = orig_cg
+check("totalen som förut", mach["container_mem_bytes"] == 529530880)
+check("processernas minne och cachen var för sig",
+      mach["container_mem_used"] == 151519232 and mach["container_mem_cache"] == 362807296, str(mach))
+
 print("\nSidorna renderas")
 c.post("/ops/login", data={"key": KEY}, headers={"origin": "https://testserver"}, follow_redirects=False)
 t = c.get("/ops/trafik")

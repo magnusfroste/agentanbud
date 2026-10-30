@@ -24,7 +24,7 @@
     <div class="big">{{ m.container_cpu_pct if m.container_cpu_pct is not none else '—' }} %</div>
     <div class="small">CPU för appen, av hela servern</div>
     <div class="kv" style="margin-top:10px">
-      <div>Minne, appen</div><div>{{ m.container_mem_bytes|bytes }}</div>
+      <div>Minne, appen</div><div>{% if m.container_mem_used is not none %}{{ m.container_mem_used|bytes }} <span class="muted">+ {{ m.container_mem_cache|bytes }} filcache</span>{% else %}{{ m.container_mem_bytes|bytes }}{% endif %}</div>
       <div>Last, servern</div><div>{{ (m.host_load or ['—'])|join(' · ') }}</div>
       <div>Ledig disk</div><div>{{ st.disk_free|bytes }}</div>
       <div>Databas</div><div>{{ st.db_bytes|bytes }}</div>

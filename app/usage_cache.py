@@ -31,6 +31,7 @@ LOG = logging.getLogger(__name__)
 
 PERIODS = (1, 7, 30)
 FRESH_S = 600   # served as is for ten minutes, then refreshed in the background
+KEEP_FRESH_S = 1800   # and in production every period is recomputed this often regardless
 
 
 def period(days: Optional[int]) -> Optional[int]:
@@ -100,19 +101,35 @@ class UsageCache:
             return summary
 
 
-    def warm(self, periods=(7, None, 1, 30), delay_s: float = 5.0) -> threading.Thread:
+    def warm(self, periods=(7, None, 1, 30), delay_s: float = 5.0,
+             every_s: Optional[float] = None) -> threading.Thread:
         """Compute these periods in the background, so the first readers
-        after a start find an answer instead of queueing for one."""
+        after a start find an answer instead of queueing for one.
+
+        With every_s, keep doing it: recompute every period that often. On
+        its own, the stale-while-revalidate in get() only refreshes a period
+        when someone reads it, and the first reader after a quiet spell gets
+        the old answer — on 30 October the 1- and 30-day figures were twenty
+        hours old, and the ops overview, reading a figure computed just after
+        midnight, said no one had visited all day.
+        """
         def run():
             time.sleep(delay_s)
-            for p in periods:
-                with self._state:
-                    if p in self._items:
-                        continue
-                try:
-                    self._run(p)
-                except Exception:
-                    LOG.exception("usage warm-up failed for period %r", p)
+            first = True
+            while True:
+                for p in periods:
+                    if first:
+                        with self._state:
+                            if p in self._items:
+                                continue
+                    try:
+                        self._run(p)
+                    except Exception:
+                        LOG.exception("usage refresh failed for period %r", p)
+                if not every_s:
+                    return
+                first = False
+                time.sleep(every_s)
         t = threading.Thread(target=run, daemon=True, name="usage-warm")
         t.start()
         return t

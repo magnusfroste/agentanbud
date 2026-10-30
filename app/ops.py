@@ -294,6 +294,7 @@ def machine() -> dict:
     # Every key present, None when unreadable (outside a container there is
     # no cgroup): the template shows a dash instead of failing.
     out: dict = {"cpus": os.cpu_count(), "container_cpu_pct": None, "container_mem_bytes": None,
+                 "container_mem_used": None, "container_mem_cache": None,
                  "container_mem_limit": None, "host_load": None, "host_mem_total": None,
                  "host_mem_available": None}
 
@@ -310,6 +311,17 @@ def machine() -> dict:
     if cur:
         out["container_mem_bytes"] = int(cur)
         out["container_mem_limit"] = None if (mx in (None, "max")) else int(mx)
+    # memory.current counts the page cache — the database file the usage
+    # worker reads — which the kernel gives back when anything needs it. It
+    # read as growth (401 → 505 MB in a day, October 2026). "anon" is what
+    # the processes actually hold; "file" is the cache.
+    st = _read(_CG / "memory.stat")
+    if st:
+        kv = dict(line.split(maxsplit=1) for line in st.splitlines() if " " in line)
+        if "anon" in kv:
+            out["container_mem_used"] = int(kv["anon"])
+        if "file" in kv:
+            out["container_mem_cache"] = int(kv["file"])
 
     la = _read(Path("/proc/loadavg"))
     if la:
