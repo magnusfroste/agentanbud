@@ -36,6 +36,9 @@
     programmets eget namn: första ordet i dess User-Agent, t.ex.
     "python-requests/2.31". Aldrig för en webbläsare, och aldrig resten av
     strängen.
+    Kommer en besökare via en länk på en annan sajt sparar vi bara den
+    sajtens domän, t.ex. "linkedin.com" — aldrig resten av adressen, som
+    kan peka ut en profil, ett inlägg eller en sökning.
     Den enda cookien på sajten är inloggningen till vår egen driftpanel.
   </p>
 </section>
@@ -190,6 +193,25 @@
       <div class="bar-track">
         <div class="bar-fill" style="width: {{ t.pct }}%"></div>
         <span class="bar-value">{{ t.n }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- WHERE VISITORS COME FROM -->
+{% if referrers %}
+<section class="insight-section">
+  <h2>Varifrån kommer besökarna?</h2>
+  <p class="muted">Sajten som länkade hit, räknat per besökare och dag. Bara domänen sparas. De flesta besök har ingen avsändare alls (inskriven adress, bokmärke, appar som inte skickar någon), så siffrorna är ett golv.</p>
+  <div class="bar-chart">
+    {% for r in referrers %}
+    <div class="bar-row">
+      <span class="bar-label">{{ r.domain[:34] }}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width: {{ r.pct }}%; background: #0ea5e9;"></div>
+        <span class="bar-value">{{ r.visitors }} besökare · {{ r.views }} sidor</span>
       </div>
     </div>
     {% endfor %}

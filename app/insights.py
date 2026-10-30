@@ -12,7 +12,9 @@ token, e.g. "python-requests/2.31"). Rows do carry a visitor id
 (app/visitors.py) — a hash of a salt that is deleted after a day, the address
 and the user agent — so a visitor can be counted once per day but not
 followed across days, and not recomputed once the salt is gone. The id never
-leaves the log: no figure here exposes it. The privacy text on /analytics
+leaves the log: no figure here exposes it. A human pageview that followed a
+link from another site carries that site's domain (referrer_domain), never
+the rest of the address. The privacy text on /analytics
 says the same and must change if this does.
 """
 from __future__ import annotations
@@ -117,6 +119,48 @@ def program_name(user_agent: str) -> Optional[str]:
         return None
     name = _PROGRAM_CHARS.sub("", ua.split()[0])[:40]
     return name if re.search(r"[A-Za-z]", name) else None
+
+
+# Short links and app referrers that stand for a site: a click from the
+# LinkedIn app arrives as android-app://com.linkedin.android/, one from a
+# post's short link as lnkd.in.
+_REFERRER_ALIASES = {
+    "lnkd.in": "linkedin.com", "com.linkedin.android": "linkedin.com",
+    "t.co": "x.com", "twitter.com": "x.com",
+    "com.google.android.gm": "gmail", "mail.google.com": "gmail",
+    "com.google.android.googlequicksearchbox": "google",
+}
+_REFERRER_PREFIXES = ("www.", "m.", "l.", "lm.", "out.", "away.")
+_HOST_CHARS = re.compile(r"^[a-z0-9.-]{1,100}$")
+
+
+def referrer_domain(referer: Optional[str], own_host: Optional[str] = None) -> Optional[str]:
+    """The site a visitor came from, as a bare domain, or None.
+
+    Only the host is kept ("linkedin.com"), never the path or query: those
+    can name a person's profile, a post or a search. A link inside the site
+    gives None (that is not where a visit came from), and so does anything
+    that is not a plain host name.
+    """
+    if not referer:
+        return None
+    from urllib.parse import urlsplit
+    try:
+        host = (urlsplit(referer.strip()).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return None
+    if not _HOST_CHARS.match(host) or "." not in host:
+        return None
+    for prefix in _REFERRER_PREFIXES:
+        if host.startswith(prefix) and host.count(".") > 1:
+            host = host[len(prefix):]
+            break
+    own = (own_host or "").lower().split(":")[0]
+    if own.startswith("www."):
+        own = own[4:]
+    if host in ("agentanbud.se", own) or host.endswith(".agentanbud.se"):
+        return None
+    return _REFERRER_ALIASES.get(host, host)
 
 
 
@@ -401,6 +445,15 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         if not _term_has_data(conn, r["term"], corpus):
             unmet.append({"term": r["term"], "n": r["n"]})
 
+    # --- Where human visitors came from: the referring domain, counted once
+    # per visitor and day. Most visits carry none (typed, bookmarked, an app
+    # that sends no referrer), so this is a lower bound for every site.
+    referrers = [{"domain": r["d"], "visitors": r["u"], "views": r["n"]} for r in conn.execute(
+        "SELECT json_extract(meta, '$.ref') AS d, COUNT(*) AS n, "
+        "COUNT(DISTINCT COALESCE(json_extract(meta, '$.v'), id)) AS u FROM usage_log "
+        + _and("action = 'view' AND json_extract(meta, '$.ref') IS NOT NULL")
+        + " GROUP BY d ORDER BY u DESC, n DESC LIMIT ?", args + [top]).fetchall()]
+
     # --- 30-day series: human pageviews only, so growth means real interest
     day_rows = conn.execute(
         "SELECT DATE(created_at) AS day, "
@@ -448,6 +501,7 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
                      for l, n in seg_counter.most_common()],
         "top_terms": term_rows,
         "visitors": visitors,
+        "referrers": referrers,
         "automated_calls": automated_calls,
         "conduct": conduct_kinds,
         "unmet_demand": unmet,
@@ -494,6 +548,11 @@ def format_usage_markdown(s: dict) -> str:
     if s["unmet_demand"]:
         out.append("## Sökningar utan träff (luckor i datan)")
         out += [f"- {x['term']}: {x['n']}" for x in s["unmet_demand"][:10]]
+        out.append("")
+    if s.get("referrers"):
+        out.append("## Varifrån besökarna kommer (länkande sajt)")
+        out += [f"- {r['domain']}: {r['visitors']} besökare, {r['views']} sidvisningar"
+                for r in s["referrers"][:10]]
         out.append("")
     if s.get("mcp_clients"):
         out.append("## Vilka AI-agenter ansluter")
