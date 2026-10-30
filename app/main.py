@@ -32,7 +32,7 @@ from .db import (
 )
 from .version import build_info, version_string, started_at
 from . import hubs, ops, related, seo, usage_cache, visitors
-from .insights import program_name, REAL_SEARCH
+from .insights import program_name, referrer_domain, REAL_SEARCH
 from .search import (build_match, match_subquery, like_floor_sql,
                      rank_order_sql)
 
@@ -318,7 +318,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                                "/ops")
 
     def _write_pageview(path: str, is_bot: bool, address: Optional[str] = None,
-                        user_agent: Optional[str] = None) -> None:
+                        user_agent: Optional[str] = None, ref: Optional[str] = None) -> None:
         conn = connect(db)
         try:
             if is_bot:
@@ -326,9 +326,10 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 # the total — aggregate instead of one row per hit.
                 bump_daily_counter(conn, "bot_view")
             else:
-                _log_usage_safe(conn, "browser", "view", query=path,
-                                meta={"bot": 0,
-                                      "v": visitors.visitor_id(conn, address, user_agent)})
+                meta = {"bot": 0, "v": visitors.visitor_id(conn, address, user_agent)}
+                if ref:
+                    meta["ref"] = ref
+                _log_usage_safe(conn, "browser", "view", query=path, meta=meta)
         finally:
             conn.close()
 
@@ -348,8 +349,10 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 # waits for a lock (up to its 5 s timeout), and doing that in
                 # an async middleware stalled every request on the server, not
                 # just this one.
+                ref = None if is_bot else referrer_domain(request.headers.get("referer"),
+                                                          request.headers.get("host"))
                 await run_in_threadpool(_write_pageview, path, is_bot,
-                                        None if is_bot else visitors.address_of(request.headers), ua)
+                                        None if is_bot else visitors.address_of(request.headers), ua, ref)
         except Exception:
             LOG.exception("pageview logging failed")
         return response
@@ -1420,6 +1423,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 monitoring_connects=s["monitoring_connects"],
                 usage_types=usage_types,
                 top_tools=bars([{"tool": t["tool"], "n": t["n"]} for t in s["mcp_tools"]]),
+                referrers=bars([{**r, "n": r["visitors"]} for r in s.get("referrers") or []]),
                 daily=daily, recent=recent, request=request,
             ))
         finally:
