@@ -7,6 +7,8 @@
     <div class="small">CPU, andel av hela servern ({{ m.cpus }} kärnor), mätt över en halv sekund</div>
     <div class="kv" style="margin-top:10px">
       <div>Minne</div><div>{{ m.container_mem_bytes|bytes }}{% if m.container_mem_limit %} av {{ m.container_mem_limit|bytes }}{% else %} (ingen gräns satt){% endif %}</div>
+      {% if m.container_mem_used is not none %}<div>varav processerna</div><div>{{ m.container_mem_used|bytes }}</div>
+      <div>varav filcache</div><div>{{ m.container_mem_cache|bytes }} <span class="muted">(databasfilen i minnet; lämnas tillbaka vid behov)</span></div>{% endif %}
     </div>
   </div>
   <div class="card"><h2>Servern <span class="pill muted">hela värden</span></h2>

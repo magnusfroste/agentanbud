@@ -115,6 +115,18 @@ c4 = UsageCache(slow)
 c4.warm(periods=(7, None), delay_s=0).join()
 check("förvärmning räknar perioderna i förväg", calls == [7, None] and c4.get(7) and calls == [7, None], str(calls))
 
+calls.clear()
+c5 = UsageCache(lambda d: (calls.append(d), {"n": len(calls)})[1])
+c5.warm(periods=(1, 30), delay_s=0, every_s=0.2)
+import time as _t  # noqa: E402
+for _ in range(100):
+    if len(calls) >= 6:
+        break
+    _t.sleep(0.05)
+check("hålls färska utan läsare: alla perioder räknas om med jämna mellanrum",
+      calls.count(1) >= 3 and calls.count(30) >= 3, str(calls))
+check("…och läsaren får det senaste", c5.get(30)["n"] >= 4, str(c5.get(30)))
+
 print("\nSajten och MCP delar cachen")
 from fastapi.testclient import TestClient  # noqa: E402
 import app.main as m  # noqa: E402
