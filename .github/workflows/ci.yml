@@ -1,4 +1,5 @@
-# Runs on every PR and every push to main.
+# Runs on every PR and every push to main. On main, once both checks pass, it
+# deploys and then smoke-tests the live site (the third job, below).
 #
 # Two jobs, because the two outages this project has had were both invisible
 # to a plain test run:
@@ -14,6 +15,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Re-run a deploy by hand: Actions -> CI -> Run workflow, on main.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -137,3 +140,48 @@ jobs:
       - name: Container logs
         if: always()
         run: docker logs app 2>&1 | tail -50 || true
+
+  # Deploy to production, only from main and only after both checks above
+  # pass, so a red build never reaches the site. Easypanel runs this as a
+  # compose app, which has no auto-deploy setting; its deploy trigger is a
+  # URL, kept in the EASYPANEL_DEPLOY_URL secret (never in the repo: anyone
+  # holding it can redeploy). The server's own ports are closed, so the URL
+  # goes through the Cloudflare tunnel.
+  #
+  # Then it waits until the site reports this exact commit and runs the full
+  # smoke test against it. A deploy is not done when Easypanel says so; it is
+  # done when the live site answers with the new build and passes.
+  deploy:
+    needs: [tests, image]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Trigger the deploy
+        env:
+          DEPLOY_URL: ${{ secrets.EASYPANEL_DEPLOY_URL }}
+        run: |
+          if [ -z "$DEPLOY_URL" ]; then
+            echo "::warning::EASYPANEL_DEPLOY_URL is not set; skipping the deploy"
+            echo "skip=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          code=$(curl -sS -m 60 -o resp.txt -w '%{http_code}' -X POST "$DEPLOY_URL")
+          echo "Easypanel answered HTTP $code"
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            cat resp.txt; echo
+            echo "::error::the deploy trigger was refused"
+            exit 1
+          fi
+
+      - name: Wait for this commit to go live, then smoke-test it
+        if: env.skip != '1'
+        run: python scripts/smoke_test.py --base https://agentanbud.se --expect-sha "$GITHUB_SHA" --wait 600
