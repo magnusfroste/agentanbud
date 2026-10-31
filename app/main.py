@@ -1668,7 +1668,8 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
         cpv: Optional[str] = Query(default=None),
         top: int = Query(default=15, ge=1, le=50),
     ) -> dict:
-        """Who wins contracts in a given area (from TED award notices).
+        """Who wins contracts in a given area: TED award notices, and under
+        "sweden" Upphandlingsmyndigheten's statistics of awarded contracts.
 
         Filter by authority and/or cpv prefix. Returns suppliers ranked by
         number of awards won, with total awarded value. At least one filter
@@ -1681,9 +1682,10 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
             # Same aggregation the MCP tool and the dashboard use, so all three
             # report identical figures — including collapsing TED's duplicate
             # republications, which would otherwise inflate a supplier's wins.
-            from mcp_shared import aggregate_winners
+            from mcp_shared import aggregate_winners, aggregate_contracts, UHM_ATTRIBUTION
             agg = aggregate_winners(conn, authority, cpv)
             wins, value_by_winner, contracts = agg["wins"], agg["value_by_winner"], agg["contracts"]
+            national = aggregate_contracts(conn, authority or "", cpv or "", top)
             ranked = [
                 # Equal share of each framework, not the framework's full value —
                 # see mcp_shared.aggregate_winners.
@@ -1696,6 +1698,11 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
                 "contracts": contracts,
                 "unique_winners": len(wins),
                 "winners": ranked,
+                # Contracts awarded in Sweden from Upphandlingsmyndigheten's
+                # statistics: every Swedish database, below the thresholds too.
+                # Separate from the TED figures above, which it can overlap.
+                "sweden": {**national, "years": list(national["years"]) if national["years"] else None,
+                           "source": UHM_ATTRIBUTION} if national["contracts"] else None,
             }
         finally:
             conn.close()

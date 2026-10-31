@@ -496,9 +496,12 @@ def _tool_objects() -> list[types.Tool]:
         types.Tool(
             name="get_winner_history",
             description=(
-                "Who tends to WIN contracts in a given area — market intelligence from TED "
-                "award notices. Filter by buyer/authority and/or CPV prefix. Returns the "
-                "suppliers ranked by number of awards won, with total awarded value. "
+                "Who tends to WIN contracts in a given area. Two sources, reported separately: "
+                "TED award notices (above the EU thresholds, recent, with values) and "
+                "Upphandlingsmyndigheten's statistics of contracts awarded in Sweden 2021 onwards "
+                "(every Swedish advertising database, below the thresholds too, with the share "
+                "won by small and medium-sized companies and the share appealed). Filter by "
+                "buyer/authority and/or CPV prefix. Returns suppliers ranked by contracts won. "
                 "Use this to answer 'is it worth bidding, or does the same supplier always win?'. "
                 "Examples: authority='Trafikverket'; cpv='45' (construction); authority='Region Stockholm', cpv='85'."
             ),
@@ -1030,11 +1033,13 @@ async def _get_winner_history(conn, args: dict) -> list[types.Content]:
             text="Ange minst en filter: authority (upphandlare) och/eller cpv (kategori-prefix).",
         )]
 
-    from mcp_shared import aggregate_winners
+    from mcp_shared import aggregate_winners, aggregate_contracts
+    top = min(args.get("top", 15), 50)
     agg = aggregate_winners(conn, authority, cpv)
     wins, value_by_winner, contracts = agg["wins"], agg["value_by_winner"], agg["contracts"]
+    national = aggregate_contracts(conn, authority, cpv, top)
 
-    if not contracts and not wins:
+    if not contracts and not wins and not national["contracts"]:
         scope = " och ".join(filter(None, [
             f"upphandlare '{authority}'" if authority else "",
             f"CPV '{cpv}'" if cpv else "",
@@ -1044,27 +1049,48 @@ async def _get_winner_history(conn, args: dict) -> list[types.Content]:
             text=f"Inga tilldelningar hittades för {scope}. Prova bredare filter eller kortare namn.",
         )]
 
-    if not wins:
+    if not wins and not national["winners"]:
         return [types.TextContent(type="text", text="Tilldelningar hittades men utan namngivna vinnare.")]
 
     scope = ", ".join(filter(None, [
         f"upphandlare '{authority}'" if authority else "",
         f"CPV-prefix '{cpv}'" if cpv else "",
     ]))
-    top = min(args.get("top", 15), 50)
-    ranked = wins.most_common(top)
-    lines = [
-        f"**Vem vinner — {scope}**",
-        f"Baserat på {contracts} tilldelningar ({len(wins)} unika leverantörer).",
-        "Belopp är uppskattad andel: ett ramavtals värde delas lika mellan de "
-        "namngivna vinnarna, eftersom TED inte redovisar hur avropen fördelas.",
-        "",
-    ]
-    for i, (w, n) in enumerate(ranked, 1):
-        tot = value_by_winner.get(w)
-        val_str = f" — ca {tot:,.0f} SEK".replace(",", " ") if tot else ""
-        lines.append(f"{i}. **{w}** — {n} vinst{'er' if n != 1 else ''}{val_str}")
-    lines.append("")
+    lines = [f"**Vem vinner — {scope}**", ""]
+    if wins:
+        lines += [
+            "**Tilldelningar i TED** (över EU:s tröskelvärden, löpande)",
+            f"Baserat på {contracts} tilldelningar ({len(wins)} unika leverantörer).",
+            "Belopp är uppskattad andel: ett ramavtals värde delas lika mellan de "
+            "namngivna vinnarna, eftersom TED inte redovisar hur avropen fördelas.",
+            "",
+        ]
+        for i, (w, n) in enumerate(wins.most_common(top), 1):
+            tot = value_by_winner.get(w)
+            val_str = f" — ca {tot:,.0f} SEK".replace(",", " ") if tot else ""
+            lines.append(f"{i}. **{w}** — {n} vinst{'er' if n != 1 else ''}{val_str}")
+        lines.append("")
+    if national["winners"]:
+        from mcp_shared import UHM_ATTRIBUTION
+        first, last = national["years"]
+        facts = [f"{national['contracts']} kontrakterade anbud i {national['procurements']} upphandlingar"]
+        if national["sme_pct"] is not None:
+            facts.append(f"{national['sme_pct']} % till små och medelstora företag")
+        if national["below_threshold_pct"] is not None:
+            facts.append(f"{national['below_threshold_pct']} % av upphandlingarna under EU:s tröskelvärden")
+        if national["appealed_pct"] is not None:
+            facts.append(f"{national['appealed_pct']} % överprövade")
+        lines += [
+            f"**Tilldelade kontrakt i Sverige {first}–{last}** (alla svenska annonsdatabaser, "
+            "även under tröskelvärdena; publiceras årsvis)",
+            "Baserat på " + ", ".join(facts) + ". Ett ramavtal med flera leverantörer räknas "
+            "för var och en. Kan överlappa TED-siffrorna ovan.",
+            "",
+        ]
+        for i, w in enumerate(national["winners"], 1):
+            org = f" (org.nr {w['orgnr']})" if w.get("orgnr") else ""
+            lines.append(f"{i}. **{w['name']}**{org} — {w['n']} kontrakt")
+        lines += ["", UHM_ATTRIBUTION, ""]
     lines.append("💡 Tips: en dominerande vinnare kan betyda hård konkurrens — men också "
                  "att marknaden är öppen för en utmanare. Använd get_authority för att se "
                  "kommande upphandlingar från samma köpare.")

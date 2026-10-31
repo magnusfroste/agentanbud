@@ -110,7 +110,8 @@ class _Snapshot:
             if key:
                 b = self.buyers.setdefault(key, {"names": Counter(), "deadlines": [], "open_ids": [],
                                                  "notices": 0, "divisions": Counter(),
-                                                 "wins": Counter(), "contracts": 0})
+                                                 "wins": Counter(), "contracts": 0,
+                                                 "nat_wins": Counter(), "nat": None})
                 b["names"][seo._buyer(r["authority"])] += 1
                 b["divisions"].update({c[:2] for c in codes})
                 if r["source_system"] != "ted_awards":
@@ -148,6 +149,12 @@ class _Snapshot:
                     b["wins"][k] += 1
                     spellings.setdefault(k, Counter())[w] += 1
         self.label = {k: c.most_common(1)[0][0] for k, c in spellings.items()}
+        # Contracts awarded in Sweden (Upphandlingsmyndigheten, scraper/
+        # uhm_contracts.py): every database and below the thresholds too,
+        # matched to a buyer by its name. Grouped in SQLite, so the 100,000
+        # rows are one pass there and a few thousand groups here.
+        self.nat_label: dict = {}
+        self._add_contracts(conn)
         # A display name per buyer (the spelling seen most, preferring one
         # that is not all capitals) and a page for the buyers with enough to
         # say: a page with one notice on it is thin content, not an answer.
@@ -156,11 +163,84 @@ class _Snapshot:
             names = b["names"].most_common()
             b["name"] = next((n for n, _ in names if not n.isupper()), names[0][0])
             b["slug"] = None
-            if b["notices"] >= PAGE_MIN_NOTICES or b["contracts"] >= PAGE_MIN_NOTICES:
+            if (b["notices"] >= PAGE_MIN_NOTICES or b["contracts"] >= PAGE_MIN_NOTICES
+                    or (b["nat"] and b["nat"]["contracts"] >= PAGE_MIN_NOTICES)):
                 slug = slugify(b["name"])
                 if slug and slug not in self.slugs:
                     self.slugs[slug] = key
                     b["slug"] = slug
+
+
+    def _add_contracts(self, conn) -> None:
+        by_match: dict = {}
+        for key in self.buyers:
+            by_match.setdefault(buyer_match_key(key), key)
+
+        def find(buyer: str):
+            key = by_match.get(buyer_match_key(seo._buyer(buyer)))
+            return self.buyers.get(key) if key else None
+
+        import sqlite3
+        from mcp_shared import SME_SIZES, pretty_company
+        try:
+            totals = conn.execute(
+                "SELECT buyer_name, COUNT(*), COUNT(DISTINCT procurement_id), MIN(year), MAX(year), "
+                "SUM(supplier_size IN (?, ?, ?)), SUM(supplier_size IS NOT NULL) "
+                "FROM contracts WHERE buyer_name IS NOT NULL GROUP BY buyer_name", SME_SIZES).fetchall()
+            pairs = conn.execute(
+                "SELECT buyer_name, supplier_key, MAX(supplier_name), COUNT(*) FROM contracts "
+                "WHERE buyer_name IS NOT NULL AND supplier_name IS NOT NULL "
+                "GROUP BY buyer_name, supplier_key").fetchall()
+        except sqlite3.OperationalError:      # no contracts table yet
+            return
+        for buyer, n, procs, first, last, sme, sized in totals:
+            b = find(buyer)
+            if b is None:
+                continue
+            nat = b["nat"] or {"contracts": 0, "procurements": 0, "first": first, "last": last,
+                               "sme": 0, "sized": 0}
+            nat["contracts"] += n
+            nat["procurements"] += procs
+            nat["first"], nat["last"] = min(nat["first"], first), max(nat["last"], last)
+            nat["sme"] += sme or 0
+            nat["sized"] += sized or 0
+            b["nat"] = nat
+        for buyer, key, name, n in pairs:
+            b = find(buyer)
+            if b is None:
+                continue
+            b["nat_wins"][key] += n
+            if key not in self.nat_label:
+                self.nat_label[key] = pretty_company(name)
+
+
+def buyer_match_key(name: str) -> str:
+    """A buyer's name as the sources and Upphandlingsmyndigheten both write it.
+
+    The agency uses the registered name in capitals — "GÖTEBORGS KOMMUN",
+    "BORLÄNGE ENERGI AB" — where the notices say "Göteborgs Stad" and "AB
+    Borlänge Energi". Case, the company form wherever it stands, punctuation,
+    and "stad" for "kommun" (the cities that call themselves one) are set
+    aside; nothing else is guessed. 498 of the 609 buyer pages matched this
+    way in October 2026, against 459 on the exact name.
+    """
+    import re
+    n = (name or "").casefold()
+    n = re.sub(r"\b(aktiebolaget|aktiebolag|ab|publ)\b", " ", n)
+    n = re.sub(r"[.,()/&-]", " ", n)
+    n = re.sub(r"\s+", " ", n).strip()
+    return n[:-4] + "kommun" if n.endswith(" stad") else n
+
+
+def _national(snap, b: dict, top: int) -> Optional[dict]:
+    """A buyer's contracts in Upphandlingsmyndigheten's statistics, if any."""
+    nat = b.get("nat")
+    if not nat or not nat["contracts"]:
+        return None
+    return {"contracts": nat["contracts"], "procurements": nat["procurements"],
+            "years": f"{nat['first']}–{nat['last']}" if nat["first"] != nat["last"] else str(nat["first"]),
+            "sme_pct": round(100 * nat["sme"] / nat["sized"]) if nat["sized"] else None,
+            "winners": [{"name": snap.nat_label.get(k, k), "n": n} for k, n in b["nat_wins"].most_common(top)]}
 
 
 _SNAPSHOTS: dict = {}
@@ -289,6 +369,7 @@ def buyer_profile(conn, authority: Optional[str]) -> Optional[dict]:
                   for d, n in b["divisions"].most_common(3)],
         "winners": [{"name": snap.label.get(k, k), "n": n} for k, n in b["wins"].most_common(3)],
         "contracts": b["contracts"],
+        "national": _national(snap, b, 3),
     }
 
 
@@ -324,6 +405,7 @@ def buyer_page(conn, slug: str) -> Optional[dict]:
         "open": [{"id": x[6], "title": x[0], "deadline_text": x[5], "region": x[3]} for x in open_items],
         "usual": usual,
         "winners": [{"name": snap.label.get(k, k), "n": n} for k, n in b["wins"].most_common(10)],
+        "national": _national(snap, b, 10),
     }
 
 
@@ -337,7 +419,12 @@ def buyer_answer(page: dict) -> str:
         parts.append("Köper oftast: " + "; ".join(
             u["label"] if u["label"][1:2].isupper() else u["label"][:1].lower() + u["label"][1:]
             for u in page["usual"][:3]) + ".")
-    if page["winners"]:
+    nat = page.get("national")
+    if nat and nat["winners"]:
+        top = ", ".join(f"{w['name']} ({w['n']})" for w in nat["winners"][:3])
+        parts.append(f"{nat['years']} gick flest kontrakt till {top}, av {nat['contracts']} "
+                     f"kontrakterade anbud i Upphandlingsmyndighetens statistik.")
+    elif page["winners"]:
         top = ", ".join(f"{w['name']} ({w['n']})" for w in page["winners"][:3])
         parts.append(f"Har oftast tilldelat kontrakt till {top}, enligt {page['contracts']} "
                      f"tilldelning{'ar' if page['contracts'] != 1 else ''} i TED.")
@@ -349,12 +436,18 @@ def buyer_jsonld(page: dict, text: str) -> list[str]:
     faq = {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
         {"@type": "Question", "name": f"Vad upphandlar {page['name']}?",
          "acceptedAnswer": {"@type": "Answer", "text": text}}]}
+    nat = page.get("national")
+    answers = []
+    if nat and nat["winners"]:
+        answers.append(f"Enligt Upphandlingsmyndighetens statistik över tilldelade kontrakt {nat['years']}: "
+                       + ", ".join(f"{w['name']} ({w['n']})" for w in nat["winners"][:5]) + ".")
     if page["winners"]:
+        answers.append("Enligt tilldelningar publicerade i TED: "
+                       + ", ".join(f"{w['name']} ({w['n']})" for w in page["winners"][:5]) + ".")
+    if answers:
         faq["mainEntity"].append({
             "@type": "Question", "name": f"Vem vinner upphandlingar hos {page['name']}?",
-            "acceptedAnswer": {"@type": "Answer", "text":
-                               "Enligt tilldelningar publicerade i TED: "
-                               + ", ".join(f"{w['name']} ({w['n']})" for w in page["winners"][:5]) + "."}})
+            "acceptedAnswer": {"@type": "Answer", "text": " ".join(answers)}})
     crumbs = seo.breadcrumbs(("Agentanbud", "/"), ("Köpare", "/kopare"), (page["name"], path))
     return [seo.jsonld(crumbs), seo.jsonld(faq)]
 

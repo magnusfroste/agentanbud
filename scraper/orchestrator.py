@@ -17,6 +17,7 @@ Enable/disable individual sources via env vars (see docker-compose.yml):
   SCRAPE_KOMMERSANNONS=true
   SCRAPE_CRITERIA=true
   SCRAPE_QUESTIONS=true
+  SCRAPE_UHM_CONTRACTS=true
 """
 from __future__ import annotations
 
@@ -25,7 +26,7 @@ import os
 import time
 from typing import Callable
 
-from . import mercell, ted, ted_awards, ted_pin, lov, kommersannons, criteria, questions
+from . import mercell, ted, ted_awards, ted_pin, lov, kommersannons, criteria, questions, uhm_contracts
 from app.db import connect, prune_logs
 
 LOG = logging.getLogger(__name__)
@@ -47,6 +48,8 @@ def _registry() -> list[tuple[str, bool, Callable[[str], int]]]:
         ("kommersannons", _truthy(os.environ.get("SCRAPE_KOMMERSANNONS", "true")), kommersannons.run),
         ("criteria",    _truthy(os.environ.get("SCRAPE_CRITERIA", "true")),    criteria.run),
         ("questions",   _truthy(os.environ.get("SCRAPE_QUESTIONS", "true")),   questions.run),
+        # Once a year a new file; on other days it stops at the headers.
+        ("uhm_contracts", _truthy(os.environ.get("SCRAPE_UHM_CONTRACTS", "true")), uhm_contracts.run),
     ]
 
 

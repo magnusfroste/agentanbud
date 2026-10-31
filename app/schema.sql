@@ -215,3 +215,44 @@ CREATE TABLE IF NOT EXISTS daily_usage (
     agent_calls     INTEGER NOT NULL DEFAULT 0,
     agent_clients   TEXT                          -- JSON list of client names that did a handshake
 );
+
+-- ---------------------------------------------------------------------------
+-- Contracts awarded in Sweden, one row per supplier per lot, from
+-- Upphandlingsmyndigheten's open statistics (scraper/uhm_contracts.py). Every
+-- registered advertising database reports here — e-Avrop and Clira too, which
+-- we cannot read directly — and below the EU thresholds as well, where TED
+-- has nothing. Published once a year, so this is history, not open tenders.
+CREATE TABLE IF NOT EXISTS contracts (
+    lot_id          TEXT NOT NULL,      -- anbudsområdes-id
+    supplier_key    TEXT NOT NULL,      -- organisation number, or anon:N for a sole trader
+    supplier_name   TEXT,               -- NULL when Upphandlingsmyndigheten anonymised it
+    supplier_orgnr  TEXT,
+    supplier_size   TEXT,               -- Mikroföretag | Små företag | Medelstora företag | Stora företag
+    procurement_id  TEXT,               -- upphandlings-id
+    title           TEXT,
+    buyer_name      TEXT,
+    buyer_key       TEXT,               -- buyer_name case-folded, for matching
+    buyer_orgnr     TEXT,
+    buyer_sector    TEXT,
+    cpv             TEXT,               -- main CPV code, eight digits
+    published       TEXT,
+    year            INTEGER,
+    kind            TEXT,               -- Kontrakt | Ramavtal
+    procedure       TEXT,
+    ad_database     TEXT,
+    above_threshold INTEGER,            -- 1 directive-governed, 0 not, NULL unknown
+    appealed        INTEGER,            -- 1 the procurement was appealed
+    run             INTEGER,            -- import that last saw the row
+    PRIMARY KEY (lot_id, supplier_key)
+);
+CREATE INDEX IF NOT EXISTS idx_contracts_buyer ON contracts(buyer_key);
+CREATE INDEX IF NOT EXISTS idx_contracts_supplier ON contracts(supplier_key);
+CREATE INDEX IF NOT EXISTS idx_contracts_cpv ON contracts(cpv);
+
+-- What a source last delivered, for sources that publish a whole file now
+-- and then: an unchanged file is not downloaded again.
+CREATE TABLE IF NOT EXISTS source_state (
+    source      TEXT PRIMARY KEY,
+    value       TEXT,
+    updated_at  TEXT DEFAULT CURRENT_TIMESTAMP
+);
