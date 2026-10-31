@@ -74,6 +74,104 @@ def canonical_supplier(name: str) -> str:
     return re.sub(r"\s+", " ", n).strip()
 
 
+# --- Contracts awarded in Sweden (Upphandlingsmyndigheten) -----------------
+# A second answer to "who wins here?", from the contracts table
+# (scraper/uhm_contracts.py): every registered advertising database, below the
+# EU thresholds too, 2021 onwards, published yearly. Kept apart from the TED
+# figures rather than added to them — a contract above the thresholds is in
+# both, and the two count differently (TED per notice, this per supplier and
+# lot) — so each figure says where it is from.
+
+UHM_ATTRIBUTION = "Uppgifter: Upphandlingsmyndigheten | Bearbetning: Agentanbud"
+SME_SIZES = ("Mikroföretag", "Små företag", "Medelstora företag")
+_KEEP_UPPER = {"AB", "HB", "KB", "AS", "ASA", "OY", "OYJ", "A/S", "APS", "GMBH", "AG", "SA",
+               "BV", "NV", "LTD", "PLC", "LLC", "INC", "ABP", "IT", "VVS", "EL"}
+_KEEP_LOWER = {"OCH", "I", "PÅ", "AV", "FÖR", "MED", "TILL", "&"}
+_WORDS = {"LÄN", "VÄG", "RÖR", "SYD", "ÖST", "NYA", "VID", "BIL", "BYN", "ALL", "SKOG"}   # short, but words
+
+
+def pretty_company(name: str) -> str:
+    """A company name written in capitals, as the agency registers it, in
+    ordinary case: "SVEVIA AB (PUBL)" -> "Svevia AB (publ)". Short words
+    stay in capitals ("NCC", "WSP", "ÅF"): they are mostly initials, and
+    "Ncc" would be wrong where "NCC" is at worst unchanged."""
+    if not name or not name.isupper():
+        return name or ""
+    out = []
+    for word in name.split():
+        core = word.strip("()")
+        if core in ("PUBL",):
+            out.append(word.lower())
+        elif core in _KEEP_UPPER or (len(core) <= 3 and core.isalpha()
+                                     and core not in _KEEP_LOWER and core not in _WORDS):
+            out.append(word)
+        elif core in _KEEP_LOWER:
+            out.append(word.lower())
+        elif any(ch.isdigit() for ch in core):
+            out.append(word)
+        else:
+            out.append("-".join(part[:1] + part[1:].lower() for part in word.split("-")))
+    return " ".join(out)
+
+
+def _like(text: str) -> str:
+    return "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+def aggregate_contracts(conn, authority: str = "", cpv: str = "", top: int = 15) -> dict:
+    """Who was awarded contracts, from Upphandlingsmyndigheten's statistics.
+
+    A win is a supplier on a lot: a framework agreement with five suppliers
+    is five, as in aggregate_winners. Sole traders, whose names the agency
+    anonymises, count in the totals but are never named.
+
+    Returns {winners: [{name, orgnr, n}], contracts (supplier-lot rows),
+    procurements, years: (first, last), sme_pct, below_threshold_pct,
+    appealed_pct}; contracts is 0 when nothing matches or the table is empty.
+    """
+    import sqlite3
+    where, params = ["1 = 1"], []
+    if authority:
+        # The agency writes "Göteborgs kommun" where the city says "Göteborgs Stad".
+        a = authority.strip().casefold()
+        a = a[:-4] + "kommun" if a.endswith(" stad") else a
+        where.append("buyer_key LIKE ? ESCAPE '\\'")
+        params.append(_like(a))
+    if cpv:
+        where.append("cpv LIKE ?")
+        params.append("".join(ch for ch in cpv if ch.isdigit()) + "%")
+    w = " AND ".join(where)
+    empty = {"winners": [], "contracts": 0, "procurements": 0, "years": None,
+             "sme_pct": None, "below_threshold_pct": None, "appealed_pct": None}
+    try:
+        tot = conn.execute(
+            "SELECT COUNT(*), COUNT(DISTINCT procurement_id), MIN(year), MAX(year), "
+            "SUM(supplier_size IN (?, ?, ?)), SUM(supplier_size IS NOT NULL), "
+            "COUNT(DISTINCT CASE WHEN above_threshold = 0 THEN procurement_id END), "
+            "COUNT(DISTINCT CASE WHEN above_threshold IS NOT NULL THEN procurement_id END), "
+            "COUNT(DISTINCT CASE WHEN appealed = 1 THEN procurement_id END), "
+            "COUNT(DISTINCT CASE WHEN appealed IS NOT NULL THEN procurement_id END) "
+            f"FROM contracts WHERE {w}", list(SME_SIZES) + params).fetchone()
+    except sqlite3.OperationalError:      # table not created yet
+        return empty
+    if not tot or not tot[0]:
+        return empty
+    rows = conn.execute(
+        "SELECT supplier_key, MAX(supplier_name), MAX(supplier_orgnr), COUNT(*) AS n FROM contracts "
+        f"WHERE {w} AND supplier_name IS NOT NULL GROUP BY supplier_key ORDER BY n DESC, 2 LIMIT ?",
+        params + [top]).fetchall()
+
+    def pct(a, b):
+        return round(100 * a / b) if b else None
+    return {
+        "winners": [{"name": pretty_company(r[1]), "orgnr": r[2], "n": r[3]} for r in rows],
+        "contracts": tot[0], "procurements": tot[1], "years": (tot[2], tot[3]),
+        "sme_pct": pct(tot[4] or 0, tot[5] or 0),
+        "below_threshold_pct": pct(tot[6] or 0, tot[7] or 0),
+        "appealed_pct": pct(tot[8] or 0, tot[9] or 0),
+    }
+
+
 def aggregate_winners(conn, authority: str = "", cpv: str = "") -> dict:
     """Count wins per supplier across award notices.
 

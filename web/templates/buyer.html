@@ -45,9 +45,20 @@
 </section>
 {% endif %}
 
+{% if b.national and b.national.winners %}
+<section class="insight-section">
+  <h2>Vem vinner hos {{ b.name }}, {{ b.national.years }}</h2>
+  <ol>
+    {% for w in b.national.winners %}<li>{{ w.name }} <span class="muted">— {{ w.n }} kontrakt</span></li>{% endfor %}
+  </ol>
+  <p class="muted small">{{ b.national.contracts }} kontrakterade anbud i {{ b.national.procurements }} upphandling{{ 'ar' if b.national.procurements != 1 else '' }}{% if b.national.sme_pct is not none %}, {{ b.national.sme_pct }} % till små och medelstora företag{% endif %}. Från alla svenska annonsdatabaser, även under EU:s tröskelvärden. Ett ramavtal med flera leverantörer räknas för var och en. Enskilda firmor är anonymiserade och namnges inte.
+  <br>Uppgifter: Upphandlingsmyndigheten | Bearbetning: Agentanbud</p>
+</section>
+{% endif %}
+
 {% if b.winners %}
 <section class="insight-section">
-  <h2>Vem vinner hos {{ b.name }}</h2>
+  <h2>{% if b.national and b.national.winners %}Senaste tilldelningarna i TED{% else %}Vem vinner hos {{ b.name }}{% endif %}</h2>
   <ol>
     {% for w in b.winners %}<li>{{ w.name }} <span class="muted">— {{ w.n }} kontrakt</span></li>{% endfor %}
   </ol>

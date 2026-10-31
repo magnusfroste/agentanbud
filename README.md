@@ -255,6 +255,23 @@ klientdokumentation i [`MCP.md`](MCP.md).
 | e-Avrop | robots.txt Disallow: / | 🔴 Respekterat — ingen scraping |
 | Clira / Esource | Sanctum-skyddat | 🔴 Kräver konto/headless browser |
 
+### Tilldelade kontrakt (contracts)
+
+| Källa | Typ | Status |
+|---|---|---|
+| **Upphandlingsmyndigheten** — statistik om annonserade upphandlingar | Öppna data, en CSV-fil per år | ✅ Live (~100 000 kontrakterade anbud 2021–2024) |
+
+Varje registrerad annonsdatabas rapporterar sina annonser till
+Upphandlingsmyndigheten, som publicerar de tilldelade kontrakten som öppna
+data: titel, köpare och leverantör med organisationsnummer, CPV, förfarande,
+annonsdatabas och om upphandlingen överprövades. Det täcker det vi inte når
+annars — e-Avrop och Clira, och kontrakt under EU:s tröskelvärden — men
+publiceras en gång om året, så det är historik och inte öppna upphandlingar.
+Lagras i en egen tabell (`contracts`), inte bland upphandlingarna, och visas
+i `get_winner_history`, `/api/winners` (`sweden`) och på köparsidorna.
+Villkor: fri användning med källan angiven, "Uppgifter:
+Upphandlingsmyndigheten | Bearbetning: Agentanbud".
+
 > **TED-filtrering:** vi filtrerar på `notice-type` (inte legacy `notice-subtype`,
 > som TED:s expert-search tyst tolkar som `cn-standard`). Öppna upphandlingar
 > (`cn-*`), tilldelningar (`can-*`) och förhandsinfo (`pin-*`) hålls därför i
