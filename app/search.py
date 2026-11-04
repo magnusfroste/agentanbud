@@ -135,15 +135,27 @@ def build_match(conn: sqlite3.Connection, query: str) -> Optional[str]:
     if n < 0:
         return None                       # FTS errored; caller falls back
 
-    # Compound backoff: "underhållsplaneringsverktyg" -> "underhållsplanering"
+    # Compound backoff: "underhållsplaneringsverktyg" -> "underhållsplanering".
+    # One letter at a time: two at a time skipped past MIN_PREFIX_LEN on an
+    # odd-length word — "väderdata" (9) went 7, then 5, "väder", and answered
+    # a search for weather data with bus-shelter glazing ("väderskydd").
     trimmed = word
     while len(trimmed) > MIN_PREFIX_LEN:
-        trimmed = trimmed[:-2]
+        trimmed = trimmed[:-1]
         expr = _expr([trimmed])
         if _count(conn, expr) > 0:
             LOG.debug("compound backoff: %r -> %r", word, trimmed)
             return expr
     return None                           # genuinely nothing; LIKE won't help either
+
+
+# bm25 weight per indexed column (title, description, authority). Equal
+# weights let the buyer's name outrank what is bought: "meteorolog" and
+# "hydrologi" put SMHI's "Personalsystem" and "Fruktkorgar" first — the words
+# are in the institute's name — above "Konsulter hydrologi och hydrogeologi"
+# (November 2026). A buyer's name still matches, so "SMHI" still lists its
+# tenders, but a word in the title or the description now comes first.
+BM25_WEIGHTS = (10.0, 3.0, 1.0)
 
 
 def match_subquery() -> str:
@@ -162,7 +174,7 @@ def match_subquery() -> str:
     LIKE finds those, and dropping to FTS alone silently lost 60 tenders for
     that one query. FTS decides the order, LIKE guarantees the floor.
     """
-    return (f"SELECT rowid AS id, bm25({FTS_TABLE}) AS r "
+    return (f"SELECT rowid AS id, bm25({FTS_TABLE}, {', '.join(map(str, BM25_WEIGHTS))}) AS r "
             f"FROM {FTS_TABLE} WHERE {FTS_TABLE} MATCH ?")
 
 
