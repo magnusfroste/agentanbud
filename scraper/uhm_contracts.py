@@ -44,6 +44,10 @@ LOG = logging.getLogger(__name__)
 SOURCE = "uhm_contracts"
 CSV_URL = "https://catalog.upphandlingsmyndigheten.se/store/12/resource/239"
 BATCH = 5000
+# Part of the version an unchanged file is recognised by: raise it when the
+# rules for reading a row change, so the next run imports the same file
+# again under them. 2: numbers that could be a person's are anonymised.
+IMPORT_RULES = 2
 
 _UPSERT = """
 INSERT INTO contracts (lot_id, supplier_key, supplier_name, supplier_orgnr, supplier_size,
@@ -162,9 +166,10 @@ def run(db_path: str, url: str = CSV_URL, client: Optional[httpx.Client] = None)
         before = conn.execute("SELECT COUNT(*) FROM contracts").fetchone()[0]
         with client.stream("GET", url) as resp:
             resp.raise_for_status()
-            version = f"{resp.headers.get('last-modified', '')}|{resp.headers.get('content-length', '')}"
+            version = (f"{IMPORT_RULES}|{resp.headers.get('last-modified', '')}"
+                       f"|{resp.headers.get('content-length', '')}")
             if before and version == _state(conn):
-                log_sync(conn, SOURCE, "ok", 0, f"oförändrad fil ({version.split('|')[0]}), {before} kontrakt")
+                log_sync(conn, SOURCE, "ok", 0, f"oförändrad fil ({version.split('|')[1]}), {before} kontrakt")
                 return 0
             # To a temporary file first: a CSV cell may hold a line break,
             # so the rows cannot be split from the stream line by line.

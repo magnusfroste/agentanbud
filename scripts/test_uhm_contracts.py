@@ -106,6 +106,10 @@ check("'Uppgift saknas' blir okänt", rows[("A4_LOT-2", "5560000003")]["above_th
 print("\nOförändrad fil, ny fil, avklippt fil")
 check("samma fil igen: läses inte om", uhm_contracts.run(DB, client=client) == 0
       and conn.execute("SELECT COUNT(*) FROM contracts").fetchone()[0] == 7)
+uhm_contracts.IMPORT_RULES += 1
+check("nya inläsningsregler: samma fil läses in igen", uhm_contracts.run(DB, client=client) == 7)
+uhm_contracts.IMPORT_RULES -= 1
+uhm_contracts.run(DB, client=client)
 served["modified"] = "Thu, 24 Sep 2027 06:40:07 GMT"
 served["body"] = body(ROWS[:6] + [ROWS[6].replace("NCC SVERIGE AB", "PEAB SVERIGE AB").replace("5560000004", "5560000005")])
 check("ny fil: rader som försvunnit tas bort", uhm_contracts.run(DB, client=client) == 7
