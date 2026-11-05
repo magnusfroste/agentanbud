@@ -37,6 +37,7 @@ from typing import Iterable, Optional
 import httpx
 
 from app.db import connect, init_db, log_sync
+from app.suppliers import could_be_person
 
 LOG = logging.getLogger(__name__)
 
@@ -81,7 +82,8 @@ def map_row(row: dict, run: int, anon_seq: dict) -> Optional[dict]:
     """One CSV row as a contracts row, or None when it has no lot id.
 
     A sole trader's name and number are anonymised to "PERSONUPPGIFT" /
-    "Personuppgift": the row is kept, so the contract still counts, but with
+    "Personuppgift", and a number that could be a personal identity number is
+    treated the same: the row is kept, so the contract still counts, but with
     no name, and keyed per lot so two anonymous suppliers stay two.
     """
     lot = (row.get("Anbudsområdes-ID") or "").strip()
@@ -89,7 +91,10 @@ def map_row(row: dict, run: int, anon_seq: dict) -> Optional[dict]:
         return None
     name = _known(row.get("Namn för leverantör"))
     orgnr = _digits(row.get("Organisationsnummer för leverantör"))
-    if name and name.upper() == "PERSONUPPGIFT":
+    # Anonymised by the agency, or a number that could be the owner's
+    # personal identity number (a sole trader's): kept as a contract, never
+    # with the name or the number. The agency's anonymisation is not relied on.
+    if (name and name.upper() == "PERSONUPPGIFT") or could_be_person(orgnr):
         name, orgnr = None, None
     if orgnr:
         key = orgnr

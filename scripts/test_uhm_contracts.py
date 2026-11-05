@@ -155,7 +155,8 @@ related.reset()
 page = related.buyer_page(conn, "goteborgs-stad")
 check("köparen 'Göteborgs Stad' får kontrakten från 'GÖTEBORGS KOMMUN'",
       page and page["national"]["contracts"] == 6 and page["national"]["years"] == "2021–2024"
-      and page["national"]["winners"][0] == {"name": "Sweco Sverige AB", "n": 2}, str(page and page["national"]))
+      and {k: page["national"]["winners"][0][k] for k in ("name", "n")} == {"name": "Sweco Sverige AB", "n": 2},
+      str(page and page["national"]))
 answer = related.buyer_answer(page)
 check("svaret överst nämner vinnarna och källan", "2021–2024 gick flest kontrakt till Sweco Sverige AB (2)" in answer
       and "Upphandlingsmyndighetens statistik" in answer, answer)

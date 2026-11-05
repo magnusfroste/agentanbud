@@ -527,6 +527,27 @@ def _tool_objects() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="get_supplier",
+            description=(
+                "What a COMPANY has won in Swedish public procurement, 2021 onwards: contracts, "
+                "the buyers that awarded them, the industries (CPV), the latest awards, share of "
+                "framework agreements and below the EU thresholds. From Upphandlingsmyndigheten's "
+                "statistics (every Swedish advertising database). Use it to size up a competitor "
+                "or a partner. Give a company name (substring) or a Swedish organisation number. "
+                "Examples: name='Sweco'; name='556767-9849'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Company name or part of it, or organisation number (10 digits)."
+                    }
+                },
+                "required": ["name"]
+            },
+        ),
+        types.Tool(
             name="similar_tenders",
             description=(
                 "Find tenders similar to a given one — same CPV categories and/or same buyer. "
@@ -655,6 +676,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.Content]:
             return await _get_usage_stats(conn, arguments)
         elif name == "get_winner_history":
             return await _get_winner_history(conn, arguments)
+        elif name == "get_supplier":
+            return await _get_supplier(conn, arguments)
         elif name == "similar_tenders":
             return await _similar_tenders(conn, arguments)
         elif name == "deadline_calendar":
@@ -1094,6 +1117,63 @@ async def _get_winner_history(conn, args: dict) -> list[types.Content]:
     lines.append("💡 Tips: en dominerande vinnare kan betyda hård konkurrens — men också "
                  "att marknaden är öppen för en utmanare. Använd get_authority för att se "
                  "kommande upphandlingar från samma köpare.")
+    return [types.TextContent(type="text", text="\n".join(lines))]
+
+
+async def _get_supplier(conn, args: dict) -> list[types.Content]:
+    """A supplier's page as text: what it has won, from whom and in what.
+
+    Same data and rules as /leverantor/{slug} (app/suppliers.py), including
+    that only a legal entity — never a number that could be a person's — is
+    found or shown.
+    """
+    from app import seo, suppliers
+    from mcp_shared import UHM_ATTRIBUTION
+    q = (args.get("name") or "").strip()
+    if not q:
+        return [types.TextContent(type="text", text="Ange name: företagsnamn (del av) eller organisationsnummer.")]
+    hits = suppliers.find(conn, q, 6)
+    if not hits:
+        return [types.TextContent(type="text", text=(
+            f"Ingen leverantör med minst {suppliers.PAGE_MIN_CONTRACTS} tilldelade kontrakt matchar '{q}'. "
+            "Prova en kortare del av namnet, eller organisationsnumret. Använd get_winner_history för "
+            "att se vem som vinner hos en viss köpare eller i en bransch."))]
+    exact = [h for h in hits if h["name"].casefold() == q.casefold()]
+    if len(hits) > 1 and not exact:
+        lines = [f"Flera leverantörer matchar '{q}' — ange organisationsnumret för en av dem:", ""]
+        lines += [f"- **{h['name']}** (org.nr {h['orgnr']}) — {h['n']} kontrakt hos {h['buyers']} köpare"
+                  for h in hits]
+        return [types.TextContent(type="text", text="\n".join(lines))]
+    page = suppliers.supplier_page(conn, (exact or hits)[0]["orgnr"])
+    if not page:
+        return [types.TextContent(type="text", text="Leverantören hittades inte.")]
+    lines = [f"**{page['name']}** (org.nr {page['orgnr']}{', ' + page['size'].lower() if page['size'] else ''})",
+             "", suppliers.supplier_answer(page), ""]
+    facts = []
+    if page["frameworks_pct"] is not None:
+        facts.append(f"{page['frameworks_pct']} % ramavtal")
+    if page["below_threshold_pct"] is not None:
+        facts.append(f"{page['below_threshold_pct']} % under EU:s tröskelvärden")
+    if page["appealed_pct"]:
+        facts.append(f"{page['appealed_pct']} % i överprövade upphandlingar")
+    if facts:
+        line = ", ".join(facts)
+        lines += [line[:1].upper() + line[1:] + ".", ""]
+    if page["buyers"]:
+        lines.append("**Köpare**")
+        lines += [f"- {b['name']} — {b['n']} kontrakt" for b in page["buyers"]]
+        lines.append("")
+    if page["usual"]:
+        lines.append("**Branscher (CPV)**")
+        lines += [f"- {u['label']} ({u['code']}) — {u['n']}" for u in page["usual"]]
+        lines.append("")
+    if page["recent"]:
+        lines.append("**Senaste tilldelningarna**")
+        lines += [f"- {r['title']} — {r['buyer']}, {r['date']}" for r in page["recent"][:10]]
+        lines.append("")
+    lines += [f"Sida: {seo.SITE_URL}/leverantor/{page['slug']}",
+              "Statistiken publiceras årsvis; de senaste månadernas kontrakt finns inte med än.",
+              UHM_ATTRIBUTION]
     return [types.TextContent(type="text", text="\n".join(lines))]
 
 

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ s.name }} — vunna offentliga upphandlingar{% endblock %}
+{% block description %}{{ answer_text[:300] }}{% endblock %}
+{% block og_title %}{{ s.name }} — vunna offentliga upphandlingar{% endblock %}
+{% block og_description %}{{ answer_text[:300] }}{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb">
+  <a href="/">Agentanbud</a><span class="sep">/</span>
+  <a href="/leverantor">Leverantörer</a><span class="sep">/</span>
+  <span class="current">{{ s.name }}</span>
+</nav>
+
+<section class="insight-section">
+  <h1>{{ s.name }}</h1>
+  <p class="muted">Org.nr {{ s.orgnr[:6] }}-{{ s.orgnr[6:] }}{% if s.size %} · {{ s.size }}{% endif %}</p>
+  <p class="lead">{{ answer_text }}</p>
+  <ul class="hub-list">
+    <li>{{ s.contracts }} kontrakt i {{ s.procurements }} upphandling{{ 'ar' if s.procurements != 1 else '' }}, {{ s.years }}</li>
+    {% if s.frameworks_pct is not none %}<li>{{ s.frameworks_pct }} % ramavtal</li>{% endif %}
+    {% if s.below_threshold_pct is not none %}<li>{{ s.below_threshold_pct }} % under EU:s tröskelvärden</li>{% endif %}
+    {% if s.appealed_pct %}<li>{{ s.appealed_pct }} % i upphandlingar som överprövades</li>{% endif %}
+  </ul>
+</section>
+
+{% if s.buyers %}
+<section class="insight-section">
+  <h2>Köpare som tilldelat {{ s.name }} kontrakt</h2>
+  <ol>
+    {% for b in s.buyers %}<li>{% if b.slug %}<a href="/kopare/{{ b.slug }}">{{ b.name }}</a>{% else %}{{ b.name }}{% endif %} <span class="muted">— {{ b.n }} kontrakt</span></li>{% endfor %}
+  </ol>
+</section>
+{% endif %}
+
+{% if s.usual %}
+<section class="insight-section">
+  <h2>Vad {{ s.name }} vinner</h2>
+  <ul class="hub-list">
+    {% for u in s.usual %}<li>{% if u.hub %}<a href="{{ u.hub }}">{{ u.label }}</a>{% else %}{{ u.label }}{% endif %} <span class="muted">({{ u.n }})</span></li>{% endfor %}
+  </ul>
+  <p class="muted small">Kontrakt per huvudgrupp i CPV, efter upphandlingens huvudsakliga kod.</p>
+</section>
+{% endif %}
+
+{% if s.recent %}
+<section class="insight-section">
+  <h2>Senaste tilldelningarna</h2>
+  <ul class="hub-list">
+    {% for r in s.recent %}<li>{{ r.title }} <span class="muted">— {% if r.buyer_slug %}<a href="/kopare/{{ r.buyer_slug }}">{{ r.buyer }}</a>{% else %}{{ r.buyer }}{% endif %}, {{ r.date }}{% if r.kind %} · {{ r.kind|lower }}{% endif %}</span></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="insight-section">
+  <p class="muted small">Tilldelade kontrakt {{ s.years }} från alla svenska annonsdatabaser, även under EU:s tröskelvärden. Statistiken publiceras en gång om året, så de senaste månadernas kontrakt finns inte med än. Ett ramavtal räknas för var och en av leverantörerna.
+  <br>Uppgifter: Upphandlingsmyndigheten | Bearbetning: Agentanbud</p>
+</section>
+
+<section class="insight-section">
+  <h2>För din AI-agent</h2>
+  <p class="muted">Samma uppgifter via MCP på <code>https://www.agentanbud.se/mcp</code>:
+    <code>get_supplier(name="{{ s.orgnr }}")</code>.
+    <a href="/agenter">Så kopplar du in din agent</a>.</p>
+</section>
+{% endblock %}

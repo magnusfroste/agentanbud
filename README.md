@@ -224,8 +224,8 @@ Kilo Code m.fl. med bara en URL — inga nycklar, verktygen listas automatiskt.
 claude mcp add --transport http agentanbud https://www.agentanbud.se/mcp
 ```
 
-**16 öppna läsverktyg:** `search_tenders`, `get_tender`, `similar_tenders`,
-`deadline_calendar`, `match_profile`, `get_winner_history`, `get_authority`,
+**17 öppna läsverktyg:** `search_tenders`, `get_tender`, `similar_tenders`,
+`deadline_calendar`, `match_profile`, `get_winner_history`, `get_supplier`, `get_authority`,
 `get_stats`, `list_providers`, `list_regions`, `list_cpv_top`,
 `search_knowledge`, `get_knowledge`, `list_posts`, `get_post`, `get_post_stats`.
 Plus 2 nyckel-skyddade skrivverktyg (`create_post`, `update_post`) för den

@@ -88,6 +88,10 @@ _KEEP_UPPER = {"AB", "HB", "KB", "AS", "ASA", "OY", "OYJ", "A/S", "APS", "GMBH",
                "BV", "NV", "LTD", "PLC", "LLC", "INC", "ABP", "IT", "VVS", "EL"}
 _KEEP_LOWER = {"OCH", "I", "PÅ", "AV", "FÖR", "MED", "TILL", "&"}
 _WORDS = {"LÄN", "VÄG", "RÖR", "SYD", "ÖST", "NYA", "VID", "BIL", "BYN", "ALL", "SKOG"}   # short, but words
+# Written in lower case after the first word, as in "Göteborgs kommun" and
+# "Region Skåne" (first word) — the agency writes buyers in capitals too.
+_LOWER_AFTER_FIRST = {"KOMMUN", "KOMMUNS", "STAD", "STADS", "LÄN", "LÄNS", "UNIVERSITET",
+                      "HÖGSKOLA", "KOMMUNALFÖRBUND", "LANDSTING", "REGION", "REGIONEN"}
 
 
 def pretty_company(name: str) -> str:
@@ -98,9 +102,11 @@ def pretty_company(name: str) -> str:
     if not name or not name.isupper():
         return name or ""
     out = []
-    for word in name.split():
+    for i, word in enumerate(name.split()):
         core = word.strip("()")
-        if core in ("PUBL",):
+        if i and core in _LOWER_AFTER_FIRST:
+            out.append(word.lower())
+        elif core in ("PUBL",):
             out.append(word.lower())
         elif core in _KEEP_UPPER or (len(core) <= 3 and core.isalpha()
                                      and core not in _KEEP_LOWER and core not in _WORDS):
@@ -130,6 +136,7 @@ def aggregate_contracts(conn, authority: str = "", cpv: str = "", top: int = 15)
     appealed_pct}; contracts is 0 when nothing matches or the table is empty.
     """
     import sqlite3
+    from app.suppliers import is_company_number
     where, params = ["1 = 1"], []
     if authority:
         # The agency writes "Göteborgs kommun" where the city says "Göteborgs Stad".
@@ -164,7 +171,10 @@ def aggregate_contracts(conn, authority: str = "", cpv: str = "", top: int = 15)
     def pct(a, b):
         return round(100 * a / b) if b else None
     return {
-        "winners": [{"name": pretty_company(r[1]), "orgnr": r[2], "n": r[3]} for r in rows],
+        # Only a legal entity's number: a sole trader's is a personal identity
+        # number (app/suppliers.is_company_number).
+        "winners": [{"name": pretty_company(r[1]), "orgnr": r[2] if is_company_number(r[2]) else None,
+                     "n": r[3]} for r in rows],
         "contracts": tot[0], "procurements": tot[1], "years": (tot[2], tot[3]),
         "sme_pct": pct(tot[4] or 0, tot[5] or 0),
         "below_threshold_pct": pct(tot[6] or 0, tot[7] or 0),
