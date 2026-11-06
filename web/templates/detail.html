@@ -128,7 +128,7 @@
     {% endif %}
     {% if buyer.national and buyer.national.winners %}
     <p>Flest kontrakt {{ buyer.national.years }}, enligt Upphandlingsmyndighetens statistik över {{ buyer.national.contracts }} kontrakterade anbud:
-      {% for w in buyer.national.winners %}{{ w.name }} ({{ w.n }}){% if not loop.last %} · {% endif %}{% endfor %}.</p>
+      {% for w in buyer.national.winners %}{% if w.slug %}<a href="/leverantor/{{ w.slug }}">{{ w.name }}</a>{% else %}{{ w.name }}{% endif %} ({{ w.n }}){% if not loop.last %} · {% endif %}{% endfor %}.</p>
     {% elif buyer.winners %}
     <p>Har oftast tilldelat kontrakt till, enligt {{ buyer.contracts }} tilldelning{{ 'ar' if buyer.contracts != 1 else '' }} i TED:
       {% for w in buyer.winners %}{{ w.name }} ({{ w.n }}){% if not loop.last %} · {% endif %}{% endfor %}.</p>

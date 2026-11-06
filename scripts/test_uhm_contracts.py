@@ -106,6 +106,10 @@ check("'Uppgift saknas' blir okänt", rows[("A4_LOT-2", "5560000003")]["above_th
 print("\nOförändrad fil, ny fil, avklippt fil")
 check("samma fil igen: läses inte om", uhm_contracts.run(DB, client=client) == 0
       and conn.execute("SELECT COUNT(*) FROM contracts").fetchone()[0] == 7)
+uhm_contracts.IMPORT_RULES += 1
+check("nya inläsningsregler: samma fil läses in igen", uhm_contracts.run(DB, client=client) == 7)
+uhm_contracts.IMPORT_RULES -= 1
+uhm_contracts.run(DB, client=client)
 served["modified"] = "Thu, 24 Sep 2027 06:40:07 GMT"
 served["body"] = body(ROWS[:6] + [ROWS[6].replace("NCC SVERIGE AB", "PEAB SVERIGE AB").replace("5560000004", "5560000005")])
 check("ny fil: rader som försvunnit tas bort", uhm_contracts.run(DB, client=client) == 7
@@ -155,7 +159,8 @@ related.reset()
 page = related.buyer_page(conn, "goteborgs-stad")
 check("köparen 'Göteborgs Stad' får kontrakten från 'GÖTEBORGS KOMMUN'",
       page and page["national"]["contracts"] == 6 and page["national"]["years"] == "2021–2024"
-      and page["national"]["winners"][0] == {"name": "Sweco Sverige AB", "n": 2}, str(page and page["national"]))
+      and {k: page["national"]["winners"][0][k] for k in ("name", "n")} == {"name": "Sweco Sverige AB", "n": 2},
+      str(page and page["national"]))
 answer = related.buyer_answer(page)
 check("svaret överst nämner vinnarna och källan", "2021–2024 gick flest kontrakt till Sweco Sverige AB (2)" in answer
       and "Upphandlingsmyndighetens statistik" in answer, answer)

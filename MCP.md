@@ -13,6 +13,7 @@ Agentanbud exponerar sina data via [Model Context Protocol](https://modelcontext
 | `match_profile` | Matcha upphandlingar mot en profil — nyckelord, CPV-prefix, regioner |
 | `get_authority` | Alla upphandlingar från en organisation, t.ex. Trafikverket |
 | `get_winner_history` | Vem brukar vinna? Rankar leverantörer per köpare/CPV med totalt värde |
+| `get_supplier` | Vad har ett företag vunnit? Köpare, branscher och senaste tilldelningar (Upphandlingsmyndigheten, 2021–) |
 | `get_stats` | Databasöversikt + senaste sync |
 | `list_providers` | Datakällor + om ansökan kräver konto |
 | `list_regions` | Län med upphandlingar |

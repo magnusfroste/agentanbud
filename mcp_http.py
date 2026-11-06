@@ -101,7 +101,7 @@ def _extract_query(name: str, arguments: dict) -> str | None:
         return arguments.get("query")
     if name == "search_knowledge":
         return arguments.get("q")
-    if name in ("get_authority", "get_winner_history"):
+    if name in ("get_authority", "get_winner_history", "get_supplier"):
         return arguments.get("authority") or arguments.get("name")
     if name == "match_profile":
         keywords = arguments.get("keywords") or []
@@ -209,6 +209,8 @@ async def _run_tool(conn, name: str, arguments: dict) -> list:
         return await mcp_server._get_usage_stats(conn, arguments or {})
     if name == "get_winner_history":
         return await mcp_server._get_winner_history(conn, arguments or {})
+    if name == "get_supplier":
+        return await mcp_server._get_supplier(conn, arguments or {})
     if name == "similar_tenders":
         return await mcp_server._similar_tenders(conn, arguments or {})
     if name == "deadline_calendar":
@@ -354,7 +356,7 @@ def _tool_list(include_write: bool = False) -> list[dict]:
         },
         {
             "name": "get_winner_history",
-            "description": "Who tends to WIN contracts in a given area — market intelligence from TED award notices. Filter by authority and/or CPV prefix; returns suppliers ranked by awards won with total value. Answers 'is it worth bidding, or does the same supplier always win?'. Examples: authority='Trafikverket'; cpv='45'.",
+            "description": "Who tends to WIN contracts in a given area. Two sources, reported separately: TED award notices (above the EU thresholds, recent, with values) and Upphandlingsmyndigheten's statistics of contracts awarded in Sweden 2021 onwards (every Swedish database, below the thresholds too, with shares won by SMEs and appealed). Filter by authority and/or CPV prefix. Answers 'is it worth bidding, or does the same supplier always win?'. Examples: authority='Trafikverket'; cpv='45'.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -362,6 +364,17 @@ def _tool_list(include_write: bool = False) -> list[dict]:
                     "cpv": {"type": "string", "description": "CPV code prefix. '45'=construction, '72'=IT, '85'=health."},
                     "top": {"type": "integer", "default": 15, "minimum": 1, "maximum": 50, "description": "How many top winners (default 15)."}
                 }
+            }
+        },
+        {
+            "name": "get_supplier",
+            "description": "What a COMPANY has won in Swedish public procurement, 2021 onwards: contracts, the buyers that awarded them, industries (CPV), latest awards, share of framework agreements and below the EU thresholds. From Upphandlingsmyndigheten's statistics. Use it to size up a competitor or partner. Give a company name (substring) or a Swedish organisation number. Examples: name='Sweco'; name='556767-9849'.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Company name or part of it, or organisation number (10 digits)."}
+                },
+                "required": ["name"]
             }
         },
         {

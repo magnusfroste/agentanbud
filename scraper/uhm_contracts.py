@@ -37,12 +37,17 @@ from typing import Iterable, Optional
 import httpx
 
 from app.db import connect, init_db, log_sync
+from app.suppliers import could_be_person
 
 LOG = logging.getLogger(__name__)
 
 SOURCE = "uhm_contracts"
 CSV_URL = "https://catalog.upphandlingsmyndigheten.se/store/12/resource/239"
 BATCH = 5000
+# Part of the version an unchanged file is recognised by: raise it when the
+# rules for reading a row change, so the next run imports the same file
+# again under them. 2: numbers that could be a person's are anonymised.
+IMPORT_RULES = 2
 
 _UPSERT = """
 INSERT INTO contracts (lot_id, supplier_key, supplier_name, supplier_orgnr, supplier_size,
@@ -81,7 +86,8 @@ def map_row(row: dict, run: int, anon_seq: dict) -> Optional[dict]:
     """One CSV row as a contracts row, or None when it has no lot id.
 
     A sole trader's name and number are anonymised to "PERSONUPPGIFT" /
-    "Personuppgift": the row is kept, so the contract still counts, but with
+    "Personuppgift", and a number that could be a personal identity number is
+    treated the same: the row is kept, so the contract still counts, but with
     no name, and keyed per lot so two anonymous suppliers stay two.
     """
     lot = (row.get("Anbudsområdes-ID") or "").strip()
@@ -89,7 +95,10 @@ def map_row(row: dict, run: int, anon_seq: dict) -> Optional[dict]:
         return None
     name = _known(row.get("Namn för leverantör"))
     orgnr = _digits(row.get("Organisationsnummer för leverantör"))
-    if name and name.upper() == "PERSONUPPGIFT":
+    # Anonymised by the agency, or a number that could be the owner's
+    # personal identity number (a sole trader's): kept as a contract, never
+    # with the name or the number. The agency's anonymisation is not relied on.
+    if (name and name.upper() == "PERSONUPPGIFT") or could_be_person(orgnr):
         name, orgnr = None, None
     if orgnr:
         key = orgnr
@@ -157,9 +166,10 @@ def run(db_path: str, url: str = CSV_URL, client: Optional[httpx.Client] = None)
         before = conn.execute("SELECT COUNT(*) FROM contracts").fetchone()[0]
         with client.stream("GET", url) as resp:
             resp.raise_for_status()
-            version = f"{resp.headers.get('last-modified', '')}|{resp.headers.get('content-length', '')}"
+            version = (f"{IMPORT_RULES}|{resp.headers.get('last-modified', '')}"
+                       f"|{resp.headers.get('content-length', '')}")
             if before and version == _state(conn):
-                log_sync(conn, SOURCE, "ok", 0, f"oförändrad fil ({version.split('|')[0]}), {before} kontrakt")
+                log_sync(conn, SOURCE, "ok", 0, f"oförändrad fil ({version.split('|')[1]}), {before} kontrakt")
                 return 0
             # To a temporary file first: a CSV cell may hold a line break,
             # so the rows cannot be split from the stream line by line.

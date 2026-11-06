@@ -31,7 +31,7 @@ from .db import (
     record_post_event,
 )
 from .version import build_info, version_string, started_at
-from . import hubs, ops, related, seo, usage_cache, visitors
+from . import hubs, ops, related, seo, suppliers, usage_cache, visitors
 from .insights import program_name, referrer_domain, REAL_SEARCH
 from .search import (build_match, match_subquery, like_floor_sql,
                      rank_order_sql)
@@ -463,8 +463,8 @@ Inte för att konkurrera med plattformarna, utan för att hjälpa marknaden fung
 ## För AI-agenter (MCP)
 
 - MCP-endpoint (Streamable HTTP): {SITE_URL}/mcp
-- 16 öppna läsverktyg: search_tenders, get_tender, similar_tenders,
-  deadline_calendar, match_profile, get_winner_history, get_authority,
+- 17 öppna läsverktyg: search_tenders, get_tender, similar_tenders,
+  deadline_calendar, match_profile, get_winner_history, get_supplier, get_authority,
   get_stats, list_providers, list_regions, list_cpv_top, search_knowledge,
   get_knowledge, list_posts, get_post, get_post_stats.
 - Inga API-nycklar krävs för läsning. Anslut med bara URL:en.
@@ -528,6 +528,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                             "/agenter", "/blogg", "/kunskap", "/upphandlingar"]
             static_paths += [h.path for h in hubs.SECTORS + hubs.COUNTIES]
             static_paths += ["/kopare"] + [f"/kopare/{s}" for s in related.buyer_slugs(conn)]
+            static_paths += ["/leverantor"] + [f"/leverantor/{s}" for s in suppliers.slugs(conn)]
             posts = conn.execute(
                 "SELECT slug, updated_at FROM posts WHERE status = 'published' "
                 "ORDER BY published_at DESC"
@@ -870,6 +871,36 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         text = related.buyer_answer(page)
         return HTMLResponse(render("buyer.html", request=request, b=page, answer_text=text,
                                    jsonld=related.buyer_jsonld(page, text)))
+
+    # ---- Supplier pages (app/suppliers.py): what a company has won ----
+    @app.get("/leverantor", include_in_schema=False)
+    def suppliers_index(request: Request):
+        conn = connect(db)
+        try:
+            top, total = suppliers.index(conn), suppliers.count(conn)
+        finally:
+            conn.close()
+        return HTMLResponse(render("suppliers_index.html", request=request, suppliers=top, total=total,
+                                   jsonld=[seo.jsonld(seo.breadcrumbs(("Agentanbud", "/"),
+                                                                      ("Leverantörer", "/leverantor")))]))
+
+    @app.get("/leverantor/{slug}", include_in_schema=False)
+    def supplier_page(slug: str, request: Request):
+        orgnr = suppliers.orgnr_from_slug(slug)
+        conn = connect(db)
+        try:
+            page = suppliers.supplier_page(conn, orgnr) if orgnr else None
+        finally:
+            conn.close()
+        if not page:
+            raise HTTPException(404, "no such supplier page")
+        # The number is the address; the name in front of it is for people.
+        # A link with an old or mistyped name goes to the one in use.
+        if slug != page["slug"]:
+            return RedirectResponse(f"/leverantor/{page['slug']}", status_code=301)
+        text = suppliers.supplier_answer(page)
+        return HTMLResponse(render("supplier.html", request=request, s=page, answer_text=text,
+                                   jsonld=suppliers.supplier_jsonld(page, text)))
 
     @app.get("/upphandlingar/{kind}/{slug}", include_in_schema=False)
     def upphandlingar_hub(kind: str, slug: str, request: Request):
@@ -2327,6 +2358,7 @@ def get_app():
         # before the first reader of /analytics or /ops asks for it.
         usage_cache.for_db(DB_PATH).warm(every_s=usage_cache.KEEP_FRESH_S)
         related.warm(DB_PATH)
+        suppliers.warm(DB_PATH)
     return _app
 
 

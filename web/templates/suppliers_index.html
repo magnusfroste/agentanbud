@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Leverantörer — vem vinner offentliga upphandlingar{% endblock %}
+{% block description %}De {{ suppliers|length }} leverantörer som vunnit flest offentliga kontrakt i Sverige: vilka köpare och vilka branscher. {{ total }} leverantörer har en egen sida.{% endblock %}
+
+{% block content %}
+<section class="insight-section">
+  <h1>Leverantörer</h1>
+  <p class="lead">Företagen som vinner offentliga upphandlingar i Sverige. {{ total }} leverantörer med minst fem kontrakt har en egen sida: vilka köpare de vunnit hos, inom vad och de senaste tilldelningarna. Här är de {{ suppliers|length }} med flest kontrakt.</p>
+</section>
+<section class="insight-section">
+  <ol>
+    {% for x in suppliers %}<li><a href="/leverantor/{{ x.slug }}">{{ x.name }}</a> <span class="muted">— {{ x.n }} kontrakt hos {{ x.buyers }} köpare</span></li>{% endfor %}
+  </ol>
+  <p class="muted small">Uppgifter: Upphandlingsmyndigheten | Bearbetning: Agentanbud</p>
+</section>
+{% endblock %}

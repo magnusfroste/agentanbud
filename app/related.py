@@ -172,7 +172,7 @@ class _Snapshot:
 
 
     def _add_contracts(self, conn) -> None:
-        by_match: dict = {}
+        self.by_match = by_match = {}
         for key in self.buyers:
             by_match.setdefault(buyer_match_key(key), key)
 
@@ -232,15 +232,27 @@ def buyer_match_key(name: str) -> str:
     return n[:-4] + "kommun" if n.endswith(" stad") else n
 
 
-def _national(snap, b: dict, top: int) -> Optional[dict]:
+def buyer_ref(conn, name: Optional[str]) -> Optional[dict]:
+    """The buyer as we know it — display name and page, if any — for a name
+    written another way, such as Upphandlingsmyndigheten's "GÖTEBORGS KOMMUN"."""
+    snap = _snapshot(conn)
+    key = getattr(snap, "by_match", {}).get(buyer_match_key(seo._buyer(name)))
+    b = snap.buyers.get(key) if key else None
+    return {"name": b.get("name") or key, "slug": b.get("slug")} if b else None
+
+
+def _national(snap, b: dict, top: int, conn=None) -> Optional[dict]:
     """A buyer's contracts in Upphandlingsmyndigheten's statistics, if any."""
+    from app import suppliers
     nat = b.get("nat")
     if not nat or not nat["contracts"]:
         return None
     return {"contracts": nat["contracts"], "procurements": nat["procurements"],
             "years": f"{nat['first']}–{nat['last']}" if nat["first"] != nat["last"] else str(nat["first"]),
             "sme_pct": round(100 * nat["sme"] / nat["sized"]) if nat["sized"] else None,
-            "winners": [{"name": snap.nat_label.get(k, k), "n": n} for k, n in b["nat_wins"].most_common(top)]}
+            "winners": [{"name": snap.nat_label.get(k, k), "n": n,
+                         "slug": suppliers.page_slug(conn, k) if conn is not None else None}
+                        for k, n in b["nat_wins"].most_common(top)]}
 
 
 _SNAPSHOTS: dict = {}
@@ -369,7 +381,7 @@ def buyer_profile(conn, authority: Optional[str]) -> Optional[dict]:
                   for d, n in b["divisions"].most_common(3)],
         "winners": [{"name": snap.label.get(k, k), "n": n} for k, n in b["wins"].most_common(3)],
         "contracts": b["contracts"],
-        "national": _national(snap, b, 3),
+        "national": _national(snap, b, 3, conn),
     }
 
 
@@ -405,7 +417,7 @@ def buyer_page(conn, slug: str) -> Optional[dict]:
         "open": [{"id": x[6], "title": x[0], "deadline_text": x[5], "region": x[3]} for x in open_items],
         "usual": usual,
         "winners": [{"name": snap.label.get(k, k), "n": n} for k, n in b["wins"].most_common(10)],
-        "national": _national(snap, b, 10),
+        "national": _national(snap, b, 10, conn),
     }
 
 
