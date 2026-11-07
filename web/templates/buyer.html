@@ -1,4 +1,7 @@
 {% extends "base.html" %}
+{% from "_feeds.html" import feed_head, feed_links %}
+{% from "_expected.html" import expected_list, expected_caveat %}
+{% block head_extra %}{{ feed_head('/kopare/' ~ b.slug, '', 'Nya upphandlingar från ' ~ b.name) }}{% endblock %}
 {% block title %}Upphandlingar från {{ b.name }}{% endblock %}
 {% block description %}{{ answer_text[:300] }}{% endblock %}
 {% block og_title %}Upphandlingar från {{ b.name }}{% endblock %}
@@ -14,6 +17,7 @@
 <section class="insight-section">
   <h1>Upphandlingar från {{ b.name }}</h1>
   <p class="lead">{{ answer_text }}</p>
+  {{ feed_links('/kopare/' ~ b.slug) }}
 </section>
 
 <section class="insight-section">
@@ -34,6 +38,15 @@
   <p>Inga öppna upphandlingar just nu. <a href="/browse?authority={{ b.name|urlencode }}&amp;status=all">Se tidigare annonser</a>.</p>
   {% endif %}
 </section>
+
+{% if expected %}
+<section class="insight-section">
+  <h2>Väntas upphandlas av {{ b.name }}</h2>
+  <p>Ramavtal som enligt fyraårsregeln ska upphandlas igen de närmaste två åren, de som går ut först överst.</p>
+  {{ expected_list(expected, show_buyer=False) }}
+  {{ expected_caveat() }}
+</section>
+{% endif %}
 
 {% if b.usual %}
 <section class="insight-section">

@@ -1,4 +1,7 @@
 {% extends "base.html" %}
+{% from "_feeds.html" import feed_head, feed_links %}
+{% from "_expected.html" import expected_list, expected_caveat %}
+{% block head_extra %}{{ feed_head(hub.path, '', 'Nya upphandlingar ' ~ hub.phrase) }}{% endblock %}
 {% block title %}Öppna upphandlingar {{ hub.phrase }}{% endblock %}
 {% block description %}{{ answer_text[:300] }}{% endblock %}
 {% block og_title %}Öppna upphandlingar {{ hub.phrase }}{% endblock %}
@@ -14,6 +17,7 @@
 <section class="insight-section">
   <h1>Öppna upphandlingar {{ hub.phrase }}</h1>
   <p class="lead">{{ answer_text }}</p>
+  {{ feed_links(hub.path) }}
   {% if hub.kind == 'lan' %}
   <p class="muted small">Här finns upphandlingar som anger {{ hub.name }} som region (från Mercell och Kommersannons).
     EU-upphandlingar från TED anger bara köparens ort, som ofta är ett huvudkontor, och är därför inte med —
@@ -41,6 +45,16 @@
   <p>Inga öppna upphandlingar just nu. <a href="/browse">Sök bland alla upphandlingar</a>, även stängda.</p>
   {% endif %}
 </section>
+
+{% if expected %}
+<section class="insight-section">
+  <h2>Väntas upphandlas {{ hub.phrase }}</h2>
+  <p>{{ expected_total }} ramavtal {{ hub.phrase }} ska upphandlas igen senast inom ett år. De som går ut först:</p>
+  {{ expected_list(expected) }}
+  <p><a href="/upphandlingar/vantas?bransch={{ hub.slug }}">Alla som väntas {{ hub.phrase }} →</a></p>
+  {{ expected_caveat() }}
+</section>
+{% endif %}
 
 {% if hub.kind == 'bransch' %}
 <section class="insight-section">

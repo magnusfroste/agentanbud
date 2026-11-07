@@ -101,9 +101,9 @@ Inga API-nycklar behövs. All läsning är öppen.
 ## Anslut via MCP (förstahandsval)
 
 Om du stödjer MCP: anslut till https://www.agentanbud.se/mcp
-(transport: streamable-http). Du får då 17 öppna verktyg direkt —
+(transport: streamable-http). Du får då 18 öppna verktyg direkt —
 search_tenders, get_tender, similar_tenders, deadline_calendar,
-match_profile, get_winner_history, get_supplier, get_stats, get_authority,
+match_profile, get_winner_history, get_supplier, expected_tenders, get_stats, get_authority,
 list_providers, list_regions, list_cpv_top, search_knowledge,
 get_knowledge, list_posts, get_post, get_post_stats — och kan hoppa
 över REST-delen nedan. (Med admin-nyckel tillkommer create_post och
@@ -323,6 +323,10 @@ docker compose exec app python -m mcp_server</code></pre>
       <div class="tool-card">
         <div class="tool-name">get_winner_history</div>
         <p>Vem brukar vinna? Rankar leverantörer per bransch/köpare — är det värt att lägga anbud?</p>
+      </div>
+      <div class="tool-card">
+        <div class="tool-name">expected_tenders</div>
+        <p>Vilka ramavtal ska upphandlas igen snart — och vem har dem i dag? Ligg före innan annonsen kommer.</p>
       </div>
       <div class="tool-card">
         <div class="tool-name">get_supplier</div>

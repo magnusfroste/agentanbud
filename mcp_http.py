@@ -101,7 +101,7 @@ def _extract_query(name: str, arguments: dict) -> str | None:
         return arguments.get("query")
     if name == "search_knowledge":
         return arguments.get("q")
-    if name in ("get_authority", "get_winner_history", "get_supplier"):
+    if name in ("get_authority", "get_winner_history", "get_supplier", "expected_tenders"):
         return arguments.get("authority") or arguments.get("name")
     if name == "match_profile":
         keywords = arguments.get("keywords") or []
@@ -211,6 +211,8 @@ async def _run_tool(conn, name: str, arguments: dict) -> list:
         return await mcp_server._get_winner_history(conn, arguments or {})
     if name == "get_supplier":
         return await mcp_server._get_supplier(conn, arguments or {})
+    if name == "expected_tenders":
+        return await mcp_server._expected_tenders(conn, arguments or {})
     if name == "similar_tenders":
         return await mcp_server._similar_tenders(conn, arguments or {})
     if name == "deadline_calendar":
@@ -363,6 +365,19 @@ def _tool_list(include_write: bool = False) -> list[dict]:
                     "authority": {"type": "string", "description": "Buyer/authority name (substring). Example: 'Trafikverket'."},
                     "cpv": {"type": "string", "description": "CPV code prefix. '45'=construction, '72'=IT, '85'=health."},
                     "top": {"type": "integer", "default": 15, "minimum": 1, "maximum": 50, "description": "How many top winners (default 15)."}
+                }
+            }
+        },
+        {
+            "name": "expected_tenders",
+            "description": "Tenders to EXPECT: framework agreements (ramavtal) in Swedish public procurement that must be put out again soon. A framework may as a rule run at most four years, so one published in 2023 is due by 2027. From Upphandlingsmyndigheten's statistics of frameworks awarded 2021-2024, leaving out those the buyer has already tendered again; marks the ones out right now. Returns the buyer, the earlier procurement, when it is due at the latest and who holds the agreement today. An estimate: use it to get ahead of a tender before it is advertised. Filter by authority and/or CPV prefix. Examples: cpv='72', months=6; authority='Göteborgs Stad'.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "authority": {"type": "string", "description": "Buyer name. Example: 'Göteborgs Stad'."},
+                    "cpv": {"type": "string", "description": "CPV code prefix. '45'=construction, '72'=IT, '85'=health."},
+                    "months": {"type": "integer", "default": 12, "minimum": 1, "maximum": 36, "description": "Due at the latest within this many months (default 12)."},
+                    "limit": {"type": "integer", "default": 20, "minimum": 1, "maximum": 100}
                 }
             }
         },

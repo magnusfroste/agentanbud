@@ -101,7 +101,8 @@ class _Snapshot:
         self.by_group: dict = {}       # first four CPV digits -> [ids]
         self.by_authority: dict = {}   # authority exactly as written -> [ids]
         self.buyers: dict = {}         # lower-cased name without town -> profile parts
-        for r in conn.execute("SELECT id, source_system, title, authority, deadline, region, cpv_codes FROM tenders"):
+        for r in conn.execute("SELECT id, source_system, title, authority, deadline, region, cpv_codes, "
+                              "published_at FROM tenders"):
             try:
                 codes = {str(c) for c in json.loads(r["cpv_codes"] or "[]") if c}
             except (TypeError, ValueError):
@@ -111,11 +112,18 @@ class _Snapshot:
                 b = self.buyers.setdefault(key, {"names": Counter(), "deadlines": [], "open_ids": [],
                                                  "notices": 0, "divisions": Counter(),
                                                  "wins": Counter(), "contracts": 0,
-                                                 "nat_wins": Counter(), "nat": None})
+                                                 "nat_wins": Counter(), "nat": None, "latest": {}})
                 b["names"][seo._buyer(r["authority"])] += 1
                 b["divisions"].update({c[:2] for c in codes})
                 if r["source_system"] != "ted_awards":
                     b["notices"] += 1
+                    # The latest notice per CPV division and group (two and three
+                    # digits): app/renewals.py uses it to tell a framework already
+                    # put out to tender again.
+                    pub = (r["published_at"] or "")[:10]
+                    for g in {c[:n] for c in codes if len(c) >= 3 for n in (2, 3)}:
+                        if pub > b["latest"].get(g, ""):
+                            b["latest"][g] = pub
                     if r["deadline"]:
                         b["deadlines"].append(r["deadline"])
             if r["source_system"] == "ted_awards" or not r["deadline"] or r["deadline"] <= now:
@@ -465,6 +473,17 @@ def buyer_jsonld(page: dict, text: str) -> list[str]:
 
 
 _SV_ORDER = str.maketrans({"å": "{", "ä": "|", "ö": "}"})   # å, ä, ö after z, in that order
+
+
+def buyer_open(conn, slug: str):
+    """(name, ids of open tenders) for a buyer page, or None: its feeds."""
+    snap = _snapshot(conn)
+    key = snap.slugs.get(slug)
+    if key is None:
+        return None
+    b = snap.buyers[key]
+    now = _now_iso()
+    return b["name"], [i for i in b["open_ids"] if snap.items[i][2] > now]
 
 
 def buyers_index(conn) -> list[dict]:
