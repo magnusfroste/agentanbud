@@ -30,6 +30,8 @@ import re
 import sqlite3
 from typing import Optional
 
+from app.query_terms import swedish_for
+
 LOG = logging.getLogger(__name__)
 
 FTS_TABLE = "tenders_fts"
@@ -67,15 +69,26 @@ def _tokens(query: str) -> list[str]:
     return longer or raw
 
 
-def _expr(tokens: list[str], op: str = "OR") -> str:
-    """Build an FTS5 MATCH expression.
+def _quote(term: str) -> str:
+    """One term or phrase, quoted (so FTS5 operators inside user input are
+    inert) and given a `*` so prefixes match — `förvaltning` should find
+    `förvaltningsentreprenad`."""
+    return '"' + term.replace('"', '""') + '"*'
 
-    Each token is quoted (so FTS5 operators inside user input are inert) and
-    given a `*` so prefixes match — `förvaltning` should find
-    `förvaltningsentreprenad`.
-    """
-    parts = ['"' + t.replace('"', '""') + '"*' for t in tokens]
-    return f" {op} ".join(parts)
+
+def _term(token: str) -> str:
+    """A token, or the token OR its Swedish equivalents when it is a German or
+    English word we know (app/query_terms.py): "wetterdaten" also searches
+    "väderdata", "väderprognos" and "meteorolog"."""
+    alts = [token] + [a for a in swedish_for(token) if a.casefold() != token.casefold()]
+    if len(alts) == 1:
+        return _quote(token)
+    return "(" + " OR ".join(_quote(a) for a in alts) + ")"
+
+
+def _expr(tokens: list[str], op: str = "OR") -> str:
+    """Build an FTS5 MATCH expression, one _term per token."""
+    return f" {op} ".join(_term(t) for t in tokens)
 
 
 def _count(conn: sqlite3.Connection, expr: str) -> int:
@@ -110,6 +123,16 @@ def build_match(conn: sqlite3.Connection, query: str) -> Optional[str]:
     tokens = _tokens(query)
     if not tokens:
         return None
+
+    # A whole phrase we know in another language — "circular business model"
+    # — is searched as that phrase OR its Swedish equivalents, before the
+    # words are taken one by one.
+    if len(tokens) > 1:
+        alts = swedish_for(" ".join(tokens))
+        if alts:
+            phrase = "(" + " OR ".join(_quote(a) for a in [" ".join(tokens), *alts]) + ")"
+            if _count(conn, phrase) > 0:
+                return phrase
 
     if len(tokens) > 1:
         both = _expr(tokens, "AND")
