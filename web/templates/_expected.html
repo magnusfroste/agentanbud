@@ -1,0 +1,19 @@
+{# Tenders to expect (app/renewals.py): frameworks due to be put out again. #}
+{% macro expected_list(items, show_buyer=True) -%}
+<ul class="hub-list expected-list">
+  {% for x in items %}
+  <li>
+    {% if x.open_id %}<strong>Ute nu:</strong> <a href="/tenders/{{ x.open_id }}">{{ x.open_title }}</a>
+      <span class="muted">— förra: {{ x.title }}, {{ x.published_text }}</span>
+    {% else %}{{ x.title }}
+      <span class="muted">— {% if show_buyer %}{% if x.buyer_slug %}<a href="/kopare/{{ x.buyer_slug }}">{{ x.buyer }}</a>{% else %}{{ x.buyer }}{% endif %}, {% endif %}senast {{ x.latest_text }} (förra {{ x.published_text }})</span>
+    {% endif %}
+    {% if x.incumbents %}<br><span class="muted small">Har avtalet: {% for s in x.incumbents %}{% if s.slug %}<a href="/leverantor/{{ s.slug }}">{{ s.name }}</a>{% else %}{{ s.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if x.suppliers > x.incumbents|length %} och {{ x.suppliers - x.incumbents|length }} till{% endif %}</span>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{%- endmacro %}
+{% macro expected_caveat() -%}
+<p class="muted small">Uppskattning: ett ramavtal får som regel löpa högst fyra år, så en ny upphandling väntas senast fyra år efter den förra, ofta tidigare. Avtalet kan ha förlängts, avslutats eller ersatts av ett annat, och vi ser inte alla nya upphandlingar. Ramavtal 2021–2024 enligt Upphandlingsmyndighetens statistik.
+<br>Uppgifter: Upphandlingsmyndigheten | Bearbetning: Agentanbud</p>
+{%- endmacro %}

@@ -248,6 +248,7 @@ CREATE TABLE IF NOT EXISTS contracts (
 CREATE INDEX IF NOT EXISTS idx_contracts_buyer ON contracts(buyer_key);
 CREATE INDEX IF NOT EXISTS idx_contracts_supplier ON contracts(supplier_key);
 CREATE INDEX IF NOT EXISTS idx_contracts_cpv ON contracts(cpv);
+CREATE INDEX IF NOT EXISTS idx_contracts_procurement ON contracts(procurement_id);
 
 -- What a source last delivered, for sources that publish a whole file now
 -- and then: an unchanged file is not downloaded again.

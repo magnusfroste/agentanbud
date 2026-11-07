@@ -31,7 +31,7 @@ from .db import (
     record_post_event,
 )
 from .version import build_info, version_string, started_at
-from . import hubs, ops, related, seo, suppliers, usage_cache, visitors
+from . import feeds, hubs, ops, related, renewals, seo, suppliers, usage_cache, visitors
 from .insights import program_name, referrer_domain, REAL_SEARCH
 from .search import (build_match, match_subquery, like_floor_sql,
                      rank_order_sql)
@@ -463,8 +463,8 @@ Inte för att konkurrera med plattformarna, utan för att hjälpa marknaden fung
 ## För AI-agenter (MCP)
 
 - MCP-endpoint (Streamable HTTP): {SITE_URL}/mcp
-- 17 öppna läsverktyg: search_tenders, get_tender, similar_tenders,
-  deadline_calendar, match_profile, get_winner_history, get_supplier, get_authority,
+- 18 öppna läsverktyg: search_tenders, get_tender, similar_tenders,
+  deadline_calendar, match_profile, get_winner_history, get_supplier, expected_tenders, get_authority,
   get_stats, list_providers, list_regions, list_cpv_top, search_knowledge,
   get_knowledge, list_posts, get_post, get_post_stats.
 - Inga API-nycklar krävs för läsning. Anslut med bara URL:en.
@@ -529,6 +529,8 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             static_paths += [h.path for h in hubs.SECTORS + hubs.COUNTIES]
             static_paths += ["/kopare"] + [f"/kopare/{s}" for s in related.buyer_slugs(conn)]
             static_paths += ["/leverantor"] + [f"/leverantor/{s}" for s in suppliers.slugs(conn)]
+            static_paths += ["/upphandlingar/vantas"] + [f"/upphandlingar/vantas?bransch={h.slug}"
+                                                         for h in hubs.SECTORS]
             posts = conn.execute(
                 "SELECT slug, updated_at FROM posts WHERE status = 'published' "
                 "ORDER BY published_at DESC"
@@ -869,8 +871,84 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         if not page:
             raise HTTPException(404, "no such buyer page")
         text = related.buyer_answer(page)
-        return HTMLResponse(render("buyer.html", request=request, b=page, answer_text=text,
+        conn = connect(db)
+        try:
+            expected = renewals.expected(conn, buyer=page["name"], within_months=24, limit=10)
+        finally:
+            conn.close()
+        return HTMLResponse(render("buyer.html", request=request, b=page, answer_text=text, expected=expected,
                                    jsonld=related.buyer_jsonld(page, text)))
+
+    # ---- Feeds without an account (app/feeds.py): RSS and iCal ----
+    def _feed(kind: str, rows: list, title: str, page_path: str, description: str):
+        if kind == "feed.xml":
+            return Response(feeds.rss(rows, title, page_path, description),
+                            media_type="application/rss+xml; charset=utf-8", headers=feeds.CACHE_HEADERS)
+        return Response(feeds.ics(rows, title), media_type="text/calendar; charset=utf-8",
+                        headers={**feeds.CACHE_HEADERS,
+                                 "Content-Disposition": 'inline; filename="agentanbud.ics"'})
+
+    @app.get("/feed.xml", include_in_schema=False)
+    @app.get("/kalender.ics", include_in_schema=False)
+    def search_feed(request: Request, q: str = "", cpv: str = "", authority: str = "", region: str = ""):
+        kind = request.url.path.lstrip("/")
+        conn = connect(db)
+        try:
+            rows = feeds.search_rows(conn, q=q, cpv=cpv, authority=authority, region=region)
+        finally:
+            conn.close()
+        what = " · ".join(x for x in (q, f"CPV {cpv}" if cpv else "", authority, region) if x)
+        title = f"Agentanbud: {what}" if what else "Agentanbud: nya upphandlingar"
+        from urllib.parse import urlencode
+        page = "/browse" + ("?" + urlencode({k: v for k, v in (("q", q), ("cpv", cpv),
+                                                               ("authority", authority)) if v}) if what else "")
+        return _feed(kind, rows, title, page, "Öppna offentliga upphandlingar i Sverige"
+                     + (f" som matchar {what}" if what else "") + ", nyaste först.")
+
+    # Before /upphandlingar/{kind}/{slug} and /upphandlingar/{tid}, which would take the path.
+    @app.get("/upphandlingar/vantas", include_in_schema=False)
+    def expected_page(request: Request, bransch: str = ""):
+        sector = hubs.find("bransch", bransch) if bransch else None
+        cpv = sector.match if sector else ()
+        conn = connect(db)
+        try:
+            items = renewals.expected(conn, cpv=cpv, within_months=12, limit=150)
+            total = renewals.count(conn, cpv=cpv, within_months=12)
+        finally:
+            conn.close()
+        crumbs = seo.breadcrumbs(("Agentanbud", "/"), ("Upphandlingar", "/upphandlingar"),
+                                 ("Väntas", "/upphandlingar/vantas"))
+        return HTMLResponse(render("expected.html", request=request, items=items, total=total, months=12,
+                                   sector=sector, sectors=hubs.SECTORS, jsonld=[seo.jsonld(crumbs)]))
+
+    @app.get("/upphandlingar/{hub_kind}/{slug}/{kind}", include_in_schema=False)
+    def hub_feed(hub_kind: str, slug: str, kind: str):
+        hub = hubs.find(hub_kind, slug)
+        if not hub or kind not in ("feed.xml", "kalender.ics"):
+            raise HTTPException(404, "no such feed")
+        conn = connect(db)
+        try:
+            rows = feeds.hub_rows(conn, hub)
+        finally:
+            conn.close()
+        return _feed(kind, rows, f"Agentanbud: upphandlingar {hub.phrase}", hub.path,
+                     f"Öppna offentliga upphandlingar {hub.phrase}, nyaste först.")
+
+    @app.get("/kopare/{slug}/{kind}", include_in_schema=False)
+    def buyer_feed(slug: str, kind: str):
+        if kind not in ("feed.xml", "kalender.ics"):
+            raise HTTPException(404, "no such feed")
+        conn = connect(db)
+        try:
+            found = related.buyer_open(conn, slug)
+            if found is None:
+                raise HTTPException(404, "no such buyer page")
+            name, ids = found
+            rows = feeds.id_rows(conn, ids)
+        finally:
+            conn.close()
+        return _feed(kind, rows, f"Agentanbud: upphandlingar från {name}", f"/kopare/{slug}",
+                     f"Öppna offentliga upphandlingar från {name}, nyaste först.")
 
     # ---- Supplier pages (app/suppliers.py): what a company has won ----
     @app.get("/leverantor", include_in_schema=False)
@@ -911,6 +989,11 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         try:
             page = hubs.hub_page(conn, hub)
             text = hubs.answer(page, mcp_shared.data_freshness(conn)["updated_at"])
+            # Frameworks due again (app/renewals.py). Industries only: the
+            # statistics have no county.
+            if hub.kind == "bransch":
+                page["expected"] = renewals.expected(conn, cpv=hub.match, within_months=12, limit=8)
+                page["expected_total"] = renewals.count(conn, cpv=hub.match, within_months=12)
             siblings = [h for h in (hubs.SECTORS if kind == "bransch" else hubs.COUNTIES) if h != hub]
             return HTMLResponse(render("hub.html", request=request, answer_text=text, siblings=siblings,
                                        jsonld=hubs.page_jsonld(page, text), **page))
@@ -1063,7 +1146,11 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             qs_all = urlencode({**{k: v for k, v in qs_base.items() if k != "status"},
                                 "status": "all"})
 
-            return HTMLResponse(render("browse.html", closed_available=closed_available,
+            # The page's own filters, for its feeds (app/feeds.py).
+            from urllib.parse import urlencode
+            _fq = {k: v for k, v in (("q", q), ("cpv", cpv), ("authority", authority)) if v}
+            feed_qs = ("?" + urlencode(_fq)) if _fq else ""
+            return HTMLResponse(render("browse.html", closed_available=closed_available, feed_qs=feed_qs,
                                        q=q, source=source,
                                        authority=authority, cpv=cpv, status=status, sort=sort,
                                        total=total, tenders=items, page=page, pages=pages,
@@ -2359,6 +2446,7 @@ def get_app():
         usage_cache.for_db(DB_PATH).warm(every_s=usage_cache.KEEP_FRESH_S)
         related.warm(DB_PATH)
         suppliers.warm(DB_PATH)
+        renewals.warm(DB_PATH)
     return _app
 
 

@@ -1,0 +1,10 @@
+{# Feeds without an account (app/feeds.py). `base` is the page path the feeds hang off, `qs` an optional query string. #}
+{% macro feed_head(base, qs='', title='Nya upphandlingar') -%}
+<link rel="alternate" type="application/rss+xml" title="{{ title }}" href="{{ base }}/feed.xml{{ qs }}" />
+{%- endmacro %}
+{% macro feed_links(base, qs='') -%}
+<p class="muted small feed-links">Bevaka utan konto:
+  <a href="{{ base }}/feed.xml{{ qs }}" rel="alternate" type="application/rss+xml">RSS</a> för nya upphandlingar ·
+  <a href="{{ base }}/kalender.ics{{ qs }}" type="text/calendar">kalender</a> med sista anbudsdag (prenumerera i Outlook, Google eller Apple Kalender).
+  Inget konto och inget vi sparar om dig.</p>
+{%- endmacro %}

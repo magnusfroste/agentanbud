@@ -1,5 +1,7 @@
 {% extends "base.html" %}
+{% from "_feeds.html" import feed_head, feed_links %}
 {% block title %}Sök upphandlingar{% endblock %}
+{% block head_extra %}{{ feed_head('', feed_qs, 'Nya upphandlingar' ~ (' för ' ~ q if q else '')) }}{% endblock %}
 
 {% block content %}
 <div class="browse-layout">
@@ -61,6 +63,7 @@
     <div class="browse-header">
       <h1 style="margin: 0;">Upphandlingar</h1>
       <span class="muted">{{ total }} träffar{% if q %} för "{{ q }}"{% endif %}</span>
+      {{ feed_links('', feed_qs) }}
       <div class="browse-actions">
         <button class="btn ghost small" id="export-csv" title="Ladda ner som CSV">CSV</button>
         <button class="btn ghost small" id="export-json" title="Ladda ner som JSON">JSON</button>

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "_expected.html" import expected_list, expected_caveat %}
+{% block title %}Upphandlingar som väntas — ramavtal som löper ut{% endblock %}
+{% block description %}{{ total }} ramavtal i offentlig sektor ska enligt fyraårsregeln upphandlas igen senast inom {{ months }} månader. Se vilka, hos vilka köpare och vem som har avtalet i dag.{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb">
+  <a href="/">Agentanbud</a><span class="sep">/</span>
+  <a href="/upphandlingar">Upphandlingar</a><span class="sep">/</span>
+  <span class="current">Väntas</span>
+</nav>
+<section class="insight-section">
+  <h1>Upphandlingar som väntas</h1>
+  <p class="lead">{{ total }} ramavtal ska upphandlas igen senast inom {{ months }} månader, räknat på att ett ramavtal får löpa högst fyra år. Här är de som går ut först{% if sector %} inom {{ sector.name|lower }}{% endif %}, med köparen och vilka leverantörer som har avtalet i dag. Att ligga i fas med en upphandling innan den annonseras är där anbuden vinns.</p>
+  <p class="small">Per bransch: {% for h in sectors %}{% if sector and h.slug == sector.slug %}<strong>{{ h.name }}</strong>{% else %}<a href="/upphandlingar/vantas?bransch={{ h.slug }}">{{ h.name }}</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}{% if sector %} · <a href="/upphandlingar/vantas">alla</a>{% endif %}</p>
+</section>
+<section class="insight-section">
+  {% if items %}{{ expected_list(items) }}{% else %}<p>Inga ramavtal väntas här de närmaste {{ months }} månaderna.</p>{% endif %}
+  {{ expected_caveat() }}
+</section>
+<section class="insight-section">
+  <h2>För din AI-agent</h2>
+  <p class="muted">Samma lista via MCP på <code>https://www.agentanbud.se/mcp</code>:
+    <code>expected_tenders(cpv="72", months=12)</code>, eller för en köpare
+    <code>expected_tenders(authority="Göteborgs Stad")</code>. <a href="/agenter">Så kopplar du in din agent</a>.</p>
+</section>
+{% endblock %}
