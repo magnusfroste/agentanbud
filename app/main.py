@@ -32,7 +32,7 @@ from .db import (
 )
 from .version import build_info, version_string, started_at
 from . import feeds, hubs, ops, related, renewals, seo, suppliers, usage_cache, visitors
-from .insights import program_name, referrer_domain, REAL_SEARCH
+from .insights import page_type, program_name, referrer_domain, REAL_SEARCH
 from .search import (build_match, match_subquery, like_floor_sql,
                      rank_order_sql)
 
@@ -323,8 +323,9 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
         try:
             if is_bot:
                 # Crawlers are ~97% of pageviews and we only ever show
-                # the total — aggregate instead of one row per hit.
-                bump_daily_counter(conn, "bot_view")
+                # totals — aggregate instead of one row per hit: the total,
+                # and per kind of page (is Google reading the new pages?).
+                bump_daily_counter(conn, "bot_view", also=(f"bot_view:{page_type(path)}",))
             else:
                 meta = {"bot": 0, "v": visitors.visitor_id(conn, address, user_agent)}
                 if ref:
@@ -1542,6 +1543,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 usage_types=usage_types,
                 top_tools=bars([{"tool": t["tool"], "n": t["n"]} for t in s["mcp_tools"]]),
                 referrers=bars([{**r, "n": r["visitors"]} for r in s.get("referrers") or []]),
+                pages=s.get("pages") or [],
                 daily=daily, recent=recent, request=request,
             ))
         finally:

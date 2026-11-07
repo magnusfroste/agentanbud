@@ -200,6 +200,20 @@
 </section>
 {% endif %}
 
+<!-- WHICH PAGES ARE READ -->
+{% if pages %}
+<section class="insight-section">
+  <h2>Vilka sidor läses?</h2>
+  <p class="muted">Besök per sorts sida. "Från sökmotor" är besök som kom via Google, Bing eller liknande; crawlerbesök är sökmotorernas och andra robotars läsning av samma sorts sidor, räknat per dygn utan adress.</p>
+  <table class="sync-table">
+    <thead><tr><th>Sidtyp</th><th>Besökare</th><th>Sidvisningar</th><th>Från sökmotor</th><th>Crawlerbesök</th></tr></thead>
+    <tbody>
+    {% for r in pages %}<tr><td>{{ r.label }}</td><td>{{ r.visitors }}</td><td>{{ r.views }}</td><td>{{ r.from_search }}</td><td>{{ r.crawler_views }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 <!-- WHERE VISITORS COME FROM -->
 {% if referrers %}
 <section class="insight-section">

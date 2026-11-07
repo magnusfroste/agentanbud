@@ -121,6 +121,57 @@ def program_name(user_agent: str) -> Optional[str]:
     return name if re.search(r"[A-Za-z]", name) else None
 
 
+# What kind of page a path is, for "which pages are read?" on /analytics.
+# First match wins; feeds first, since an industry page's feed starts with the
+# industry page's path. Keys are stable: they name the crawler counters in
+# daily_counters ("bot_view:kopare"), labels may change.
+PAGE_TYPES: tuple[tuple[str, str], ...] = (
+    ("flode", "Flöden (RSS, kalender)"),
+    ("start", "Startsidan"),
+    ("upphandling", "Upphandlingar"),
+    ("sok", "Sök"),
+    ("kopare", "Köparsidor"),
+    ("leverantor", "Leverantörssidor"),
+    ("vantas", "Väntas komma"),
+    ("hub", "Bransch- och länssidor"),
+    ("index", "Översikter (köpare, leverantörer, branscher)"),
+    ("blogg", "Blogg"),
+    ("agenter", "För agenter"),
+    ("ovrigt", "Övrigt"),
+)
+PAGE_TYPE_LABELS = dict(PAGE_TYPES)
+SEARCH_ENGINES = ("google.com", "google.se", "bing.com", "duckduckgo.com", "google", "yahoo.com",
+                  "ecosia.org", "search.brave.com", "startpage.com")
+
+
+def page_type(path: Optional[str]) -> str:
+    """The PAGE_TYPES key for a path (query string ignored)."""
+    p = (path or "/").split("?")[0]
+    if p.endswith("/feed.xml") or p.endswith("/kalender.ics") or p in ("/feed.xml", "/kalender.ics"):
+        return "flode"
+    if p in ("/", ""):
+        return "start"
+    if p.startswith("/tenders/"):
+        return "upphandling"
+    if p.startswith("/browse"):
+        return "sok"
+    if p.startswith("/kopare/"):
+        return "kopare"
+    if p.startswith("/leverantor/"):
+        return "leverantor"
+    if p.startswith("/upphandlingar/vantas"):
+        return "vantas"
+    if p.startswith(("/upphandlingar/bransch/", "/upphandlingar/lan/")):
+        return "hub"
+    if p in ("/kopare", "/leverantor", "/upphandlingar"):
+        return "index"
+    if p.startswith("/blogg"):
+        return "blogg"
+    if p.startswith("/agenter"):
+        return "agenter"
+    return "ovrigt"
+
+
 # Short links and app referrers that stand for a site: a click from the
 # LinkedIn app arrives as android-app://com.linkedin.android/, one from a
 # post's short link as lnkd.in.
@@ -454,6 +505,31 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         + _and("action = 'view' AND json_extract(meta, '$.ref') IS NOT NULL")
         + " GROUP BY d ORDER BY u DESC, n DESC LIMIT ?", args + [top]).fetchall()]
 
+    # --- Which pages are read: human views per page type, how many came from
+    # a search engine, and the crawlers' views of each type (counted per day
+    # in daily_counters, without the path). Aggregate only.
+    conn.create_function("page_type", 1, page_type, deterministic=True)
+    engines = ",".join("?" * len(SEARCH_ENGINES))
+    human_types = {r[0]: r for r in conn.execute(
+        "SELECT page_type(query) AS t, COUNT(*), COUNT(DISTINCT COALESCE(json_extract(meta, '$.v'), id)), "
+        f"SUM(json_extract(meta, '$.ref') IN ({engines})) FROM usage_log "
+        + _and("action = 'view' AND json_extract(meta, '$.bot') = 0") + " GROUP BY t",
+        list(SEARCH_ENGINES) + args).fetchall()}
+    crawl_where, crawl_args = "WHERE kind LIKE 'bot_view:%'", []
+    if days:
+        crawl_where += " AND day >= DATE('now', ?)"
+        crawl_args = [f"-{days} days"]
+    crawled = {r[0][len("bot_view:"):]: r[1] for r in conn.execute(
+        f"SELECT kind, SUM(n) FROM daily_counters {crawl_where} GROUP BY kind", crawl_args).fetchall()}
+    pages = []
+    for key, label in PAGE_TYPES:
+        h = human_types.get(key)
+        row = {"type": key, "label": label, "views": h[1] if h else 0, "visitors": h[2] if h else 0,
+               "from_search": (h[3] or 0) if h else 0, "crawler_views": crawled.get(key, 0)}
+        if row["views"] or row["crawler_views"]:
+            pages.append(row)
+    pages.sort(key=lambda r: (-r["views"], -r["crawler_views"]))
+
     # --- 30-day series: human pageviews only, so growth means real interest
     day_rows = conn.execute(
         "SELECT DATE(created_at) AS day, "
@@ -502,6 +578,7 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         "top_terms": term_rows,
         "visitors": visitors,
         "referrers": referrers,
+        "pages": pages,
         "automated_calls": automated_calls,
         "conduct": conduct_kinds,
         "unmet_demand": unmet,
@@ -548,6 +625,11 @@ def format_usage_markdown(s: dict) -> str:
     if s["unmet_demand"]:
         out.append("## Sökningar utan träff (luckor i datan)")
         out += [f"- {x['term']}: {x['n']}" for x in s["unmet_demand"][:10]]
+        out.append("")
+    if s.get("pages"):
+        out.append("## Vilka sidor läses (besökare / sidvisningar / från sökmotor / crawlerbesök)")
+        out += [f"- {r['label']}: {r['visitors']} / {r['views']} / {r['from_search']} / {r['crawler_views']}"
+                for r in s["pages"]]
         out.append("")
     if s.get("referrers"):
         out.append("## Varifrån besökarna kommer (länkande sajt)")

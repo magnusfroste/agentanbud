@@ -221,17 +221,19 @@ def log_usage(
     conn.commit()
 
 
-def bump_daily_counter(conn: sqlite3.Connection, kind: str, day: Optional[str] = None) -> None:
-    """Increment an aggregated daily counter (one row per day+kind).
+def bump_daily_counter(conn: sqlite3.Connection, kind: str, day: Optional[str] = None,
+                       also: tuple[str, ...] = ()) -> None:
+    """Increment an aggregated daily counter (one row per day+kind), and the
+    counters in `also`, in one commit.
 
     Used for high-volume, low-information events — crawler pageviews — so a
     bot storm costs one UPDATE per day instead of one INSERT per request.
     """
     d = day or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    conn.execute(
+    conn.executemany(
         "INSERT INTO daily_counters (day, kind, n) VALUES (?, ?, 1) "
         "ON CONFLICT(day, kind) DO UPDATE SET n = n + 1",
-        (d, kind),
+        [(d, k) for k in (kind, *also)],
     )
     conn.commit()
 
