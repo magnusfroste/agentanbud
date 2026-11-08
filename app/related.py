@@ -80,6 +80,22 @@ PAGE_MIN_NOTICES = 5   # a buyer gets a page at five notices or five awards
 _SLUG_MAP = str.maketrans({"å": "a", "ä": "a", "ö": "o", "é": "e", "ü": "u", "æ": "ae", "ø": "o"})
 
 
+# Words that say nothing about what is bought: a framework and a notice that
+# share only these are not the same purchase.
+_GENERIC_STEMS = {"ramavt", "upphan", "avtal", "tjänst", "konsul", "inköp", "leverans"[:6], "förnya",
+                  "dynami", "anskaf", "kommun", "region", "försör", "förfrå", "direkt", "tilldel",
+                  "område", "avrop", "system", "materi", "produk", "utföra", "arbete", "samt"}
+
+
+def title_stems(title: Optional[str]) -> frozenset:
+    """The first six letters of each word of five letters or more, generic
+    procurement words left out: "Eventteknik till Vetlandafesten" and
+    "Vetlandafesten eventteknik" share {"eventt", "vetlan"}."""
+    import re
+    words = re.findall(r"[a-zåäöéü]{5,}", (title or "").lower())
+    return frozenset(w[:6] for w in words) - _GENERIC_STEMS
+
+
 def slugify(name: str) -> str:
     """"Västra Götalandsregionen" → "vastra-gotalandsregionen"."""
     import re
@@ -112,18 +128,17 @@ class _Snapshot:
                 b = self.buyers.setdefault(key, {"names": Counter(), "deadlines": [], "open_ids": [],
                                                  "notices": 0, "divisions": Counter(),
                                                  "wins": Counter(), "contracts": 0,
-                                                 "nat_wins": Counter(), "nat": None, "latest": {}})
+                                                 "nat_wins": Counter(), "nat": None, "history": {}})
                 b["names"][seo._buyer(r["authority"])] += 1
                 b["divisions"].update({c[:2] for c in codes})
                 if r["source_system"] != "ted_awards":
                     b["notices"] += 1
-                    # The latest notice per CPV division and group (two and three
-                    # digits): app/renewals.py uses it to tell a framework already
-                    # put out to tender again.
-                    pub = (r["published_at"] or "")[:10]
-                    for g in {c[:n] for c in codes if len(c) >= 3 for n in (2, 3)}:
-                        if pub > b["latest"].get(g, ""):
-                            b["latest"][g] = pub
+                    # Each notice per CPV group (three digits), with its date and
+                    # the stems of its title: app/renewals.py uses them to tell a
+                    # framework that has been put out to tender again.
+                    entry = ((r["published_at"] or "")[:10], title_stems(r["title"]), r["id"])
+                    for g in {c[:3] for c in codes if len(c) >= 3}:
+                        b["history"].setdefault(g, []).append(entry)
                     if r["deadline"]:
                         b["deadlines"].append(r["deadline"])
             if r["source_system"] == "ted_awards" or not r["deadline"] or r["deadline"] <= now:
