@@ -73,7 +73,8 @@ add("A", "IT-konsulter", soon(30), "72000000",
 add("B", "Markentreprenad", soon(200), "45000000")
 add("C", "Snöröjning", soon(-20), "90620000")                       # due already passed: left out
 add("D", "Arkitekter", soon(60), "71000000")
-add("D2", "Arkitekter igen", ago(1), "71240000")                    # renewed in the statistics: D left out
+add("D2", "Arkitekter igen", ago(1), "71000000")                    # renewed in the statistics: D left out
+add("D3", "Laboratorieanalyser", ago(1), "72000000", kind="Kontrakt")  # same group as A, unrelated: A stays
 add("E", "Städ", soon(40), "90910000", kind="Kontrakt")             # not a framework
 add("F", "Personbilar", soon(150), "34100000")                      # open right now in our notices
 add("G", "Livsmedel", soon(90), "15000000")                         # renewed among our notices (closed)
@@ -97,7 +98,8 @@ def notice(title, cpv, deadline_days, published):
 
 
 notice("Personbilar 2026", "34110000", 20, ago(0, 10))
-notice("Livsmedel 2025", "15800000", -100, ago(1))
+notice("Livsmedel 2025", "15000000", -100, ago(1))
+notice("Takbyte skola", "45000000", 25, ago(0, 3))     # same group as B, unrelated: B stays expected
 for i in range(4):
     notice(f"Övrigt {i}", "79000000", 30, ago(0, 5))
 conn.commit()
@@ -120,6 +122,11 @@ check("två till fyra år efter den förra", a["published"] == soon(30)
 check("vem som har avtalet", [s["name"] for s in a["incumbents"]] == ["Atea Sverige AB", "CGI Sverige AB", "Sweco Sverige AB"]
       and a["suppliers"] == 4, str(a["incumbents"]))
 check("räknat", renewals.count(conn, within_months=12) == 4 and renewals.count(conn, within_months=24) == 5)
+b_item = next(x for x in items if x["id"] == "B")
+check("en orelaterad öppen annons i samma CPV-grupp gör den varken 'ute nu' eller omupphandlad",
+      b_item["open_id"] is None, str(b_item))
+check("en orelaterad senare upphandling i statistiken räknas inte som omupphandling",
+      "A" in ids and "H" in ids)
 check("CPV-filter", [x["id"] for x in renewals.expected(conn, cpv="72", within_months=12)] == ["A", "H"])
 check("köpare skriven som vi skriver den",
       [x["id"] for x in renewals.expected(conn, buyer="Göteborgs Stad", within_months=24)] == ["F", "A", "B", "I"])

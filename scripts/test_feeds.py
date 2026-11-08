@@ -47,17 +47,20 @@ n = [0]
 
 
 def add(title, authority="Göteborgs Stad", days=10, cpv="45331000", region="Västra Götalands län",
-        published="2026-10-01", source="mercell"):
+        published="2026-10-01", source="mercell", deadline=None):
     n[0] += 1
     upsert_tender(conn, {"source_system": source, "source_id": str(n[0]), "tender_url": "https://example.invalid",
                          "title": title, "authority": authority, "cpv_codes": [cpv],
-                         "deadline": iso(days) if days is not None else None, "published_at": published,
+                         "deadline": deadline or (iso(days) if days is not None else None), "published_at": published,
                          "description": "Byte av aggregat, <b>fet</b> & mer", "value": None, "procedure": None,
                          "contract_type": None, "document_type": None, "region": region, "raw_json": "{}"})
 
 
 add("Ventilation skola, etapp 1", published="2026-10-05")
-add("Ventilation sporthall", published="2026-10-09", days=20)
+# Computed once: the check below compares it to the second, and computing it
+# again there failed whenever the clock passed a second in between.
+SPORTHALL = iso(20)
+add("Ventilation sporthall", published="2026-10-09", deadline=SPORTHALL)
 add("Ventilation stängd", days=-3)
 add("Ventilation utan deadline", days=None, published="2026-10-07")
 add("Tilldelning ventilation", source="ted_awards")
@@ -92,7 +95,7 @@ check("text/calendar, CRLF", r.headers["content-type"].startswith("text/calendar
       and body.startswith("BEGIN:VCALENDAR\r\n") and body.endswith("END:VCALENDAR\r\n"))
 check("bara upphandlingar med sista dag", body.count("BEGIN:VEVENT") == 2, str(body.count("BEGIN:VEVENT")))
 check("händelsen slutar vid sista anbudsdag, påminnelse tre dagar före",
-      "DTEND:" + iso(20).replace("-", "").replace(":", "") in body and "TRIGGER:-P3D" in body)
+      "DTEND:" + SPORTHALL.replace("-", "").replace(":", "") in body and "TRIGGER:-P3D" in body)
 check("kommatecken escapade, inga rader över 75 byte",
       "Ventilation skola\\, etapp 1" in body and all(len(x.encode()) <= 75 for x in body.split("\r\n")))
 check("stabila UID:n", "UID:tender-1@agentanbud.se" in body)

@@ -17,10 +17,16 @@ question that sorts them is which must be renewed soonest. Left out:
 - frameworks whose window has passed (it was renewed, extended or dropped;
   we cannot tell which);
 - those the same buyer has demonstrably put out again: a later procurement
-  under the framework's own CPV prefix, in the contracts or among our notices.
-  The prefix is the framework's main code without its trailing zeros, at
-  most three digits: 34100000 (motor vehicles) is "341", so a new notice for
-  passenger cars (34110000) is its renewal; 15000000 (food) is "15".
+  in the same CPV group (the first three digits of the main code) whose
+  title shares a word with the framework's (related.title_stems), in the
+  contracts or among our notices.
+The CPV group alone is not enough. A framework coded at the top of a
+division (71000000) matched everything in it, and in production (8 Nov
+2026) all 150 frameworks on the page were marked "out now", linked to
+unrelated tenders — laboratory analyses for "technical consultants for
+early stages". Requiring a shared word in the title costs some renewals
+that are worded differently, which then show as still expected: the
+safer mistake for an estimate.
 Marked "ute nu" when such a tender is open right now, with a link.
 
 It is an estimate and every surface says so: the agreement may have been
@@ -95,6 +101,7 @@ def _frameworks(conn) -> list[dict]:
         rows = []
     # Every procurement per buyer, frameworks or not: a later one under a
     # framework's prefix is its renewal.
+    from app.related import title_stems
     by_buyer: dict = {}
     out = []
     for pid, buyer, title, cpv, published, n, framework in rows:
@@ -102,14 +109,15 @@ def _frameworks(conn) -> list[dict]:
         if not d or not cpv:
             continue
         match = buyer_match_key(seo._buyer(buyer))
-        by_buyer.setdefault(match, []).append((cpv, d))
+        stems = title_stems(title)
+        by_buyer.setdefault(match, []).append((cpv, d, stems))
         if framework:
             out.append({"id": pid, "buyer_name": buyer, "buyer": pretty_company(buyer), "match": match,
                         "title": title or "(utan titel)", "cpv": cpv, "group": _prefix(cpv), "published": d,
-                        "suppliers": n})
+                        "suppliers": n, "stems": stems})
     for f in out:
         f["redone"] = any(c.startswith(f["group"]) and (d - f["published"]).days >= REDONE_AFTER_DAYS
-                          for c, d in by_buyer[f["match"]])
+                          and f["stems"] & st for c, d, st in by_buyer[f["match"]])
     with _LOCK:
         _CACHE[path] = (version, out)
     return out
@@ -139,9 +147,8 @@ def reset() -> None:
 
 
 def _prefix(cpv: str) -> str:
-    """A framework's CPV prefix for matching its renewal (see the module docstring)."""
-    p = cpv.rstrip("0")[:3]
-    return p if len(p) >= 2 else cpv[:2]
+    """A framework's CPV group for matching its renewal: the first three digits."""
+    return cpv[:3]
 
 
 def _incumbents(conn, pid: str, top: int = 3) -> list[dict]:
@@ -181,17 +188,28 @@ def _select(conn, buyer: str, cpv, within_months: int, today: Optional[date]) ->
         item = {**f, "earliest": earliest, "latest": latest, "open_id": None, "open_title": None,
                 "buyer_slug": b.get("slug") if b else None}
         renewed_after = (f["published"] + timedelta(days=REDONE_AFTER_DAYS)).isoformat()
-        if b and b["latest"].get(f["group"], "") >= renewed_after:
-            # Our notices hold a later one in the group: open now, show it;
-            # closed, the framework has been renewed already.
-            open_now = [i for i in b["open_ids"] if snap.items[i][2] > now_iso
-                        and any(c.startswith(f["group"]) for c in snap.items[i][4])]
+        later = [(pub, i) for pub, st, i in (b["history"].get(f["group"], []) if b else [])
+                 if pub >= renewed_after and f["stems"] & st]
+        if later:
+            # Our notices hold its renewal: open now, show it; closed, it has
+            # been renewed already.
+            open_now = sorted((pub, i) for pub, i in later if i in snap.items and snap.items[i][2] > now_iso)
             if not open_now:
                 continue
-            item["open_id"], item["open_title"] = open_now[0], snap.items[open_now[0]][0]
+            i = open_now[-1][1]
+            item["open_id"], item["open_title"] = i, snap.items[i][0]
         picked.append(item)
     picked.sort(key=lambda x: (x["open_id"] is None, x["latest"], x["buyer"]))
-    return picked
+    # One open tender is the renewal of one framework, the first listed.
+    seen, out = set(), []
+    for x in picked:
+        if x["open_id"] is not None:
+            if x["open_id"] in seen:
+                x = {**x, "open_id": None, "open_title": None}
+            seen.add(x["open_id"])
+        out.append(x)
+    out.sort(key=lambda x: (x["open_id"] is None, x["latest"], x["buyer"]))
+    return out
 
 
 def expected(conn, *, buyer: str = "", cpv=(), within_months: int = 24,
