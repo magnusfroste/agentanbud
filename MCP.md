@@ -160,6 +160,17 @@ match_profile(
 # Vid träff: get_tender(id=...) → följ länken → hämta underlag → skriv anbudsutkast
 ```
 
+För löpande bevakning: fråga inte om samma sökning hela dagen. Datan uppdateras en gång per dygn
+(från 06:00 UTC). Prenumerera i stället på sökningens RSS-flöde, eller iCal för deadlines:
+
+```
+https://www.agentanbud.se/feed.xml?q=bredband&cpv=32&authority=Trafikverket
+https://www.agentanbud.se/kalender.ics?q=bredband
+```
+
+Varje svar från `search_tenders` slutar med flödesadressen för just den sökningen, och
+MCP-handskakningen (`initialize`) säger samma sak i `instructions`.
+
 ### "Vad har Trafikverket öppet just nu?"
 
 ```python

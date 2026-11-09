@@ -228,7 +228,9 @@ def _tool_objects() -> list[types.Tool]:
                 "source='ted' (EU-thresholds only), open_only=false (include closed). "
                 "Returns title, buyer, deadline with days-until, value, CPV, and a deep link. "
                 "Data is refreshed once a day (sync starts 06:00 UTC); repeating a search before "
-                "then returns the same results, so for monitoring ask once a day, after 07:00 UTC."
+                "then returns the same results. To monitor a search, subscribe to its RSS feed instead "
+                "of polling: https://www.agentanbud.se/feed.xml?q=<query>&cpv=<prefix>&authority=<buyer> "
+                "(each result also ends with the feed URL for that exact search)."
             ),
             inputSchema={
                 "type": "object",
@@ -804,11 +806,11 @@ async def _search_tenders(conn, args: dict) -> list[types.Content]:
     key = synced + "|" + SearchCache.key(args)
     now = time.monotonic()
     hit = SEARCH_CACHE.get(key, now)
-    if hit is not None:
-        return _with_freshness(conn, hit)
-    result = await _search_tenders_uncached(conn, args)
-    SEARCH_CACHE.put(key, result, now)
-    return _with_freshness(conn, result)
+    if hit is None:
+        hit = await _search_tenders_uncached(conn, args)
+        SEARCH_CACHE.put(key, hit, now)
+    feed = types.TextContent(type="text", text=mcp_shared.feed_note(args))
+    return _with_freshness(conn, [*hit, feed])
 
 
 async def _search_tenders_uncached(conn, args: dict) -> list[types.Content]:
@@ -1641,7 +1643,10 @@ async def _get_usage_stats(conn, args: dict) -> list[types.Content]:
 # only the way handlers attach to Server changed between major versions.
 
 if MCP_V1:
-    server = Server("agentanbud")
+    try:
+        server = Server("agentanbud", instructions=mcp_shared.MONITORING_HINT)
+    except TypeError:  # mcp releases before server instructions
+        server = Server("agentanbud")
 
     @server.list_tools()
     async def _list_tools_v1() -> list[types.Tool]:
@@ -1661,6 +1666,7 @@ else:
 
     server = Server(
         "agentanbud",
+        instructions=mcp_shared.MONITORING_HINT,
         on_list_tools=_on_list_tools,
         on_call_tool=_on_call_tool,
     )

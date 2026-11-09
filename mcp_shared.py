@@ -275,6 +275,32 @@ def data_freshness(conn) -> dict:
             "next_update": nxt.strftime("%Y-%m-%dT%H:%M:%SZ") if nxt else None}
 
 
+FEED_BASE = "https://www.agentanbud.se"
+
+MONITORING_HINT = (
+    "Monitoring tenders? Do not poll search_tenders. Every search has an RSS feed and an "
+    "iCal calendar with the same filters: " + FEED_BASE + "/feed.xml?q=<query>&cpv=<prefix>"
+    "&authority=<buyer> (or /kalender.ics?...). Subscribe once and read it after the daily "
+    "sync (06:00 UTC); the data does not change more often than that.")
+
+
+def feed_url(query: str = "", cpv: str = "", authority: str = "", kind: str = "feed.xml") -> str:
+    """The RSS (or iCal) URL that answers the same search as search_tenders,
+    so an agent that wants to watch a search can subscribe instead of polling."""
+    from urllib.parse import urlencode
+    params = {k: v for k, v in (("q", query), ("cpv", cpv), ("authority", authority)) if v}
+    return f"{FEED_BASE}/{kind}" + ("?" + urlencode(params) if params else "")
+
+
+def feed_note(args: dict) -> str:
+    """One line appended to search_tenders: where to subscribe to this search."""
+    q = (args.get("query") or "").strip()
+    cpv = "".join(ch for ch in str(args.get("cpv") or "") if ch.isdigit())
+    authority = (args.get("authority") or "").strip()
+    return (f"_Bevaka den här sökningen utan att fråga igen: RSS {feed_url(q, cpv, authority)} "
+            f"· kalender {feed_url(q, cpv, authority, 'kalender.ics')}_")
+
+
 def freshness_note(conn) -> str:
     """One line for the end of an MCP answer: when the data changes next."""
     f = data_freshness(conn)

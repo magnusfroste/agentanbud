@@ -216,7 +216,8 @@ class Paused(Exception):
         return (f"Pausad: {self.calls_last_hour} anrop den senaste timmen är mer än datan kan "
                 f"motivera — den ändras en gång per dygn (nästa gång {_when(self.next_update)}). "
                 f"Försök igen om {self.retry_after} sekunder, och ställ sedan varje fråga högst "
-                f"en gång per dygn.")
+                f"en gång per dygn. För bevakning: prenumerera på RSS i stället, "
+                f"https://www.agentanbud.se/feed.xml?q=<sökord> (samma filter som search_tenders).")
 
 
 def check_pause(e: Optional[Entry], next_update: Optional[str], now: Optional[float] = None) -> None:
