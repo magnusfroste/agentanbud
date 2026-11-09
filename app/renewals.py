@@ -113,7 +113,7 @@ def _frameworks(conn) -> list[dict]:
         if not d or not cpv:
             continue
         match = buyer_match_key(seo._buyer(buyer))
-        stems = title_stems(title)
+        stems = _purchase_stems(title, buyer)
         by_buyer.setdefault(match, []).append((cpv, d, stems))
         if framework:
             out.append({"id": pid, "buyer_name": buyer, "buyer": pretty_company(buyer), "match": match,
@@ -274,11 +274,20 @@ def _ted_contracts(conn) -> list[dict]:
         out.append({"id": f"ted:{tid}", "tender_id": tid, "buyer_name": authority,
                     "buyer": seo._buyer(authority) or authority, "match": match,
                     "title": title or "(utan titel)", "cpv": codes[0], "group": codes[0][:3],
-                    "published": pub, "stems": title_stems(title), "winners": names,
+                    "published": pub, "stems": _purchase_stems(title, authority), "winners": names,
                     "suppliers": len(names), "end": end, "final": final, "renewals": renewals})
     with _LOCK:
         _TED_CACHE[path] = (version, out, time.monotonic())
     return out
+
+
+def _purchase_stems(title: Optional[str], buyer: Optional[str]) -> frozenset:
+    """The title's stems without the buyer's own name. Buyers put their town
+    in their titles ("Markprojektörer Helsingborg 2022"), and in production
+    (9 Nov 2026) that one word made an inspection of bridges in Helsingborg
+    the renewal of a framework for ground designers."""
+    from app.related import title_stems
+    return title_stems(title) - title_stems(seo._buyer(buyer) if buyer else "")
 
 
 def _incumbents(conn, pid: str, top: int = 3) -> list[dict]:
