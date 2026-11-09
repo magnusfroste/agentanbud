@@ -243,7 +243,7 @@ def _tool_list(include_write: bool = False) -> list[dict]:
     tools = [
         {
             "name": "search_tenders",
-            "description": "Search Swedish public procurement tenders. Examples: query='IT-konsult stockholm', cpv='72' (IT), cpv='45' (construction), source='ted' (EU-thresholds only), open_only=false (include closed). Returns title, buyer, deadline with days-until, value, CPV, and a deep link. Data is refreshed once a day (sync starts 06:00 UTC); repeating a search before then returns the same results, so for monitoring ask once a day, after 07:00 UTC.",
+            "description": "Search Swedish public procurement tenders. Examples: query='IT-konsult stockholm', cpv='72' (IT), cpv='45' (construction), source='ted' (EU-thresholds only), open_only=false (include closed). Returns title, buyer, deadline with days-until, value, CPV, and a deep link. Data is refreshed once a day (sync starts 06:00 UTC); repeating a search before then returns the same results. To monitor a search, subscribe to its RSS feed instead of polling: https://www.agentanbud.se/feed.xml?q=<query>&cpv=<prefix>&authority=<buyer> (each result also ends with the feed URL for that exact search).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -531,7 +531,7 @@ async def mcp_get(request: Request):
         "endpoint": "/mcp",
         "mcp_version": "2024-11-05",
         "tools_count": len(_tool_list()),
-        "instructions": "POST JSON-RPC 2.0 to /mcp. Method 'tools/list' lists tools. Method 'tools/call' invokes one.",
+        "instructions": "POST JSON-RPC 2.0 to /mcp. Method 'tools/list' lists tools. Method 'tools/call' invokes one. " + mcp_shared.MONITORING_HINT,
         "client_config": {
             "mcpServers": {
                 "agentanbud": {
@@ -592,7 +592,8 @@ async def mcp_post(request: Request):
             result = {
                 "protocolVersion": "2024-11-05",
                 "serverInfo": {"name": "agentanbud", "version": version_string()},
-                "capabilities": {"tools": {"listChanged": False}}
+                "capabilities": {"tools": {"listChanged": False}},
+                "instructions": mcp_shared.MONITORING_HINT,
             }
         elif method == "notifications/initialized":
             # Client→server notification, no response needed (but we still ack with 204)
