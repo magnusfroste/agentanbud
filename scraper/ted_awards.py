@@ -61,7 +61,29 @@ TED_AWARD_FIELDS = [
     "cvd-contract-type-lot",
     "place-of-performance-country-proc",
     "title-proc",
+    # How long the contract runs (eForms), for app/renewals.py: an end date,
+    # or a start (or signing) date and a duration, and how often and how long
+    # it may be renewed ("Förlängning är 12 månader"). About two in three
+    # Swedish award notices carry an end date or a duration (August 2026).
+    "contract-duration-start-date-lot",
+    "contract-duration-end-date-lot",
+    "duration-period-value-lot",
+    "duration-period-unit-lot",
+    "contract-conclusion-date",
+    "renewal-maximum-lot",
+    "renewal-description-lot",
+    # Whether it is a framework agreement, and works, services or supplies:
+    # a building contract that ends is not bought again; a framework is.
+    "framework-agreement-lot",
+    "contract-nature-main-proc",
 ]
+
+# Award notices in eForms, the only ones notice-type finds, go back to the
+# autumn of 2023 (256 Swedish ones that year, 8,666 in 2024). Each run also
+# fetches one window further back than the lookback, until this date, so
+# the contracts' end dates go back as far as TED has them.
+BACKFILL_FLOOR = "20230901"
+BACKFILL_WINDOW_DAYS = 90
 
 
 def _user_agent() -> str:
@@ -223,9 +245,15 @@ def walk_notices(
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
     limit: int = DEFAULT_LIMIT,
     max_pages: int = MAX_PAGES,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
 ) -> Iterator[dict]:
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).strftime("%Y%m%d")
+    """Award notices published from `since` (YYYYMMDD; default: lookback_days
+    ago) up to and including `until`, if given."""
+    cutoff = since or (datetime.now(timezone.utc) - timedelta(days=lookback_days)).strftime("%Y%m%d")
     query = f"buyer-country = SWE AND publication-date >= {cutoff} AND {_build_type_query()}"
+    if until:
+        query += f" AND publication-date <= {until}"
 
     for page in range(1, max_pages + 1):
         try:
@@ -246,21 +274,51 @@ def walk_notices(
         time.sleep(0.3)
 
 
+def _store(conn, records) -> int:
+    written = 0
+    for rec in records:
+        try:
+            upsert_tender(conn, _map_record(rec))
+            written += 1
+            conn.commit()
+        except Exception as exc:
+            LOG.warning("ted_awards record %r failed: %s", rec.get("publication-number"), exc)
+    return written
+
+
+def _backfill(conn, lookback_days: int) -> str:
+    """One window further back than the oldest fetched, until BACKFILL_FLOOR.
+    The window's start is stored once it has been fetched, so a failed run
+    tries the same window again."""
+    row = conn.execute("SELECT value FROM source_state WHERE source = 'ted_awards_backfill'").fetchone()
+    oldest = row[0] if row else (datetime.now(timezone.utc) - timedelta(days=lookback_days)).strftime("%Y%m%d")
+    if oldest <= BACKFILL_FLOOR:
+        return "historik klar"
+    end = datetime.strptime(oldest, "%Y%m%d") - timedelta(days=1)
+    start = max(end - timedelta(days=BACKFILL_WINDOW_DAYS - 1), datetime.strptime(BACKFILL_FLOOR, "%Y%m%d"))
+    since, until = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
+    n = _store(conn, walk_notices(since=since, until=until))
+    conn.execute("INSERT INTO source_state (source, value, updated_at) VALUES ('ted_awards_backfill', ?, "
+                 "CURRENT_TIMESTAMP) ON CONFLICT(source) DO UPDATE SET value = excluded.value, "
+                 "updated_at = excluded.updated_at", (since,))
+    conn.commit()
+    return f"historik {since}–{until}: {n}"
+
+
 def run(db_path: str, lookback_days: int = DEFAULT_LOOKBACK_DAYS) -> int:
     init_db(db_path)
     conn = connect(db_path)
     written = 0
     try:
-        for rec in walk_notices(lookback_days=lookback_days):
-            try:
-                upsert_tender(conn, _map_record(rec))
-                written += 1
-                conn.commit()
-            except Exception as exc:
-                LOG.warning("ted_awards record %r failed: %s", rec.get("publication-number"), exc)
+        written = _store(conn, walk_notices(lookback_days=lookback_days))
         conn.commit()
+        try:
+            history = _backfill(conn, lookback_days)
+        except Exception as exc:          # the history can wait a day; the latest cannot
+            LOG.warning("ted_awards backfill failed: %s", exc)
+            history = f"historik misslyckades: {exc}"
         log_sync(conn, source="ted_awards", status="ok", count=written,
-                 message=f"lookback {lookback_days}d, types {CAN_NOTICE_TYPES}")
+                 message=f"lookback {lookback_days}d, types {CAN_NOTICE_TYPES}; {history}")
         LOG.info("ted_awards: wrote/updated %d award notices (lookback %dd)", written, lookback_days)
         return written
     except Exception as exc:

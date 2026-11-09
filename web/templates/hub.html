@@ -49,7 +49,7 @@
 {% if expected %}
 <section class="insight-section">
   <h2>Väntas upphandlas {{ hub.phrase }}</h2>
-  <p>{{ expected_total }} ramavtal {{ hub.phrase }} ska upphandlas igen senast inom ett år. De som går ut först:</p>
+  <p>{{ expected_total }} avtal och ramavtal {{ hub.phrase }} löper ut och ska upphandlas igen inom ett år. De som går ut först:</p>
   {{ expected_list(expected) }}
   <p><a href="/upphandlingar/vantas?bransch={{ hub.slug }}">Alla som väntas {{ hub.phrase }} →</a></p>
   {{ expected_caveat() }}

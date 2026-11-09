@@ -134,8 +134,9 @@ check("köpare skriven som vi skriver den",
 print("\nSidorna")
 c = TestClient(APP, base_url="https://testserver")
 h = c.get("/upphandlingar/vantas").text
-check("sidan: antal, lista, förbehåll och källa", "4 ramavtal ska upphandlas igen senast inom 12 månader" in h
-      and "IT-konsulter" in h and "Uppskattning:" in h and "Uppgifter: Upphandlingsmyndigheten | Bearbetning: Agentanbud" in h)
+check("sidan: antal, lista, förbehåll och källa", "4 avtal och ramavtal löper ut och ska upphandlas igen inom 12 månader" in h
+      and "IT-konsulter" in h and "uppskattning)" in h and "högst fyra år" in h
+      and "Uppgifter: TED (EU) och Upphandlingsmyndigheten | Bearbetning: Agentanbud" in h)
 check("ute nu-raden länkar annonsen", "<strong>Ute nu:</strong>" in h and f'href="/tenders/{f["open_id"]}"' in h)
 check("per bransch", "IT-drift" in c.get("/upphandlingar/vantas", params={"bransch": "it"}).text
       and "Markentreprenad" not in c.get("/upphandlingar/vantas", params={"bransch": "it"}).text)
@@ -150,7 +151,7 @@ print("\nMCP: expected_tenders")
 mcp_server.DB_PATH = DB
 t = asyncio.run(mcp_server._expected_tenders(conn, {"cpv": "72"}))[0].text
 check("listan med vem som har avtalet och förbehållet", "**IT-konsulter** — Göteborgs kommun" in t
-      and "Har avtalet: Atea Sverige AB, CGI Sverige AB, Sweco Sverige AB och 1 till." in t and "Uppskattning:" in t, t)
+      and "Har avtalet: Atea Sverige AB, CGI Sverige AB, Sweco Sverige AB och 1 till." in t and "(uppskattning;" in t, t)
 check("tomt svar förklarar", "Inga ramavtal" in asyncio.run(mcp_server._expected_tenders(conn, {"cpv": "99"}))[0].text)
 
 if failures:

@@ -550,7 +550,7 @@ def _tool_objects() -> list[types.Tool]:
         types.Tool(
             name="expected_tenders",
             description=(
-                "Tenders to EXPECT: framework agreements (ramavtal) in Swedish public procurement that must be put out again soon. A framework may as a rule run at most four years, so one published in 2023 is due by 2027. From Upphandlingsmyndigheten's statistics of frameworks awarded 2021-2024, leaving out those the buyer has already tendered again; marks the ones out right now. Returns the buyer, the earlier procurement, when it is due at the latest and who holds the agreement today. An estimate: use it to get ahead of a tender before it is advertised. Filter by authority and/or CPV prefix. Examples: cpv='72', months=6; authority='Göteborgs Stad'."
+                "Tenders to EXPECT: framework agreements (ramavtal) in Swedish public procurement that must be put out again soon. A framework may as a rule run at most four years, so one published in 2023 is due by 2027. Uses the contract end date and renewals stated in TED award notices where there are any, otherwise estimates from Upphandlingsmyndigheten's statistics of frameworks awarded 2021-2024; leaves out those the buyer has already tendered again; marks the ones out right now. Returns the buyer, the earlier procurement, when it is due at the latest and who holds the agreement today. An estimate: use it to get ahead of a tender before it is advertised. Filter by authority and/or CPV prefix. Examples: cpv='72', months=6; authority='Göteborgs Stad'."
             ),
             inputSchema={
                 "type": "object",
@@ -1155,7 +1155,8 @@ async def _expected_tenders(conn, args: dict) -> list[types.Content]:
             "enligt vår data. Prova ett längre months, en kortare CPV-prefix eller köparens namn som "
             "Upphandlingsmyndigheten skriver det."))]
     lines = [f"**Väntas upphandlas{' — ' + scope if scope else ''}**",
-             f"{total} ramavtal ska upphandlas igen senast inom {months} månader; de {len(items)} som går ut först:", ""]
+             f"{total} avtal och ramavtal löper ut och ska upphandlas igen inom {months} månader; "
+             f"de {len(items)} som går ut först:", ""]
     for x in items:
         held = ", ".join(s["name"] for s in x["incumbents"])
         more = x["suppliers"] - len(x["incumbents"])
@@ -1163,12 +1164,18 @@ async def _expected_tenders(conn, args: dict) -> list[types.Content]:
         if x["open_id"]:
             lines.append(f"- **Ute nu:** {x['open_title']} — {x['buyer']} ({seo.SITE_URL}/tenders/{x['open_id']}). "
                          f"Förra: {x['title']}, {x['published_text']}.")
+        elif x["exact"]:
+            more = (f", med förlängningar till {x['final_text']}" if x["final_text"] else
+                    f", kan förlängas {x['renewals']} gång{'er' if x['renewals'] != 1 else ''}" if x["renewals"] else "")
+            lines.append(f"- **{x['title']}** — {x['buyer']}. Avtalet löper till {x['end_text']}{more} "
+                         f"(enligt TED-annonsen {seo.SITE_URL}/tenders/{x['tender_id']}, CPV {x['cpv']}).")
         else:
             lines.append(f"- **{x['title']}** — {x['buyer']}. Senast {x['latest_text']} "
-                         f"(förra publicerades {x['published_text']}, CPV {x['cpv']}).")
+                         f"(uppskattning; förra publicerades {x['published_text']}, CPV {x['cpv']}).")
         if held:
             lines.append(f"  Har avtalet: {held}.")
-    lines += ["", renewals.CAVEAT, f"Lista: {seo.SITE_URL}/upphandlingar/vantas", UHM_ATTRIBUTION]
+    lines += ["", renewals.CAVEAT, f"Lista: {seo.SITE_URL}/upphandlingar/vantas",
+              "Uppgifter: TED (EU) och Upphandlingsmyndigheten | Bearbetning: Agentanbud"]
     return [types.TextContent(type="text", text="\n".join(lines))]
 
 

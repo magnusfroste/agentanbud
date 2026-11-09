@@ -42,7 +42,7 @@
 {% if expected %}
 <section class="insight-section">
   <h2>Väntas upphandlas av {{ b.name }}</h2>
-  <p>Ramavtal som enligt fyraårsregeln ska upphandlas igen de närmaste två åren, de som går ut först överst.</p>
+  <p>Avtal och ramavtal som löper ut de närmaste två åren, de som går ut först överst: enligt TED-annonsens slutdatum där det finns, annars enligt fyraårsregeln.</p>
   {{ expected_list(expected, show_buyer=False) }}
   {{ expected_caveat() }}
 </section>

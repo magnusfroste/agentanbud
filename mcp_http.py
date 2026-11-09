@@ -370,7 +370,7 @@ def _tool_list(include_write: bool = False) -> list[dict]:
         },
         {
             "name": "expected_tenders",
-            "description": "Tenders to EXPECT: framework agreements (ramavtal) in Swedish public procurement that must be put out again soon. A framework may as a rule run at most four years, so one published in 2023 is due by 2027. From Upphandlingsmyndigheten's statistics of frameworks awarded 2021-2024, leaving out those the buyer has already tendered again; marks the ones out right now. Returns the buyer, the earlier procurement, when it is due at the latest and who holds the agreement today. An estimate: use it to get ahead of a tender before it is advertised. Filter by authority and/or CPV prefix. Examples: cpv='72', months=6; authority='Göteborgs Stad'.",
+            "description": "Tenders to EXPECT: framework agreements (ramavtal) in Swedish public procurement that must be put out again soon. A framework may as a rule run at most four years, so one published in 2023 is due by 2027. Uses the contract end date and renewals stated in TED award notices where there are any, otherwise estimates from Upphandlingsmyndigheten's statistics of frameworks awarded 2021-2024; leaves out those the buyer has already tendered again; marks the ones out right now. Returns the buyer, the earlier procurement, when it is due at the latest and who holds the agreement today. An estimate: use it to get ahead of a tender before it is advertised. Filter by authority and/or CPV prefix. Examples: cpv='72', months=6; authority='Göteborgs Stad'.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
