@@ -80,6 +80,7 @@ add("F", "Personbilar", soon(150), "34100000")                      # open right
 add("G", "Livsmedel", soon(90), "15000000")                         # renewed among our notices (closed)
 add("H", "IT-drift", soon(100), "72500000", buyer="TRAFIKVERKET")
 add("I", "Möbler", soon(500), "39100000")                           # due beyond twelve months
+add("J", "Markprojektörer Göteborgs 2022", soon(160), "71300000")    # shares only the town with an open notice
 data = ("﻿" + COLS + "\n" + "\n".join(rows) + "\n").encode()
 client = httpx.Client(transport=httpx.MockTransport(
     lambda r: httpx.Response(200, content=data, headers={"last-modified": "x", "content-length": str(len(data))})))
@@ -100,6 +101,7 @@ def notice(title, cpv, deadline_days, published):
 notice("Personbilar 2026", "34110000", 20, ago(0, 10))
 notice("Livsmedel 2025", "15000000", -100, ago(1))
 notice("Takbyte skola", "45000000", 25, ago(0, 3))     # same group as B, unrelated: B stays expected
+notice("Inspektion av broar i Göteborgs hamn", "71300000", 25, ago(0, 2))  # same group as J, same town only
 for i in range(4):
     notice(f"Övrigt {i}", "79000000", 30, ago(0, 5))
 conn.commit()
@@ -110,7 +112,7 @@ suppliers.reset()
 print("Vilka som väntas")
 items = renewals.expected(conn, within_months=12, limit=50)
 ids = [x["id"] for x in items]
-check("ute nu först, sedan de som ska upphandlas snarast", ids == ["F", "A", "H", "B"], str(ids))
+check("ute nu först, sedan de som ska upphandlas snarast", ids == ["F", "A", "H", "J", "B"], str(ids))
 check("passerade, redan omgjorda, kontrakt och för avlägsna är borta", not {"C", "D", "E", "G", "I"} & set(ids))
 f = items[0]
 check("den som är ute nu länkar annonsen", f["open_title"] == "Personbilar 2026" and f["open_id"])
@@ -121,20 +123,22 @@ check("två till fyra år efter den förra", a["published"] == soon(30)
       and a["latest"] == pub.replace(year=pub.year + 4).isoformat(), f"{a['earliest']} {a['latest']}")
 check("vem som har avtalet", [s["name"] for s in a["incumbents"]] == ["Atea Sverige AB", "CGI Sverige AB", "Sweco Sverige AB"]
       and a["suppliers"] == 4, str(a["incumbents"]))
-check("räknat", renewals.count(conn, within_months=12) == 4 and renewals.count(conn, within_months=24) == 5)
+check("räknat", renewals.count(conn, within_months=12) == 5 and renewals.count(conn, within_months=24) == 6)
 b_item = next(x for x in items if x["id"] == "B")
 check("en orelaterad öppen annons i samma CPV-grupp gör den varken 'ute nu' eller omupphandlad",
       b_item["open_id"] is None, str(b_item))
+j_item = next(x for x in renewals.expected(conn, within_months=12, limit=50) if x["id"] == "J")
+check("köparens ortsnamn räknas inte som ett gemensamt ord", j_item["open_id"] is None, str(j_item))
 check("en orelaterad senare upphandling i statistiken räknas inte som omupphandling",
       "A" in ids and "H" in ids)
 check("CPV-filter", [x["id"] for x in renewals.expected(conn, cpv="72", within_months=12)] == ["A", "H"])
 check("köpare skriven som vi skriver den",
-      [x["id"] for x in renewals.expected(conn, buyer="Göteborgs Stad", within_months=24)] == ["F", "A", "B", "I"])
+      [x["id"] for x in renewals.expected(conn, buyer="Göteborgs Stad", within_months=24)] == ["F", "A", "J", "B", "I"])
 
 print("\nSidorna")
 c = TestClient(APP, base_url="https://testserver")
 h = c.get("/upphandlingar/vantas").text
-check("sidan: antal, lista, förbehåll och källa", "4 avtal och ramavtal löper ut och ska upphandlas igen inom 12 månader" in h
+check("sidan: antal, lista, förbehåll och källa", "5 avtal och ramavtal löper ut och ska upphandlas igen inom 12 månader" in h
       and "IT-konsulter" in h and "uppskattning)" in h and "högst fyra år" in h
       and "Uppgifter: TED (EU) och Upphandlingsmyndigheten | Bearbetning: Agentanbud" in h)
 check("ute nu-raden länkar annonsen", "<strong>Ute nu:</strong>" in h and f'href="/tenders/{f["open_id"]}"' in h)
