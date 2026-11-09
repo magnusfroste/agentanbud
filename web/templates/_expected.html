@@ -5,8 +5,10 @@
   <li>
     {% if x.open_id %}<strong>Ute nu:</strong> <a href="/tenders/{{ x.open_id }}">{{ x.open_title }}</a>
       <span class="muted">— förra: {{ x.title }}, {{ x.published_text }}</span>
+    {% elif x.exact %}{{ x.title }}
+      <span class="muted">— {% if show_buyer %}{% if x.buyer_slug %}<a href="/kopare/{{ x.buyer_slug }}">{{ x.buyer }}</a>{% else %}{{ x.buyer }}{% endif %}, {% endif %}avtalet löper till {{ x.end_text }}{% if x.final_text %}, med förlängningar till {{ x.final_text }}{% elif x.renewals %}, kan förlängas {{ x.renewals }} gång{{ 'er' if x.renewals != 1 else '' }}{% endif %} (<a href="/tenders/{{ x.tender_id }}">enligt TED-annonsen</a>)</span>
     {% else %}{{ x.title }}
-      <span class="muted">— {% if show_buyer %}{% if x.buyer_slug %}<a href="/kopare/{{ x.buyer_slug }}">{{ x.buyer }}</a>{% else %}{{ x.buyer }}{% endif %}, {% endif %}senast {{ x.latest_text }} (förra {{ x.published_text }})</span>
+      <span class="muted">— {% if show_buyer %}{% if x.buyer_slug %}<a href="/kopare/{{ x.buyer_slug }}">{{ x.buyer }}</a>{% else %}{{ x.buyer }}{% endif %}, {% endif %}senast {{ x.latest_text }} (förra {{ x.published_text }}, uppskattning)</span>
     {% endif %}
     {% if x.incumbents %}<br><span class="muted small">Har avtalet: {% for s in x.incumbents %}{% if s.slug %}<a href="/leverantor/{{ s.slug }}">{{ s.name }}</a>{% else %}{{ s.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% if x.suppliers > x.incumbents|length %} och {{ x.suppliers - x.incumbents|length }} till{% endif %}</span>{% endif %}
   </li>
@@ -14,6 +16,6 @@
 </ul>
 {%- endmacro %}
 {% macro expected_caveat() -%}
-<p class="muted small">Uppskattning: ett ramavtal får som regel löpa högst fyra år, så en ny upphandling väntas senast fyra år efter den förra, ofta tidigare. Avtalet kan ha förlängts, avslutats eller ersatts av ett annat, och vi ser inte alla nya upphandlingar. Ramavtal 2021–2024 enligt Upphandlingsmyndighetens statistik.
-<br>Uppgifter: Upphandlingsmyndigheten | Bearbetning: Agentanbud</p>
+<p class="muted small">Avtal som löper ut: där TED-annonsen om tilldelning anger avtalets slutdatum och förlängningar används de. Övriga är ramavtal 2021–2024 ur Upphandlingsmyndighetens statistik, uppskattade med att ett ramavtal får löpa högst fyra år; en ny upphandling väntas då senast fyra år efter den förra, ofta tidigare. Avtal kan ha förlängts, avslutats eller ersatts av andra, och vi ser inte alla nya upphandlingar.
+<br>Uppgifter: TED (EU) och Upphandlingsmyndigheten | Bearbetning: Agentanbud</p>
 {%- endmacro %}

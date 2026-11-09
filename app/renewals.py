@@ -35,8 +35,11 @@ framework, and the statistics have no end dates.
 """
 from __future__ import annotations
 
+import json
+import re
 import sqlite3
 import threading
+import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
@@ -46,9 +49,10 @@ EARLIEST_YEARS, LATEST_YEARS = 2, 4
 REDONE_AFTER_DAYS = 300   # a later procurement this long after counts as the renewal
 MONTHS = ("januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti",
           "september", "oktober", "november", "december")
-CAVEAT = ("Uppskattning: ett ramavtal får som regel löpa högst fyra år, så en ny upphandling väntas "
-          "senast fyra år efter den förra, ofta tidigare. Avtalet kan ha förlängts, avslutats eller "
-          "ersatts av ett annat, och vi ser inte alla nya upphandlingar.")
+CAVEAT = ("Där TED-annonsen anger avtalets slutdatum och förlängningar används de. Annars är det en "
+          "uppskattning: ett ramavtal får som regel löpa högst fyra år, så en ny upphandling väntas senast "
+          "fyra år efter den förra, ofta tidigare. Avtal kan ha förlängts, avslutats eller ersatts av andra, "
+          "och vi ser inte alla nya upphandlingar.")
 
 
 def _month(d: date) -> str:
@@ -131,6 +135,7 @@ def warm(path: str) -> threading.Thread:
             conn = connect(path)
             try:
                 _frameworks(conn)
+                _ted_contracts(conn)
             finally:
                 conn.close()
         except Exception:
@@ -144,11 +149,136 @@ def warm(path: str) -> threading.Thread:
 def reset() -> None:
     with _LOCK:
         _CACHE.clear()
+        _TED_CACHE.clear()
 
 
 def _prefix(cpv: str) -> str:
     """A framework's CPV group for matching its renewal: the first three digits."""
     return cpv[:3]
+
+
+# --- Contracts with their end date in the TED award notice ---------------
+# eForms award notices state how long the contract runs: an end date, or a
+# start (or signing) date and a duration, and how many renewals of what
+# length. Where they do, that replaces the four-year estimate: "the contract
+# runs until March 2027, renewable to March 2028" is a fact from the notice.
+
+_TED_CACHE: dict = {}    # db path -> (tenders version, contracts, built at)
+TED_REUSE_S = 600
+_RENEWAL_LEN = re.compile(r"(\d+)\s*(månad|manad|month|år|ar\b|year)", re.I)
+
+
+def _dates(val) -> list[date]:
+    vals = val if isinstance(val, list) else [val]
+    return [d for d in (_parse(str(v)) for v in vals if v) if d]
+
+
+def _first_int(val) -> Optional[int]:
+    for v in (val if isinstance(val, list) else [val]):
+        try:
+            return int(str(v).strip())
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _add_months(d: date, months: int) -> date:
+    m = d.month - 1 + months
+    y, m = d.year + m // 12, m % 12 + 1
+    for day in (d.day, 30, 29, 28):
+        try:
+            return date(y, m, day)
+        except ValueError:
+            continue
+    return date(y, m, 28)
+
+
+def contract_end(rec: dict) -> tuple[Optional[date], Optional[date], Optional[int]]:
+    """(end, end with every renewal, number of renewals) from a TED award
+    notice's eForms fields; the second is None when the renewals' length is
+    not stated, the first when nothing is."""
+    ends = _dates(rec.get("contract-duration-end-date-lot"))
+    end = max(ends) if ends else None
+    if end is None:
+        starts = _dates(rec.get("contract-duration-start-date-lot")) or _dates(rec.get("contract-conclusion-date"))
+        n, unit = _first_int(rec.get("duration-period-value-lot")), rec.get("duration-period-unit-lot")
+        unit = (unit[0] if isinstance(unit, list) and unit else unit) or ""
+        if starts and n:
+            months = {"YEAR": 12 * n, "MONTH": n, "DAY": n // 30, "WEEK": n // 4}.get(str(unit).upper())
+            end = _add_months(min(starts), months) if months else None
+    if end is None:
+        return None, None, None
+    renewals = _first_int(rec.get("renewal-maximum-lot")) or 0
+    if not renewals:
+        return end, end, 0
+    desc = rec.get("renewal-description-lot")
+    if isinstance(desc, dict):
+        desc = desc.get("swe") or desc.get("eng") or next(iter(desc.values()), "")
+    text = " ".join(desc) if isinstance(desc, list) else str(desc or "")
+    m = _RENEWAL_LEN.search(text)
+    if not m:
+        return end, None, renewals
+    each = int(m.group(1)) * (1 if m.group(2).lower().startswith(("mån", "man", "mon")) else 12)
+    return end, _add_months(end, each * renewals), renewals
+
+
+def recurring(rec: dict) -> bool:
+    """Is this a contract that is bought again when it ends? A framework
+    agreement is; so are services and supplies. A works contract that is not
+    a framework — a school built, a bridge repaired — ends with the work.
+    Notices without these fields count as recurring: they are older rows
+    fetched before the fields were, and the backfill fetches them again."""
+    fa = rec.get("framework-agreement-lot")
+    fa = [str(v) for v in (fa if isinstance(fa, list) else [fa]) if v]
+    if any(v != "none" for v in fa):
+        return True
+    nature = rec.get("contract-nature-main-proc")
+    nature = (nature[0] if isinstance(nature, list) and nature else nature) or ""
+    return str(nature).lower() != "works"
+
+
+def _ted_contracts(conn) -> list[dict]:
+    """Every TED award notice with an end date, once per change of the tenders."""
+    from app import related
+    from app.related import buyer_match_key, title_stems
+    path = conn.execute("PRAGMA database_list").fetchone()[2]
+    version = related._version(conn)
+    with _LOCK:
+        hit = _TED_CACHE.get(path)
+        # Reused for ten minutes even when the tenders change: the morning
+        # sync changes them hundreds of times, and each rebuild reads every
+        # award notice (1–2 s at 25,000). An end date does not move by the minute.
+        if hit and (hit[0] == version or time.monotonic() - hit[2] < TED_REUSE_S):
+            return hit[1]
+    out, seen = [], set()
+    for tid, title, authority, cpvs, published, winners, raw in conn.execute(
+            "SELECT id, title, authority, cpv_codes, published_at, winner_name, raw_json FROM tenders "
+            "WHERE source_system = 'ted_awards' AND raw_json LIKE '%duration%'"):
+        try:
+            rec = json.loads(raw or "{}")
+            codes = [str(c) for c in json.loads(cpvs or "[]") if c]
+            names = json.loads(winners or "[]")
+        except (TypeError, ValueError):
+            continue
+        end, final, renewals = contract_end(rec)
+        pub = _parse(published)
+        if not end or not pub or not codes or not authority:
+            continue
+        if not recurring(rec):
+            continue
+        match = buyer_match_key(seo._buyer(authority))
+        key = (match, (title or "").casefold(), end)
+        if key in seen:                       # TED republishes a notice under a new number
+            continue
+        seen.add(key)
+        out.append({"id": f"ted:{tid}", "tender_id": tid, "buyer_name": authority,
+                    "buyer": seo._buyer(authority) or authority, "match": match,
+                    "title": title or "(utan titel)", "cpv": codes[0], "group": codes[0][:3],
+                    "published": pub, "stems": title_stems(title), "winners": names,
+                    "suppliers": len(names), "end": end, "final": final, "renewals": renewals})
+    with _LOCK:
+        _TED_CACHE[path] = (version, out, time.monotonic())
+    return out
 
 
 def _incumbents(conn, pid: str, top: int = 3) -> list[dict]:
@@ -170,26 +300,43 @@ def _select(conn, buyer: str, cpv, within_months: int, today: Optional[date]) ->
     snap = related._snapshot(conn)
     by_match = getattr(snap, "by_match", {})
     now_iso = related._now_iso()
-    picked = []
+    ted = _ted_contracts(conn)
+    ted_by = {}
+    for t in ted:
+        ted_by.setdefault((t["match"], t["group"]), []).append(t)
+    candidates = []
+    for t in ted:
+        # Due when the contract ends with every renewal, or, if the renewals'
+        # length is not stated, when it ends without them.
+        candidates.append({**t, "exact": True, "earliest": t["end"], "latest": t["final"] or t["end"]})
     for f in _frameworks(conn):
-        if f["redone"] or (want and f["match"] != want):
+        if f["redone"]:
+            continue
+        # The TED award notice for the same purchase, within two years of
+        # the statistics' publication date, has the real dates.
+        if any(f["stems"] & t["stems"] and 0 <= (t["published"] - f["published"]).days <= 730
+               for t in ted_by.get((f["match"], f["group"]), [])):
+            continue
+        candidates.append({**f, "exact": False, "earliest": _add_years(f["published"], EARLIEST_YEARS),
+                           "latest": _add_years(f["published"], LATEST_YEARS)})
+    picked = []
+    for f in candidates:
+        if want and f["match"] != want:
             continue
         if prefixes and not any(f["cpv"].startswith(p) for p in prefixes):
             continue
-        earliest = _add_years(f["published"], EARLIEST_YEARS)
-        latest = _add_years(f["published"], LATEST_YEARS)
-        # Due by the four-year cap within the horizon. Every framework from
-        # 2021–2024 is past its earliest date by now, so "could come" says
-        # nothing; "must come by" does.
+        earliest, latest = f["earliest"], f["latest"]
+        # Due within the horizon: by the notice's end date, or by the
+        # four-year cap (every framework from 2021–2024 is past its earliest
+        # date by now, so "could come" says nothing; "must come by" does).
         if latest < today or latest > horizon:
             continue
         key = by_match.get(f["match"])
         b = snap.buyers.get(key) if key else None
-        item = {**f, "earliest": earliest, "latest": latest, "open_id": None, "open_title": None,
-                "buyer_slug": b.get("slug") if b else None}
+        item = {**f, "open_id": None, "open_title": None, "buyer_slug": b.get("slug") if b else None}
         renewed_after = (f["published"] + timedelta(days=REDONE_AFTER_DAYS)).isoformat()
         later = [(pub, i) for pub, st, i in (b["history"].get(f["group"], []) if b else [])
-                 if pub >= renewed_after and f["stems"] & st]
+                 if pub >= renewed_after and f["stems"] & st and i != f.get("tender_id")]
         if later:
             # Our notices hold its renewal: open now, show it; closed, it has
             # been renewed already.
@@ -216,12 +363,21 @@ def expected(conn, *, buyer: str = "", cpv=(), within_months: int = 24,
              limit: int = 50, today: Optional[date] = None) -> list[dict]:
     """Frameworks expected to be tendered again: those out now first, then
     the ones nearest the end of their window."""
+    from mcp_shared import pretty_company
     out = []
     for x in _select(conn, buyer, cpv, within_months, today)[:limit]:
+        if x["exact"]:
+            incumbents = [{"name": pretty_company(n), "slug": None} for n in x["winners"][:3]]
+        else:
+            incumbents = _incumbents(conn, x["id"])
         out.append({"id": x["id"], "title": x["title"], "buyer": x["buyer"], "buyer_slug": x["buyer_slug"],
                     "cpv": x["cpv"], "published": x["published"].isoformat(),
                     "published_text": _month(x["published"]), "suppliers": x["suppliers"],
-                    "incumbents": _incumbents(conn, x["id"]),
+                    "incumbents": incumbents, "exact": x["exact"],
+                    "tender_id": x.get("tender_id"),
+                    "end_text": _month(x["end"]) if x["exact"] else None,
+                    "final_text": _month(x["final"]) if x["exact"] and x["final"] and x["final"] != x["end"] else None,
+                    "renewals": x.get("renewals") or 0,
                     "window": f"{_month(x['earliest'])}–{_month(x['latest'])}",
                     "latest_text": _month(x["latest"]),
                     "earliest": x["earliest"].isoformat(), "latest": x["latest"].isoformat(),
