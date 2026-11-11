@@ -171,6 +171,10 @@ https://www.agentanbud.se/kalender.ics?q=bredband
 Varje svar från `search_tenders` slutar med flödesadressen för just den sökningen, och
 MCP-handskakningen (`initialize`) säger samma sak i `instructions`.
 
+Samma anropare som gör exakt samma sökning fler än 5 gånger innan nästa hämtning får ett kort
+svar ("Oförändrat …") med flödesadressen i stället för listan. En annan sökning, en annan
+anropare eller samma sökning efter nästa hämtning besvaras i sin helhet.
+
 ### "Vad har Trafikverket öppet just nu?"
 
 ```python

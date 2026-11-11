@@ -230,7 +230,9 @@ def _tool_objects() -> list[types.Tool]:
                 "Data is refreshed once a day (sync starts 06:00 UTC); repeating a search before "
                 "then returns the same results. To monitor a search, subscribe to its RSS feed instead "
                 "of polling: https://www.agentanbud.se/feed.xml?q=<query>&cpv=<prefix>&authority=<buyer> "
-                "(each result also ends with the feed URL for that exact search)."
+                "(each result also ends with the feed URL for that exact search). The same caller asking "
+                "the identical search more than 5 times before the next sync gets a short 'unchanged' "
+                "reply with that feed URL instead of the list."
             ),
             inputSchema={
                 "type": "object",
