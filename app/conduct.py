@@ -53,6 +53,7 @@ CHURN_RATIO = 0.8
 HOT_PER_HOUR = 300        # calls in the last hour → "faster than the data changes"
 PAUSE_PER_HOUR = 1200     # 20/s sustained: not an agent thinking, a loop running
 PAUSE_SECONDS = 60
+SHORT_ANSWER_AFTER = 5    # identical search_tenders asks since the data changed → short answer
 LOOP_SAME_QUERY_AT = 20   # classification: same question this often is automation
 
 CLASSES = ("single", "explorer", "monitor", "loop")
@@ -89,6 +90,7 @@ class Entry:
     calls: int = 0
     sessions: set = field(default_factory=set)
     queries: Counter = field(default_factory=Counter)   # since data_mark
+    asks: Counter = field(default_factory=Counter)      # exact tool+arguments, since data_mark
     data_mark: Optional[str] = None                     # updated_at the counts refer to
     recent: deque = field(default_factory=lambda: deque(maxlen=PAUSE_PER_HOUR + 1))
     last_query: Optional[str] = None
@@ -126,7 +128,8 @@ class Ledger:
             self._day, self._entries = day, {}
 
     def record(self, visitor: Optional[str], session: Optional[str], query: Optional[str],
-               data_mark: Optional[str], now: Optional[float] = None) -> Optional[Entry]:
+               data_mark: Optional[str], now: Optional[float] = None,
+               ask: Optional[str] = None) -> Optional[Entry]:
         """Count one call. Returns the caller's entry, or None without a visitor id
         (stdio, or no CF-Connecting-IP) — then there is nothing to say."""
         if not visitor:
@@ -138,6 +141,7 @@ class Ledger:
             if data_mark != e.data_mark:
                 # The data moved; repeating a question is reasonable again.
                 e.queries.clear()
+                e.asks.clear()
                 e.data_mark = data_mark
             e.calls += 1
             if session and len(e.sessions) < 10_000:
@@ -146,6 +150,8 @@ class Ledger:
             if q:
                 e.queries[q] += 1
                 e.last_query = q
+            if ask and (ask in e.asks or len(e.asks) < 10_000):
+                e.asks[ask] += 1
             e.recent.append(now)
             return e
 
@@ -199,6 +205,30 @@ def guidance(e: Optional[Entry], now: Optional[float] = None) -> list[str]:
             f"ett anrop per fråga och dygn ger samma svar. För bevakning: fråga en gång efter "
             f"07:00 UTC._")
     return notes
+
+
+def short_answer(e: Optional[Entry], ask: Optional[str], feed_url: str,
+                 next_update: Optional[str]) -> Optional[str]:
+    """The reply to an identical search asked past SHORT_ANSWER_AFTER since the
+    data last changed — in place of the full result list, which this caller
+    already has and which cannot have changed. None means answer in full.
+
+    Keyed on the caller's visitor id and the exact arguments, so a different
+    search, a different caller, or the same search after the next sync is
+    answered in full as always. What it says is what a watcher needs: that
+    nothing changed, when it next can, and the feed that does the watching."""
+    if e is None or not ask:
+        return None
+    n = e.asks.get(ask, 0)
+    if n <= SHORT_ANSWER_AFTER:
+        return None
+    return (f"Oförändrat. Du har gjort exakt den här sökningen {n} gånger sedan datan senast "
+            f"ändrades ({_when(e.data_mark)}), så resultatet upprepas inte här — det är "
+            f"detsamma som du redan har fått. Nästa hämtning startar {_when(next_update)}.\n\n"
+            f"Bevaka sökningen med RSS i stället för att fråga igen: {feed_url}\n"
+            f"Flödet har samma träffar, nyaste först, och uppdateras efter varje hämtning. "
+            f"Behöver du listan nu: hämta flödet. En annan sökning, eller samma sökning efter "
+            f"nästa hämtning, besvaras i sin helhet som vanligt.")
 
 
 class Paused(Exception):

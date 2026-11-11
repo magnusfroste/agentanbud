@@ -163,16 +163,27 @@ async def _dispatch_tool(name: str, arguments: dict, session_id: str | None = No
         # How this caller has behaved today (app/conduct.py). Recorded before
         # the tool runs so a paused call is counted as attempted; the pause
         # itself is raised here and answered by the handler with a retry time.
-        entry = None
+        entry, short = None, None
+        ask = f"{name}|{mcp_server.SearchCache.key(arguments or {})}" if name == "search_tenders" else None
         try:
             fresh = mcp_shared.data_freshness(conn)
             entry = conduct.LEDGER.record(v, meta.get("_sid"), _extract_query(name, arguments),
-                                          fresh.get("updated_at"))
+                                          fresh.get("updated_at"), ask=ask)
             conduct.check_pause(entry, fresh.get("next_update"))
+            if ask:
+                a = arguments or {}
+                short = conduct.short_answer(entry, ask, mcp_shared.feed_url(
+                    (a.get("query") or "").strip(),
+                    "".join(ch for ch in str(a.get("cpv") or "") if ch.isdigit()),
+                    (a.get("authority") or "").strip()), fresh.get("next_update"))
         except conduct.Paused:
             raise
         except Exception:
             LOG.exception("conduct failed for MCP tool %s", name)
+        if short:
+            # The same search, again, from a caller that already has the answer:
+            # say so and hand over the feed instead of repeating the list.
+            return [types.TextContent(type="text", text=short)]
         content = await _run_tool(conn, name, arguments)
         # Guidance rides as its own text block after the answer, like the
         # freshness note: the answer is never altered, only followed.
@@ -243,7 +254,7 @@ def _tool_list(include_write: bool = False) -> list[dict]:
     tools = [
         {
             "name": "search_tenders",
-            "description": "Search Swedish public procurement tenders. Examples: query='IT-konsult stockholm', cpv='72' (IT), cpv='45' (construction), source='ted' (EU-thresholds only), open_only=false (include closed). Returns title, buyer, deadline with days-until, value, CPV, and a deep link. Data is refreshed once a day (sync starts 06:00 UTC); repeating a search before then returns the same results. To monitor a search, subscribe to its RSS feed instead of polling: https://www.agentanbud.se/feed.xml?q=<query>&cpv=<prefix>&authority=<buyer> (each result also ends with the feed URL for that exact search).",
+            "description": "Search Swedish public procurement tenders. Examples: query='IT-konsult stockholm', cpv='72' (IT), cpv='45' (construction), source='ted' (EU-thresholds only), open_only=false (include closed). Returns title, buyer, deadline with days-until, value, CPV, and a deep link. Data is refreshed once a day (sync starts 06:00 UTC); repeating a search before then returns the same results. To monitor a search, subscribe to its RSS feed instead of polling: https://www.agentanbud.se/feed.xml?q=<query>&cpv=<prefix>&authority=<buyer> (each result also ends with the feed URL for that exact search). The same caller asking the identical search more than 5 times before the next sync gets a short 'unchanged' reply with that feed URL instead of the list.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
