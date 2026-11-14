@@ -267,7 +267,7 @@ def _tool_list(include_write: bool = False) -> list[dict]:
                     "source": {"type": "string", "enum": SOURCES, "description": SOURCE_DESCRIPTION},
                     "authority": {"type": "string", "description": "Filter by buyer/contracting authority (substring match)."},
                     "cpv": {"type": "string", "description": "CPV code prefix. '72'=IT, '45'=construction."},
-                    "open_only": {"type": "boolean", "default": True, "description": "If true (default), only tenders open for bids: no past deadlines and no award notices (ted_awards)."},
+                    "open_only": {"type": "boolean", "default": True, "description": "If true (default), only tenders open for bids: no past deadlines, no award notices (ted_awards), and no notice without a deadline published more than 60 days ago (LOV systems excepted)."},
                     "limit": {"type": "integer", "default": 10, "minimum": 1, "maximum": 50}
                 }
             }

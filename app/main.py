@@ -568,7 +568,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         try:
             total = conn.execute("SELECT COUNT(*) FROM tenders").fetchone()[0]
             open_count = conn.execute(
-                "SELECT COUNT(*) FROM tenders WHERE source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)",
+                "SELECT COUNT(*) FROM tenders WHERE source_system != 'ted_awards' AND (deadline > ? OR (deadline IS NULL AND (source_system = 'lov' OR published_at IS NULL OR published_at >= date('now', '-60 days'))))",
                 (datetime.now().isoformat(timespec="seconds"),),
             ).fetchone()[0]
             sources = conn.execute(
@@ -584,7 +584,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 SELECT id, source_system, title, authority, region, deadline,
                        published_at, value, cpv_codes
                 FROM tenders
-                WHERE source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)
+                WHERE source_system != 'ted_awards' AND (deadline > ? OR (deadline IS NULL AND (source_system = 'lov' OR published_at IS NULL OR published_at >= date('now', '-60 days'))))
                 ORDER BY published_at DESC NULLS LAST, id DESC
                 LIMIT 6
                 """,
@@ -649,7 +649,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             # Basic counts
             total = conn.execute("SELECT COUNT(*) FROM tenders").fetchone()[0]
             open_count = conn.execute(
-                "SELECT COUNT(*) FROM tenders WHERE source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)",
+                "SELECT COUNT(*) FROM tenders WHERE source_system != 'ted_awards' AND (deadline > ? OR (deadline IS NULL AND (source_system = 'lov' OR published_at IS NULL OR published_at >= date('now', '-60 days'))))",
                 (now_iso,),
             ).fetchone()[0]
 
@@ -1050,7 +1050,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
             if status == "open":
                 # Award notices have no deadline but are not open for bids.
-                where.append("source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)")
+                where.append("source_system != 'ted_awards' AND (deadline > ? OR (deadline IS NULL AND (source_system = 'lov' OR published_at IS NULL OR published_at >= date('now', '-60 days'))))")
                 args.append(now_iso)
             elif status == "closing":
                 where.append("deadline > ?")

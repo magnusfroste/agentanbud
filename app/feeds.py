@@ -46,7 +46,7 @@ def _parse(value: Optional[str]) -> Optional[datetime]:
 
 
 _COLUMNS = "tenders.id, title, authority, region, deadline, published_at, description"
-_OPEN = "source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)"
+_OPEN = "source_system != 'ted_awards' AND (deadline > ? OR (deadline IS NULL AND (source_system = 'lov' OR published_at IS NULL OR published_at >= date('now', '-60 days'))))"
 
 
 def search_rows(conn, q: str = "", cpv: str = "", authority: str = "", region: str = "",

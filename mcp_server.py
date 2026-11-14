@@ -264,7 +264,7 @@ def _tool_objects() -> list[types.Tool]:
                     "open_only": {
                         "type": "boolean",
                         "default": True,
-                        "description": "If true (default), only tenders open for bids: no past deadlines and no award notices (ted_awards)."
+                        "description": "If true (default), only tenders open for bids: no past deadlines, no award notices (ted_awards), and no notice without a deadline published more than 60 days ago (LOV systems excepted)."
                     },
                     "limit": {
                         "type": "integer",
@@ -819,8 +819,12 @@ async def _search_tenders(conn, args: dict) -> list[types.Content]:
 
 # A tender is open when it can still be bid on. Award notices (ted_awards)
 # have no deadline and were counted as open by "deadline IS NULL" — a search
-# for open tenders answered with contracts signed months ago.
-OPEN_SQL = "source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)"
+# for open tenders answered with contracts signed months ago. A notice
+# without a deadline is taken as open for 60 days after it was published:
+# "Reservkraftsystem", published in August with no deadline in the notice,
+# was still listed as open in November. LOV systems (valfrihetssystem) stay
+# open for years by design and are left as they are.
+OPEN_SQL = "source_system != 'ted_awards' AND (deadline > ? OR (deadline IS NULL AND (source_system = 'lov' OR published_at IS NULL OR published_at >= date('now', '-60 days'))))"
 
 
 def _dedupe(items: list, limit: int) -> list:
@@ -936,7 +940,7 @@ async def _get_tender(conn, args: dict) -> list[types.Content]:
 async def _get_stats(conn, args: dict) -> list[types.Content]:
     total = conn.execute("SELECT COUNT(*) FROM tenders").fetchone()[0]
     open_n = conn.execute(
-        "SELECT COUNT(*) FROM tenders WHERE source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)",
+        "SELECT COUNT(*) FROM tenders WHERE source_system != 'ted_awards' AND (deadline > ? OR (deadline IS NULL AND (source_system = 'lov' OR published_at IS NULL OR published_at >= date('now', '-60 days'))))",
         (datetime.now().isoformat(timespec="seconds"),),
     ).fetchone()[0]
     by_source = conn.execute(
@@ -1065,7 +1069,7 @@ async def _get_authority(conn, args: dict) -> list[types.Content]:
     where = ["authority LIKE ?"]
     params = [f"%{name}%"]
     if args.get("open_only", False):
-        where.append("source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)")
+        where.append("source_system != 'ted_awards' AND (deadline > ? OR (deadline IS NULL AND (source_system = 'lov' OR published_at IS NULL OR published_at >= date('now', '-60 days'))))")
         params.append(datetime.now().isoformat(timespec="seconds"))
     where_sql = "WHERE " + " AND ".join(where)
     limit = min(args.get("limit", 20), 100)
@@ -1323,7 +1327,7 @@ async def _similar_tenders(conn, args: dict) -> list[types.Content]:
     where = f"({' OR '.join(clauses)}) AND id != ?"
     params.append(tid)
     if args.get("open_only", True):
-        where += " AND source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)"
+        where += " AND source_system != 'ted_awards' AND (deadline > ? OR (deadline IS NULL AND (source_system = 'lov' OR published_at IS NULL OR published_at >= date('now', '-60 days'))))"
         params.append(datetime.now().isoformat(timespec="seconds"))
 
     rows = conn.execute(
@@ -1553,7 +1557,7 @@ async def _match_profile(conn, args: dict) -> list[types.Content]:
             params.append(f"%{r}%")
 
     if args.get("open_only", True):
-        where.append("source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)")
+        where.append("source_system != 'ted_awards' AND (deadline > ? OR (deadline IS NULL AND (source_system = 'lov' OR published_at IS NULL OR published_at >= date('now', '-60 days'))))")
         params.append(datetime.now().isoformat(timespec="seconds"))
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
