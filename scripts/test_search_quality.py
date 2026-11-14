@@ -58,6 +58,10 @@ ROWS = [
     ("ted", "8", "Expert AI", "Försäkringskassan", "AI-tjänster.", "Sverige", soon),
     ("mercell", "9", "Expert AI", "Försäkringskassan", "AI-tjänster.", None, soon),
     ("mercell", "10", "Mailservice", "Postnord", "E-mail och utskick.", None, soon),
+    ("mercell", "13", "Konsulter elbesiktning", "Stockholms stad", "Konsulter för besiktning.",
+     "Stockholms län", soon),
+    ("ted", "14", "Expertkonsult IFS", "Luftfartsverket", "Konsult.", "Sverige", soon),
+    ("mercell", "15", "Expertkonsult IFS", "Luftfartsverket, NORRKÖPING", "Konsult.", None, soon),
     ("ted_awards", "11", "Ventilation sporthall", "Borås kommun", "Tilldelat avtal.", "Sverige", None),
     ("mercell", "12", "Ventilation skola", "Borås kommun", "Byte av aggregat.", None, soon),
 ]
@@ -95,6 +99,9 @@ check("ai: AI, not every word with 'ai' in it", t == ["Expert AI"], str(t))
 
 text, t = search(query="IT-konsult stockholm")
 check("IT-konsult stockholm: Stockholm's, not Malmö's", t == ["IT-konsulter för drift"], str(t))
+text, t = search(query="it-konsult stockholm")
+check("…also in lower case: 'it' is kept, not any consultant", "Konsulter elbesiktning" not in t
+      and t == ["IT-konsulter för drift"], str(t))
 check("…and says where it looked", "Stockholm" in text.splitlines()[0], text.splitlines()[0])
 check("a place alone is still searched as a word", split_place("stockholm") == ("stockholm", None))
 check("Göteborg is a place too", split_place("städ göteborg")[1] == ("Västra Götaland", "Göteborg"))
@@ -102,6 +109,9 @@ check("'Stockholms län' drops both words", split_place("städ Stockholms län")
 
 text, t = search(query="expert ai")
 check("the same procurement from two sources is listed once", t.count("Expert AI") == 1, str(t))
+
+text, t = search(query="expertkonsult ifs")
+check("the same buyer written two ways is still one procurement", t == ["Expertkonsult IFS"], str(t))
 
 text, t = search(query="ventilation")
 check("open search: no award notices", t == ["Ventilation skola"], str(t))

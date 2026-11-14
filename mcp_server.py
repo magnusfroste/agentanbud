@@ -828,7 +828,11 @@ def _dedupe(items: list, limit: int) -> list:
     once, the best-ranked copy kept (a notice in two sources, or its lots)."""
     seen, out = set(), []
     for t in items:
-        key = ((t.get("title") or "").strip().casefold(), (t.get("authority") or "").strip().casefold())
+        # The buyer as the sources write it differently: "Luftfartsverket" in
+        # one, "Luftfartsverket, NORRKÖPING" in the other.
+        from app.related import buyer_match_key
+        buyer = buyer_match_key((t.get("authority") or "").split(",")[0])
+        key = ((t.get("title") or "").strip().casefold(), buyer)
         if key in seen:
             continue
         seen.add(key)
