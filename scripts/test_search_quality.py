@@ -58,9 +58,27 @@ ROWS = [
     ("ted", "8", "Expert AI", "Försäkringskassan", "AI-tjänster.", "Sverige", soon),
     ("mercell", "9", "Expert AI", "Försäkringskassan", "AI-tjänster.", None, soon),
     ("mercell", "10", "Mailservice", "Postnord", "E-mail och utskick.", None, soon),
+    ("mercell", "13", "Konsulter elbesiktning", "Stockholms stad", "Konsulter för besiktning.",
+     "Stockholms län", soon),
+    ("ted", "14", "Expertkonsult IFS", "Luftfartsverket", "Konsult.", "Sverige", soon),
+    ("mercell", "15", "Expertkonsult IFS", "Luftfartsverket, NORRKÖPING", "Konsult.", None, soon),
     ("ted_awards", "11", "Ventilation sporthall", "Borås kommun", "Tilldelat avtal.", "Sverige", None),
     ("mercell", "12", "Ventilation skola", "Borås kommun", "Byte av aggregat.", None, soon),
 ]
+def ago(days):
+    return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+
+
+# (source, id, title, published, deadline): notices without a deadline.
+UNDATED = [("ted", "20", "Reservkraftsystem gammal", ago(90)),
+           ("ted", "21", "Reservkraftsystem ny", ago(10)),
+           ("lov", "22", "Reservkraft hemtjänst LOV", ago(400))]
+for src, sid, title, published in UNDATED:
+    upsert_tender(conn, {"source_system": src, "source_id": sid, "tender_url": "https://example.invalid",
+                         "title": title, "authority": "Bolagsverket", "cpv_codes": [], "deadline": None,
+                         "published_at": published, "description": "Reservkraft.", "value": None,
+                         "procedure": None, "contract_type": None, "document_type": None, "region": None,
+                         "raw_json": "{}"})
 for src, sid, title, authority, desc, region, dl in ROWS:
     upsert_tender(conn, {"source_system": src, "source_id": sid, "tender_url": "https://example.invalid",
                          "title": title, "authority": authority, "cpv_codes": [], "deadline": dl,
@@ -95,6 +113,9 @@ check("ai: AI, not every word with 'ai' in it", t == ["Expert AI"], str(t))
 
 text, t = search(query="IT-konsult stockholm")
 check("IT-konsult stockholm: Stockholm's, not Malmö's", t == ["IT-konsulter för drift"], str(t))
+text, t = search(query="it-konsult stockholm")
+check("…also in lower case: 'it' is kept, not any consultant", "Konsulter elbesiktning" not in t
+      and t == ["IT-konsulter för drift"], str(t))
 check("…and says where it looked", "Stockholm" in text.splitlines()[0], text.splitlines()[0])
 check("a place alone is still searched as a word", split_place("stockholm") == ("stockholm", None))
 check("Göteborg is a place too", split_place("städ göteborg")[1] == ("Västra Götaland", "Göteborg"))
@@ -103,10 +124,21 @@ check("'Stockholms län' drops both words", split_place("städ Stockholms län")
 text, t = search(query="expert ai")
 check("the same procurement from two sources is listed once", t.count("Expert AI") == 1, str(t))
 
+text, t = search(query="expertkonsult ifs")
+check("the same buyer written two ways is still one procurement", t == ["Expertkonsult IFS"], str(t))
+
 text, t = search(query="ventilation")
 check("open search: no award notices", t == ["Ventilation skola"], str(t))
 text, t = search(query="ventilation", open_only=False)
 check("open_only=false: the awards too", "Ventilation sporthall" in t, str(t))
+
+text, t = search(query="reservkraftsystem")
+check("a notice without a deadline is open for 60 days after publication",
+      t == ["Reservkraftsystem ny"], str(t))
+text, t = search(query="reservkraft hemtjänst")
+check("…but a LOV system stays open however old", t == ["Reservkraft hemtjänst LOV"], str(t))
+text, t = search(query="reservkraftsystem", open_only=False)
+check("…and the old notice is still there with open_only=false", "Reservkraftsystem gammal" in t, str(t))
 
 c = TestClient(APP, base_url="https://testserver")
 page = c.get("/browse", params={"q": "ventilation"}).text

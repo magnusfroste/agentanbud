@@ -41,6 +41,12 @@ FTS_TABLE = "tenders_fts"
 # everything and drag the ranking down. A one-word query is never dropped.
 MIN_TOKEN_LEN = 3
 
+# Short words that are not stop-syllables: they are what is being bought.
+# Dropping "IT" turned "IT-konsult stockholm" into a search for any
+# consultant — electrical inspection, wolf counts, kitchen refrigeration.
+# A short word written in capitals in the query (an acronym) is kept too.
+KEEP_SHORT = {"it", "ai", "ux", "ui", "va", "hr", "eu", "pr", "el", "ip"}
+
 # Terms this short are matched as whole words, not as prefixes: "nis" (from
 # "NIS 2") matched "Nissan" and "ai" matched every word that starts with it.
 # Longer terms keep the prefix, because a Swedish search needs it.
@@ -138,7 +144,8 @@ def _tokens(query: str) -> list[str]:
     raw = [t for t in re.split(r"[^0-9A-Za-zÀ-ÿ]+", query or "") if t]
     if len(raw) <= 1:
         return raw
-    longer = [t for t in raw if len(t) >= MIN_TOKEN_LEN]
+    longer = [t for t in raw if len(t) >= MIN_TOKEN_LEN or t.casefold() in KEEP_SHORT
+              or (t.isalpha() and t.isupper() and len(t) > 1)]
     return longer or raw
 
 
