@@ -41,10 +41,83 @@ FTS_TABLE = "tenders_fts"
 # everything and drag the ranking down. A one-word query is never dropped.
 MIN_TOKEN_LEN = 3
 
+# Terms this short are matched as whole words, not as prefixes: "nis" (from
+# "NIS 2") matched "Nissan" and "ai" matched every word that starts with it.
+# Longer terms keep the prefix, because a Swedish search needs it.
+EXACT_MAX_LEN = 3
+
+# Below this length the LIKE recall floor is not used: '%nis%' is inside
+# "organisation" and '%ai%' inside "mail". The floor exists to find a word at
+# the tail of a compound ("fastighetsunderhåll"), which a short query is not.
+LIKE_MIN_LEN = 5
+
+# Where the words of a search are looked for first. The buyer's name is
+# searched only when no title or description has them — then the query is
+# most likely a buyer ("Trafikverket"), and callers can say so. Before this,
+# "meteorologiska" answered with SMHI's fruit baskets, because the word is in
+# the institute's name.
+CONTENT_COLUMNS = "{title description}"
+BUYER_COLUMNS = "{authority}"
+
 # How far a single compound may be shortened before we give up. Stopping at 6
 # keeps "underhållsplaneringsverktyg" -> "underhållsplanering" but refuses to
 # degrade a word into a meaningless stem like "und".
 MIN_PREFIX_LEN = 6
+
+
+def _fold(word: str) -> str:
+    return (word.casefold().replace("å", "a").replace("ä", "a").replace("ö", "o")
+            .replace("é", "e"))
+
+
+def _places() -> dict:
+    """Folded place word → (region LIKE, authority LIKE). The counties from
+    app/hubs.py, in the forms people type ("stockholm", "stockholms"), and the
+    two largest cities that are not county names."""
+    from app.hubs import COUNTIES
+    out = {}
+    for hub in COUNTIES:
+        region = hub.name.replace(" län", "")
+        if " " in region:
+            continue                       # "Västra Götaland": see göteborg below
+        root = region[:-1] if region.endswith("s") and not region.endswith("ss") else region
+        for w in (root, root + "s"):
+            out[_fold(w)] = (root, root)
+    out["goteborg"] = ("Västra Götaland", "Göteborg")
+    out["malmo"] = ("Skåne", "Malmö")
+    return out
+
+
+_PLACES: Optional[dict] = None
+
+
+def split_place(query: str) -> tuple[str, Optional[tuple[str, str]]]:
+    """Take a place out of a search: "IT-konsult stockholm" is a search for
+    IT consultants in Stockholm, not for tenders that mention the word. Returns
+    (the query without it, (region word, buyer word)) or (query, None). A query
+    that is only a place is left alone — then the place is what is searched."""
+    global _PLACES
+    if _PLACES is None:
+        _PLACES = _places()
+    words = (query or "").split()
+    place, rest = None, []
+    for w in words:
+        key = _fold(re.sub(r"[^0-9A-Za-zÀ-ÿ]+", "", w))
+        if place is None and key in _PLACES:
+            place = _PLACES[key]
+        elif key == "lan" and place is not None:
+            continue
+        else:
+            rest.append(w)
+    if place is None or not rest:
+        return query, None
+    return " ".join(rest), place
+
+
+def place_sql() -> str:
+    """WHERE fragment for split_place()'s result: in that county, or bought by
+    a buyer with the place in its name (most TED notices say only "Sverige")."""
+    return "(region LIKE ? OR authority LIKE ?)"
 
 
 def fts_available(conn: sqlite3.Connection) -> bool:
@@ -73,7 +146,8 @@ def _quote(term: str) -> str:
     """One term or phrase, quoted (so FTS5 operators inside user input are
     inert) and given a `*` so prefixes match — `förvaltning` should find
     `förvaltningsentreprenad`."""
-    return '"' + term.replace('"', '""') + '"*'
+    star = "*" if (" " in term or len(term) > EXACT_MAX_LEN) else ""
+    return '"' + term.replace('"', '""') + '"' + star
 
 
 def _term(token: str) -> str:
@@ -92,6 +166,8 @@ def _expr(tokens: list[str], op: str = "OR") -> str:
 
 
 def _count(conn: sqlite3.Connection, expr: str) -> int:
+    if _SCOPE.cols:
+        expr = f"{_SCOPE.cols} : ({expr})"
     try:
         return conn.execute(
             f"SELECT COUNT(*) FROM {FTS_TABLE} WHERE {FTS_TABLE} MATCH ?", (expr,)
@@ -101,7 +177,54 @@ def _count(conn: sqlite3.Connection, expr: str) -> int:
         return -1
 
 
+class _Scope:
+    """The column set _count() restricts to while _build() runs."""
+    cols = ""
+
+
+_SCOPE = _Scope()
+
+
+def build_match_scoped(conn: sqlite3.Connection, query: str) -> tuple[Optional[str], str]:
+    """(MATCH expression, where it matched): "content" when the words are in a
+    title or description, "buyer" when only a buyer's name has them, and
+    (None, "") when nothing does. The expression carries its column filter,
+    so it can be used with match_subquery() as it is."""
+    if not query or not query.strip() or not fts_available(conn):
+        return None, ""
+    tokens = _tokens(query)
+    if len(tokens) > 1:
+        # All the words together in a buyer's name and nowhere in one title or
+        # description: a search for that buyer ("Sveriges meteorologiska"),
+        # not for whichever single word a title happens to share with it.
+        both = _expr(tokens, "AND")
+        if (_count(conn, f"{CONTENT_COLUMNS} : ({both})") == 0
+                and _count(conn, f"{BUYER_COLUMNS} : ({both})") > 0):
+            return f"{BUYER_COLUMNS} : ({both})", "buyer"
+    for cols, scope in ((CONTENT_COLUMNS, "content"), (BUYER_COLUMNS, "buyer")):
+        _SCOPE.cols = cols
+        try:
+            expr = _build(conn, query)
+        finally:
+            _SCOPE.cols = ""
+        if expr:
+            return f"{cols} : ({expr})", scope
+    return None, ""
+
+
 def build_match(conn: sqlite3.Connection, query: str) -> Optional[str]:
+    """build_match_scoped() without saying where it matched."""
+    return build_match_scoped(conn, query)[0]
+
+
+def like_pattern(query: str) -> str:
+    """The LIKE floor's pattern for a query, or one that matches nothing when
+    the query is too short for a substring match to mean anything."""
+    q = (query or "").strip()
+    return f"%{q}%" if len(q) >= LIKE_MIN_LEN else "\x00 no floor \x00"
+
+
+def _build(conn: sqlite3.Connection, query: str) -> Optional[str]:
     """Turn a user query into an FTS5 MATCH expression that actually matches.
 
     Returns None when FTS is unusable or the query has nothing searchable, so
@@ -115,11 +238,6 @@ def build_match(conn: sqlite3.Connection, query: str) -> Optional[str]:
       3. For a single token that still finds nothing, shorten it step by step
          (compound backoff).
     """
-    if not query or not query.strip():
-        return None
-    if not fts_available(conn):
-        return None
-
     tokens = _tokens(query)
     if not tokens:
         return None
@@ -146,9 +264,11 @@ def build_match(conn: sqlite3.Connection, query: str) -> Optional[str]:
         counted = [(c, t) for t in tokens for c in (_count(conn, _expr([t])),) if c > 0]
         if counted:
             return _expr([min(counted)[1]])
-        # Every token unknown — back off the longest one, which carries the
-        # meaning in a Swedish compound query.
-        tokens = [max(tokens, key=len)]
+        # Every word unknown. Shortening one of them is not a fix here: it
+        # turned "artificiell intelligens" into "intell" and answered with
+        # stage lighting ("intelligent ljusstyrning"). A one-word compound is
+        # still backed off below; several unknown words are no match.
+        return None
 
     word = tokens[0]
     expr = _expr([word])

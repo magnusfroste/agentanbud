@@ -33,7 +33,7 @@ from .db import (
 from .version import build_info, version_string, started_at
 from . import feeds, hubs, ops, related, renewals, seo, suppliers, usage_cache, visitors
 from .insights import page_type, program_name, referrer_domain, REAL_SEARCH
-from .search import (build_match, match_subquery, like_floor_sql,
+from .search import (build_match, match_subquery, like_floor_sql, like_pattern,
                      rank_order_sql)
 
 # Markdown rendering for blog posts. Output is ALWAYS sanitised (allowlist of
@@ -568,7 +568,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         try:
             total = conn.execute("SELECT COUNT(*) FROM tenders").fetchone()[0]
             open_count = conn.execute(
-                "SELECT COUNT(*) FROM tenders WHERE deadline IS NULL OR deadline > ?",
+                "SELECT COUNT(*) FROM tenders WHERE source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)",
                 (datetime.now().isoformat(timespec="seconds"),),
             ).fetchone()[0]
             sources = conn.execute(
@@ -584,7 +584,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 SELECT id, source_system, title, authority, region, deadline,
                        published_at, value, cpv_codes
                 FROM tenders
-                WHERE deadline IS NULL OR deadline > ?
+                WHERE source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)
                 ORDER BY published_at DESC NULLS LAST, id DESC
                 LIMIT 6
                 """,
@@ -649,7 +649,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
             # Basic counts
             total = conn.execute("SELECT COUNT(*) FROM tenders").fetchone()[0]
             open_count = conn.execute(
-                "SELECT COUNT(*) FROM tenders WHERE deadline IS NULL OR deadline > ?",
+                "SELECT COUNT(*) FROM tenders WHERE source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)",
                 (now_iso,),
             ).fetchone()[0]
 
@@ -1038,7 +1038,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                 join_sql = f"LEFT JOIN ({match_subquery()}) m ON m.id = tenders.id"
                 where.append(like_floor_sql())
                 args.insert(0, match)
-                args.extend([f"%{q}%", f"%{q}%"])
+                args.extend([like_pattern(q), like_pattern(q)])
             elif q:
                 where.append("(title LIKE ? OR description LIKE ?)")
                 args.extend([f"%{q}%", f"%{q}%"])
@@ -1049,7 +1049,8 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
 
             now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
             if status == "open":
-                where.append("(deadline IS NULL OR deadline > ?)")
+                # Award notices have no deadline but are not open for bids.
+                where.append("source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)")
                 args.append(now_iso)
             elif status == "closing":
                 where.append("deadline > ?")
@@ -1987,7 +1988,7 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
                 order_sql = f"ORDER BY {rank_order_sql()}"
                 where.append(like_floor_sql())
                 args.insert(0, match)
-                args.extend([f"%{q}%", f"%{q}%"])
+                args.extend([like_pattern(q), like_pattern(q)])
             elif q:
                 where.append("(title LIKE ? OR description LIKE ?)")
                 args.extend([f"%{q}%", f"%{q}%"])

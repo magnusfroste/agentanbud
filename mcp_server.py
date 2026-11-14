@@ -37,8 +37,9 @@ from mcp.server import Server
 sys.path.insert(0, str(Path(__file__).parent))
 from mcp_shared import SOURCES, SOURCE_DESCRIPTION  # noqa: E402
 from app.insights import format_usage_markdown  # noqa: E402
-from app.search import (build_match, match_subquery, like_floor_sql,  # noqa: E402
-                        rank_order_sql)
+from app.search import (build_match, build_match_scoped, match_subquery,  # noqa: E402
+                        like_floor_sql, like_pattern, rank_order_sql, split_place,
+                        place_sql)
 from app.db import (  # noqa: E402
     connect,
     create_post as _db_create_post,
@@ -224,7 +225,8 @@ def _tool_objects() -> list[types.Tool]:
             name="search_tenders",
             description=(
                 "Search Swedish public procurement tenders. "
-                "Examples: query='IT-konsult stockholm', cpv='72' (IT), cpv='45' (construction), "
+                "Examples: query='IT-konsult stockholm' (a county or Göteborg/Malmö in the query "
+                "filters by place), cpv='72' (IT), cpv='45' (construction), "
                 "source='ted' (EU-thresholds only), open_only=false (include closed). "
                 "Returns title, buyer, deadline with days-until, value, CPV, and a deep link. "
                 "Data is refreshed once a day (sync starts 06:00 UTC); repeating a search before "
@@ -262,7 +264,7 @@ def _tool_objects() -> list[types.Tool]:
                     "open_only": {
                         "type": "boolean",
                         "default": True,
-                        "description": "If true (default), exclude tenders past their deadline."
+                        "description": "If true (default), only tenders open for bids: no past deadlines and no award notices (ted_awards)."
                     },
                     "limit": {
                         "type": "integer",
@@ -815,23 +817,49 @@ async def _search_tenders(conn, args: dict) -> list[types.Content]:
     return _with_freshness(conn, [*hit, feed])
 
 
+# A tender is open when it can still be bid on. Award notices (ted_awards)
+# have no deadline and were counted as open by "deadline IS NULL" — a search
+# for open tenders answered with contracts signed months ago.
+OPEN_SQL = "source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)"
+
+
+def _dedupe(items: list, limit: int) -> list:
+    """One row per procurement: the same title from the same buyer is listed
+    once, the best-ranked copy kept (a notice in two sources, or its lots)."""
+    seen, out = set(), []
+    for t in items:
+        key = ((t.get("title") or "").strip().casefold(), (t.get("authority") or "").strip().casefold())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+        if len(out) >= limit:
+            break
+    return out
+
+
 async def _search_tenders_uncached(conn, args: dict) -> list[types.Content]:
     where = []
     params: list = []
 
+    raw_query = (args.get("query") or "").strip()
+    query, place = split_place(raw_query)
+    if place:
+        where.append(place_sql())
+        params.extend([f"%{place[0]}%", f"%{place[1]}%"])
+
     # Full-text with relevance ranking when the index is usable; the old
     # LIKE stays as the fallback so this works on an un-migrated database.
-    join_sql, rank_order = "", ""
-    match = build_match(conn, args.get("query") or "")
+    join_sql, rank_order, scope = "", "", ""
+    match, scope = build_match_scoped(conn, query)
     if match:
         join_sql = f"LEFT JOIN ({match_subquery()}) m ON m.id = tenders.id"
         rank_order = f"{rank_order_sql()},"
         where.append(like_floor_sql())
-        params.append(match)
-        params.extend([f"%{args['query']}%", f"%{args['query']}%"])
-    elif args.get("query"):
+        params = [match] + params + [like_pattern(query), like_pattern(query)]
+    elif query:
         where.append("(title LIKE ? OR description LIKE ?)")
-        params.extend([f"%{args['query']}%", f"%{args['query']}%"])
+        params.extend([f"%{query}%", f"%{query}%"])
     if args.get("source"):
         where.append("source_system = ?")
         params.append(args["source"])
@@ -846,7 +874,7 @@ async def _search_tenders_uncached(conn, args: dict) -> list[types.Content]:
         params.append(args["buyer_type"])
 
     if args.get("open_only", True):
-        where.append("(deadline IS NULL OR deadline > ?)")
+        where.append(OPEN_SQL)
         params.append(datetime.now().isoformat(timespec="seconds"))
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
@@ -864,9 +892,9 @@ async def _search_tenders_uncached(conn, args: dict) -> list[types.Content]:
             published_at DESC
         LIMIT ?
         """,
-        params + [limit],
+        params + [limit * 3],
     ).fetchall()
-    items = [_row_dict(r) for r in rows]
+    items = _dedupe([_row_dict(r) for r in rows], limit)
 
     if not items:
         return [types.TextContent(
@@ -875,6 +903,14 @@ async def _search_tenders_uncached(conn, args: dict) -> list[types.Content]:
         )]
 
     header = f"Hittade {len(items)} upphandlingar"
+    if place:
+        header += f" i/hos {place[1]} (sökt: \"{query}\")"
+    if scope == "buyer":
+        # The words are in no title or description — only in buyers' names.
+        # Say so, rather than present a buyer's unrelated purchases as hits.
+        header = (f"Ingen upphandling nämner \"{query}\" i titel eller beskrivning. "
+                  f"Ordet finns i köparens namn — här är {len(items)} upphandlingar från "
+                  f"sådana köpare")
     body = "\n\n---\n\n".join(_format_tender(t) for t in items)
     return [types.TextContent(type="text", text=f"{header}\n\n{body}")]
 
@@ -896,7 +932,7 @@ async def _get_tender(conn, args: dict) -> list[types.Content]:
 async def _get_stats(conn, args: dict) -> list[types.Content]:
     total = conn.execute("SELECT COUNT(*) FROM tenders").fetchone()[0]
     open_n = conn.execute(
-        "SELECT COUNT(*) FROM tenders WHERE deadline IS NULL OR deadline > ?",
+        "SELECT COUNT(*) FROM tenders WHERE source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)",
         (datetime.now().isoformat(timespec="seconds"),),
     ).fetchone()[0]
     by_source = conn.execute(
@@ -1025,7 +1061,7 @@ async def _get_authority(conn, args: dict) -> list[types.Content]:
     where = ["authority LIKE ?"]
     params = [f"%{name}%"]
     if args.get("open_only", False):
-        where.append("(deadline IS NULL OR deadline > ?)")
+        where.append("source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)")
         params.append(datetime.now().isoformat(timespec="seconds"))
     where_sql = "WHERE " + " AND ".join(where)
     limit = min(args.get("limit", 20), 100)
@@ -1283,7 +1319,7 @@ async def _similar_tenders(conn, args: dict) -> list[types.Content]:
     where = f"({' OR '.join(clauses)}) AND id != ?"
     params.append(tid)
     if args.get("open_only", True):
-        where += " AND (deadline IS NULL OR deadline > ?)"
+        where += " AND source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)"
         params.append(datetime.now().isoformat(timespec="seconds"))
 
     rows = conn.execute(
@@ -1513,7 +1549,7 @@ async def _match_profile(conn, args: dict) -> list[types.Content]:
             params.append(f"%{r}%")
 
     if args.get("open_only", True):
-        where.append("(deadline IS NULL OR deadline > ?)")
+        where.append("source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)")
         params.append(datetime.now().isoformat(timespec="seconds"))
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""

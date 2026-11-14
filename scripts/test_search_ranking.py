@@ -69,7 +69,8 @@ t = titles("hydrologi")
 check("hydrologi: titelträffen först", t and t[0] == "Konsulter hydrologi och hydrogeologi", str(t))
 t = titles("meteorolog")
 check("meteorolog: beskrivningsträffen före SMHI:s fruktkorgar", t and t[0] == "Mätstationer", str(t))
-check("…men SMHI:s upphandlingar finns kvar i listan", "Fruktkorgar" in t, str(t))
+check("…och SMHI:s fruktkorgar är inte en träff: ordet finns bara i köparens namn",
+      "Fruktkorgar" not in t, str(t))
 t = titles("Sveriges Meteorologiska")
 check("söker man på köparen får man köparens", set(t) >= {"Personalsystem", "Fruktkorgar", "Mötesteknik"}, str(t))
 
@@ -79,7 +80,7 @@ expr = build_match(conn, "väderdatainsamling")
 check(f"avkortningen stannar på minst {MIN_PREFIX_LEN} tecken", expr is None
       or len(expr.split('"')[1]) >= MIN_PREFIX_LEN, str(expr))
 check("ett sammansatt ord som finns kortas fortfarande ned till det",
-      build_match(conn, "väderprognoserna") == '"väderprognos"*', str(build_match(conn, "väderprognoserna")))
+      build_match(conn, "väderprognoserna") == '{title description} : ("väderprognos"*)', str(build_match(conn, "väderprognoserna")))
 
 if failures:
     print(f"\n{failures} fall misslyckades")
