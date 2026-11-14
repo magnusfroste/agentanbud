@@ -52,7 +52,7 @@ _OPEN = "source_system != 'ted_awards' AND (deadline IS NULL OR deadline > ?)"
 def search_rows(conn, q: str = "", cpv: str = "", authority: str = "", region: str = "",
                 limit: int = LIMIT) -> list:
     """Open tenders for a search, newest first."""
-    from app.search import build_match, like_floor_sql, match_subquery
+    from app.search import build_match, like_floor_sql, like_pattern, match_subquery
     where, args, join = [_OPEN], [_iso(_now())], ""
     if authority:
         where.append("authority LIKE ?")
@@ -67,7 +67,7 @@ def search_rows(conn, q: str = "", cpv: str = "", authority: str = "", region: s
     if match:
         join = f"LEFT JOIN ({match_subquery()}) m ON m.id = tenders.id"
         where.append(like_floor_sql())
-        args = [match] + args + [f"%{q}%", f"%{q}%"]
+        args = [match] + args + [like_pattern(q), like_pattern(q)]
     elif q:
         where.append("(title LIKE ? OR description LIKE ?)")
         args += [f"%{q}%", f"%{q}%"]

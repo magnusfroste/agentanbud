@@ -86,7 +86,7 @@ t = titles("cleaning")
 check("en engelsk titel hittas fortfarande av sina egna ord, och svenska till",
       "Cleaning services for embassy" in t and "Lokalvård skolor" in t, str(t))
 check("svenska sökningar oförändrade", titles("ventilation") == ["Ventilation sporthall"]
-      and build_match(conn, "ventilation") == '"ventilation"*')
+      and build_match(conn, "ventilation") == '{title description} : ("ventilation"*)')
 
 print("\nEfterfrågan utan träff")
 check("de utländska orden räknas inte längre som luckor i datan",

@@ -254,7 +254,7 @@ def _tool_list(include_write: bool = False) -> list[dict]:
     tools = [
         {
             "name": "search_tenders",
-            "description": "Search Swedish public procurement tenders. Examples: query='IT-konsult stockholm', cpv='72' (IT), cpv='45' (construction), source='ted' (EU-thresholds only), open_only=false (include closed). Returns title, buyer, deadline with days-until, value, CPV, and a deep link. Data is refreshed once a day (sync starts 06:00 UTC); repeating a search before then returns the same results. To monitor a search, subscribe to its RSS feed instead of polling: https://www.agentanbud.se/feed.xml?q=<query>&cpv=<prefix>&authority=<buyer> (each result also ends with the feed URL for that exact search). The same caller asking the identical search more than 5 times before the next sync gets a short 'unchanged' reply with that feed URL instead of the list.",
+            "description": "Search Swedish public procurement tenders. Examples: query='IT-konsult stockholm' (a county or Göteborg/Malmö in the query filters by place), cpv='72' (IT), cpv='45' (construction), source='ted' (EU-thresholds only), open_only=false (include closed). Returns title, buyer, deadline with days-until, value, CPV, and a deep link. Data is refreshed once a day (sync starts 06:00 UTC); repeating a search before then returns the same results. To monitor a search, subscribe to its RSS feed instead of polling: https://www.agentanbud.se/feed.xml?q=<query>&cpv=<prefix>&authority=<buyer> (each result also ends with the feed URL for that exact search). The same caller asking the identical search more than 5 times before the next sync gets a short 'unchanged' reply with that feed URL instead of the list.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -267,7 +267,7 @@ def _tool_list(include_write: bool = False) -> list[dict]:
                     "source": {"type": "string", "enum": SOURCES, "description": SOURCE_DESCRIPTION},
                     "authority": {"type": "string", "description": "Filter by buyer/contracting authority (substring match)."},
                     "cpv": {"type": "string", "description": "CPV code prefix. '72'=IT, '45'=construction."},
-                    "open_only": {"type": "boolean", "default": True, "description": "If true (default), exclude tenders past their deadline."},
+                    "open_only": {"type": "boolean", "default": True, "description": "If true (default), only tenders open for bids: no past deadlines and no award notices (ted_awards)."},
                     "limit": {"type": "integer", "default": 10, "minimum": 1, "maximum": 50}
                 }
             }
