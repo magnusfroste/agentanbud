@@ -39,6 +39,7 @@ for src, sid, title, desc, dl, cpv in [
         ("ted_awards", "1", "Reservkraftsystem", "Tilldelat.", None, ["31120000"]),
         ("mercell", "2", "Reservkraftverk till vattenverk", "Nytt aggregat.", soon, ["31120000"]),
         ("mercell", "3", "Chattfunktion för medborgarservice", "Svar dygnet runt.", soon, ["72000000"]),
+        ("mercell", "4", "Reservkraftsaggregat", "Mobilt.", soon, ["31120000"]),
 ]:
     upsert_tender(conn, {"source_system": src, "source_id": sid, "tender_url": "https://example.invalid",
                          "title": title, "authority": "Kinda kommun", "cpv_codes": cpv, "deadline": dl,
@@ -57,7 +58,8 @@ check("no open hits: said plainly, not as a Python dict",
 check("…counts the closed and awarded ones and how to see them",
       "1 avslutade eller tilldelade" in t and "open_only=false" in t and "get_winner_history" in t, t)
 check("…points to expected renewals in the same field", "expected_tenders(cpv='311')" in t, t)
-check("…suggests a word that does find open tenders, with the count", '"reservkraft' in t and "(1)" in t, t)
+check("…suggests a word that does find open tenders, with the count", '"reservkraft" (2)' in t, t)
+check("…not the compound's joining 's' ('reservkrafts')", '"reservkrafts"' not in t, t)
 check("…and gives the feed for the search",
       "https://www.agentanbud.se/feed.xml?q=reservkraftsystem" in t, t)
 
