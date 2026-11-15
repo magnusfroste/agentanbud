@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
+from collections import Counter
 import mcp_shared
 import subprocess
 import sys
@@ -846,6 +848,90 @@ def _dedupe(items: list, limit: int) -> list:
     return out
 
 
+def _open_count(conn, query: str) -> int:
+    """Open tenders matching `query` alone, without the caller's other filters."""
+    match = build_match(conn, query)
+    if not match:
+        return 0
+    return conn.execute(
+        f"SELECT COUNT(*) FROM tenders JOIN ({match_subquery()}) m ON m.id = tenders.id "
+        f"WHERE {OPEN_SQL}", [match, datetime.now().isoformat(timespec="seconds")]).fetchone()[0]
+
+
+def _suggestions(conn, query: str, limit: int = 4) -> list[tuple[str, int]]:
+    """Other words for the same search that do find open tenders: its Swedish
+    equivalents, its words one by one, and a long compound's start
+    ("reservkraftsystem" → "reservkraft")."""
+    from app.query_terms import swedish_for
+    words = [w for w in re.split(r"[^0-9A-Za-zÀ-ÿ-]+", query) if len(w) >= 2]
+    cands = list(swedish_for(query))
+    for w in words:
+        cands += list(swedish_for(w))
+    if len(words) > 1:
+        cands += words
+    seen, out = {query.casefold()}, []
+    for c in cands:
+        if c.casefold() in seen:
+            continue
+        seen.add(c.casefold())
+        n = _open_count(conn, c)
+        if n:
+            out.append((c, n))
+            if len(out) >= limit:
+                return out
+    if len(words) == 1 and len(words[0]) > 8:
+        # Only the longest start that finds something: every shorter one
+        # finds the same and more, and listing them says nothing.
+        w = words[0]
+        for k in range(len(w) - 1, 5, -1):
+            n = _open_count(conn, w[:k])
+            if n:
+                out.append((w[:k], n))
+                break
+    return out
+
+
+def _no_hits(conn, args: dict, query: str, place, where: list, params: list,
+             join_sql: str) -> str:
+    """The answer when nothing matches: what does exist, and what to do next.
+    An agent given only "nothing found" either gives up or rephrases blindly;
+    this tells it which rephrasing works, whether the search finds closed and
+    awarded tenders, and how to be told when an open one appears."""
+    shown = f'"{query}"' + (f" i/hos {place[1]}" if place else "")
+    lines = [f"Inga öppna upphandlingar matchar {shown} just nu."]
+    if args.get("open_only", True) and where and where[-1] == OPEN_SQL:
+        # The same search without the open filter, which was added last.
+        rest = where[:-1]
+        sql_where = ("WHERE " + " AND ".join(rest)) if rest else ""
+        rows = conn.execute(
+            f"SELECT cpv_codes FROM tenders {join_sql} {sql_where} LIMIT 500", params[:-1]
+        ).fetchall()
+        if rows:
+            n = f"{len(rows)}" if len(rows) < 500 else "över 500"
+            lines.append(f"- {n} avslutade eller tilldelade upphandlingar matchar. Sök med "
+                         f"open_only=false för att se dem, och get_winner_history för vem som vann.")
+            cpv3 = Counter()
+            for (codes,) in rows:
+                try:
+                    for c in {str(x)[:3] for x in json.loads(codes or "[]")}:
+                        cpv3[c] += 1
+                except Exception:
+                    pass
+            if cpv3:
+                top = cpv3.most_common(1)[0][0]
+                lines.append(f"- Avtal inom samma område som löper ut och upphandlas igen: "
+                             f"expected_tenders(cpv='{top}').")
+    sugg = _suggestions(conn, query) if query else []
+    if sugg:
+        lines.append("- Andra ord för samma sak som ger öppna träffar: "
+                     + ", ".join(f'"{w}" ({n})' for w, n in sugg) + ".")
+    a = args or {}
+    feed = mcp_shared.feed_url(query, "".join(ch for ch in str(a.get("cpv") or "") if ch.isdigit()),
+                               (a.get("authority") or "").strip())
+    lines.append(f"- Bevaka sökningen, så syns nya träffar när de publiceras: {feed}")
+    return "\n".join(lines)
+
+
 async def _search_tenders_uncached(conn, args: dict) -> list[types.Content]:
     where = []
     params: list = []
@@ -905,10 +991,8 @@ async def _search_tenders_uncached(conn, args: dict) -> list[types.Content]:
     items = _dedupe([_row_dict(r) for r in rows], limit)
 
     if not items:
-        return [types.TextContent(
-            type="text",
-            text=f"Inga upphandlingar matchar {args}. Prova bredare sökning, annan CPV, eller open_only=false."
-        )]
+        return [types.TextContent(type="text", text=_no_hits(conn, args, query, place, where,
+                                                              params, join_sql))]
 
     header = f"Hittade {len(items)} upphandlingar"
     if place:

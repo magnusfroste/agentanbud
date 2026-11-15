@@ -111,8 +111,8 @@ TERMS: dict[str, tuple[str, ...]] = {
     "machine learning": ("maskininlärning",),
     "computer vision": ("datorseende", "bildanalys"),
     "video analytics": ("videoanalys",),
-    "chatbot": ("chattbot",),
-    "chattbot": ("chatbot",),
+    "chatbot": ("chattbot", "chattfunktion", "virtuell assistent", "ai-assistent"),
+    "chattbot": ("chatbot", "chattfunktion", "virtuell assistent", "ai-assistent"),
     "user research": ("användarundersökning",),
     "service design": ("tjänstedesign",),
     "customer experience": ("kundupplevelse",),
@@ -151,6 +151,20 @@ TERMS: dict[str, tuple[str, ...]] = {
     "rahmenvertrag": ("ramavtal",),
     "framework agreement": ("ramavtal",),
     "dienstleistung": ("tjänst",),
+    # --- Swedish words the notices write differently (unmet demand, November
+    # 2026): searched, found nothing, though the thing is procured under
+    # another name. Each value is what a procurement officer would write.
+    "nödström": ("reservkraft", "avbrottsfri kraft"),
+    "webbdesign": ("webbplats", "webbutveckling", "webbyrå"),
+    "väderdata": ("väderprognos", "väderobservation", "meteorolog"),
+    "vinddata": ("vindmätning", "vindkartering"),
+    "klimadata": ("klimatdata", "klimat"),
+    "nis2": ("nis", "cybersäkerhet", "informationssäkerhet"),
+    "nis 2": ("nis", "cybersäkerhet", "informationssäkerhet"),
+    "videoanalys": ("kameraövervakning", "videoövervakning", "bildanalys"),
+    "nlp": ("språkteknologi", "språkmodell", "textanalys"),
+    "mlops": ("maskininlärning",),
+    "agentic": ("ai-agent",),
 }
 
 _MIN_PREFIX = 6   # a compound is matched through an entry at least this long
