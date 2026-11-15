@@ -915,7 +915,15 @@ def _suggestions(conn, query: str, limit: int = 4) -> list[tuple[str, int]]:
         for k in range(len(w) - 1, 5, -1):
             n = _open_count(conn, w[:k])
             if n:
-                out.append((w[:k], n))
+                stem = w[:k]
+                # A start that ends in the joining "s" of a compound
+                # ("reservkrafts-") reads oddly and finds less than the word
+                # before it: offer "reservkraft" when that finds at least as much.
+                if stem.endswith("s") and len(stem) > 6:
+                    n2 = _open_count(conn, stem[:-1])
+                    if n2 >= n:
+                        stem, n = stem[:-1], n2
+                out.append((stem, n))
                 break
     return out
 
