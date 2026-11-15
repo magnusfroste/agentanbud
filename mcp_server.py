@@ -41,7 +41,7 @@ from mcp_shared import SOURCES, SOURCE_DESCRIPTION  # noqa: E402
 from app.insights import format_usage_markdown  # noqa: E402
 from app.search import (build_match, build_match_scoped, match_subquery,  # noqa: E402
                         like_floor_sql, like_pattern, rank_order_sql, split_place,
-                        place_sql)
+                        place_sql, cpv_for_query, cpv_sql)
 from app.db import (  # noqa: E402
     connect,
     create_post as _db_create_post,
@@ -231,6 +231,9 @@ def _tool_objects() -> list[types.Tool]:
                 "filters by place), cpv='72' (IT), cpv='45' (construction), "
                 "source='ted' (EU-thresholds only), open_only=false (include closed). "
                 "Returns title, buyer, deadline with days-until, value, CPV, and a deep link. "
+                "A query word that names a CPV code (e.g. 'städning', 'tolktjänster') also finds "
+                "tenders with that code; those are listed after the word matches and marked "
+                "'Träff via CPV'. "
                 "Data is refreshed once a day (sync starts 06:00 UTC); repeating a search before "
                 "then returns the same results. To monitor a search, subscribe to its RSS feed instead "
                 "of polling: https://www.agentanbud.se/feed.xml?q=<query>&cpv=<prefix>&authority=<buyer> "
@@ -848,6 +851,32 @@ def _dedupe(items: list, limit: int) -> list:
     return out
 
 
+def _text_first_sql(query: str) -> str:
+    """ORDER BY term putting rows that contain the query's words before rows
+    found only by CPV code, when there is no FTS rank to do it."""
+    q = query.replace("'", "''")
+    return f"CASE WHEN title LIKE '%{q}%' OR description LIKE '%{q}%' THEN 0 ELSE 1 END,"
+
+
+def _via_cpv(t: dict, query: str, cpvs: list) -> str:
+    """'<code> <name>' when a row was found by its CPV code and not by the
+    words, so the answer can say why it is there; '' otherwise."""
+    if not cpvs:
+        return ""
+    from app.search import _tokens
+    from app.query_terms import swedish_for
+    text = f"{t.get('title') or ''} {t.get('description') or ''}".casefold()
+    words = [w for tok in _tokens(query) for w in (tok, *swedish_for(tok))]
+    if any(w.casefold() in text for w in words):
+        return ""
+    codes = t.get("cpv_codes") if isinstance(t.get("cpv_codes"), list) else []
+    for c in codes:
+        for p, label in cpvs:
+            if str(c).startswith(p):
+                return f"{c} {label}"
+    return ""
+
+
 def _open_count(conn, query: str) -> int:
     """Open tenders matching `query` alone, without the caller's other filters."""
     match = build_match(conn, query)
@@ -946,14 +975,19 @@ async def _search_tenders_uncached(conn, args: dict) -> list[types.Content]:
     # LIKE stays as the fallback so this works on an un-migrated database.
     join_sql, rank_order, scope = "", "", ""
     match, scope = build_match_scoped(conn, query)
+    # The CPV codes the search names, unless it names a buyer or the caller
+    # gave a CPV code of their own (app/search.cpv_for_query).
+    cpvs = cpv_for_query(query) if query and scope != "buyer" and not args.get("cpv") else []
+    cpv_or = (" OR " + cpv_sql(len(cpvs))) if cpvs else ""
+    cpv_params = [f'%"{p}%' for p, _ in cpvs]
     if match:
         join_sql = f"LEFT JOIN ({match_subquery()}) m ON m.id = tenders.id"
         rank_order = f"{rank_order_sql()},"
-        where.append(like_floor_sql())
-        params = [match] + params + [like_pattern(query), like_pattern(query)]
+        where.append(like_floor_sql()[:-1] + cpv_or + ")")
+        params = [match] + params + [like_pattern(query), like_pattern(query)] + cpv_params
     elif query:
-        where.append("(title LIKE ? OR description LIKE ?)")
-        params.extend([f"%{query}%", f"%{query}%"])
+        where.append("(title LIKE ? OR description LIKE ?" + cpv_or + ")")
+        params.extend([f"%{query}%", f"%{query}%"] + cpv_params)
     if args.get("source"):
         where.append("source_system = ?")
         params.append(args["source"])
@@ -977,10 +1011,11 @@ async def _search_tenders_uncached(conn, args: dict) -> list[types.Content]:
     rows = conn.execute(
         f"""
         SELECT tenders.id, source_system, source_id, tender_url, title, authority,
-               cpv_codes, deadline, published_at, value, procedure, region
+               cpv_codes, deadline, published_at, value, procedure, region, description
         FROM tenders {join_sql} {where_sql}
         ORDER BY
             {rank_order}
+            {_text_first_sql(query) if cpvs and not match else ""}
             CASE WHEN deadline IS NULL THEN 1 ELSE 0 END,
             deadline ASC NULLS LAST,
             published_at DESC
@@ -989,6 +1024,9 @@ async def _search_tenders_uncached(conn, args: dict) -> list[types.Content]:
         params + [limit * 3],
     ).fetchall()
     items = _dedupe([_row_dict(r) for r in rows], limit)
+    for t in items:
+        t["_via_cpv"] = _via_cpv(t, query, cpvs)
+        t.pop("description", None)       # read for _via_cpv, not shown in a list
 
     if not items:
         return [types.TextContent(type="text", text=_no_hits(conn, args, query, place, where,
@@ -1003,7 +1041,10 @@ async def _search_tenders_uncached(conn, args: dict) -> list[types.Content]:
         header = (f"Ingen upphandling nämner \"{query}\" i titel eller beskrivning. "
                   f"Ordet finns i köparens namn — här är {len(items)} upphandlingar från "
                   f"sådana köpare")
-    body = "\n\n---\n\n".join(_format_tender(t) for t in items)
+    body = "\n\n---\n\n".join(
+        _format_tender(t) + (f"\nTräff via CPV: {t['_via_cpv']} — ordet \"{query}\" står inte i "
+                             f"annonsen, men koden betyder det." if t.get("_via_cpv") else "")
+        for t in items)
     return [types.TextContent(type="text", text=f"{header}\n\n{body}")]
 
 
