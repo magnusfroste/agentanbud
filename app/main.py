@@ -1775,10 +1775,14 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
                 "SELECT source, run_at, count, status, message FROM sync_log "
                 "ORDER BY run_at DESC LIMIT 20"
             ).fetchall()
+            from app import coverage
             return {
                 "by_source": [dict(r) for r in by_source],
                 "top_authorities": [dict(r) for r in top_auth],
                 "recent_syncs": [dict(r) for r in recent],
+                # What share of all Swedish notices the live sources reach
+                # (app/coverage.py, from Upphandlingsmyndigheten's statistics).
+                "coverage": coverage.coverage(conn),
             }
         finally:
             conn.close()
