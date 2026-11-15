@@ -250,6 +250,31 @@ CREATE INDEX IF NOT EXISTS idx_contracts_supplier ON contracts(supplier_key);
 CREATE INDEX IF NOT EXISTS idx_contracts_cpv ON contracts(cpv);
 CREATE INDEX IF NOT EXISTS idx_contracts_procurement ON contracts(procurement_id);
 
+-- Every advertised procurement in Sweden, from every registered advertising
+-- database (scraper/uhm_notices.py): Upphandlingsmyndigheten's yearly open
+-- statistics, one row per notice. No deadline and no link, so never a tender
+-- to bid on — what was bought, by whom, and through which database, used for
+-- buyers' history and to measure what the live sources miss.
+CREATE TABLE IF NOT EXISTS uhm_notices (
+    procurement_id  TEXT PRIMARY KEY,   -- upphandlings-id, unique across databases
+    year            INTEGER,
+    published       TEXT,
+    title           TEXT,
+    buyer_name      TEXT,
+    buyer_key       TEXT,               -- buyer_name case-folded, for matching
+    buyer_orgnr     TEXT,
+    buyer_sector    TEXT,
+    cpv             TEXT,               -- main CPV code, eight digits
+    category        TEXT,               -- Tjänster | Varor | Byggentreprenad
+    kind            TEXT,               -- Kontrakt | Ramavtal
+    procedure       TEXT,
+    ad_database     TEXT,
+    above_threshold INTEGER,            -- 1 directive-governed, 0 not, NULL unknown
+    run             INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_uhm_notices_buyer ON uhm_notices(buyer_key);
+CREATE INDEX IF NOT EXISTS idx_uhm_notices_year ON uhm_notices(year, ad_database);
+
 -- What a source last delivered, for sources that publish a whole file now
 -- and then: an unchanged file is not downloaded again.
 CREATE TABLE IF NOT EXISTS source_state (

@@ -1100,6 +1100,10 @@ async def _get_stats(conn, args: dict) -> list[types.Content]:
             f"**Senaste sync:** {ls.get('source')} kl {ls.get('run_at','?')[:19]} — "
             f"{ls.get('count')} records, status={ls.get('status')}"
         )
+    from app import coverage
+    cov = coverage.summary_lines(coverage.coverage(conn))
+    if cov:
+        lines += [""] + cov
     return [types.TextContent(type="text", text="\n".join(lines))]
 
 
@@ -1218,8 +1222,13 @@ async def _get_authority(conn, args: dict) -> list[types.Content]:
         params + [limit],
     ).fetchall()
     items = [_row_dict(r) for r in rows]
+    from app import coverage
+    history = coverage.history_lines(coverage.buyer_history(conn, name))
     if not items:
-        return [types.TextContent(type="text", text=f"Inga upphandlingar hittades för '{name}'. Försök kortare namn.")]
+        text = f"Inga upphandlingar hittades för '{name}' bland de löpande källorna. Försök kortare namn."
+        if history:
+            text += "\n\n" + "\n".join(history)
+        return [types.TextContent(type="text", text=text)]
 
     lines = [f"**{len(items)} upphandlingar från '{name}':**", ""]
     for t in items:
@@ -1234,6 +1243,8 @@ async def _get_authority(conn, args: dict) -> list[types.Content]:
             d_str = "—"
         value = f"{t['value']:,.0f} SEK" if t.get("value") else "—"
         lines.append(f"- [{t['id']}] {t.get('title','(utan titel)')[:80]} ({d_str}, {value})")
+    if history:
+        lines += [""] + history
     return [types.TextContent(type="text", text="\n".join(lines))]
 
 
