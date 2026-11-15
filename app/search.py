@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 import re
+from functools import lru_cache
 import sqlite3
 from typing import Optional
 
@@ -124,6 +125,77 @@ def place_sql() -> str:
     """WHERE fragment for split_place()'s result: in that county, or bought by
     a buyer with the place in its name (most TED notices say only "Sverige")."""
     return "(region LIKE ? OR authority LIKE ?)"
+
+
+# --- What is bought, by its CPV name -------------------------------------
+# The notices often do not say in words what the CPV code says: a tender for
+# "Aggregat till vattenverk" is coded 31682510 Reservkraftssystem. A search
+# word that names a CPV code finds the tenders with that code too, after the
+# ones that have the word. Only specific words do: a word that names more
+# than CPV_MAX_CODES codes ("tjänster": 215, "programvara": 144) says nothing
+# about which, and short words ("väder" → windmills, weather insurance) are
+# too loose.
+CPV_MIN_WORD = 6
+CPV_MAX_CODES = 12
+CPV_MAX_PREFIXES = 4
+
+
+def _cpv_labels() -> dict:
+    from app.related import _labels
+    return _labels()
+
+
+@lru_cache(maxsize=2048)
+def cpv_for_query(query: str) -> tuple[tuple[str, str], ...]:
+    """[(code prefix, Swedish name)] for the CPV codes a search names.
+
+    A one-word search, or any of its Swedish equivalents, of at least
+    CPV_MIN_WORD letters, names a code when it starts a word of the code's
+    name. A search of several words names a code only when every word does:
+    "bärbara datorer" is 30213100, not portable lamps and radios. The prefix
+    is the code without its trailing zeros (90910000 → "9091"), so the
+    branch below it counts, and a code under another one is left out. A
+    parent named "X och Y" that only matched for one of them gives way to
+    its matching children: "meteorologiska" is 3812 Meteorologiska
+    instrument, not all of 381 Navigationsinstrument och meteorologiska
+    instrument."""
+    tokens = [t.casefold() for t in _tokens(query)]
+    if not tokens:
+        return ()
+    if len(tokens) == 1:
+        groups = [[w.casefold()] for w in (tokens[0], *swedish_for(tokens[0]))
+                  if len(w) >= CPV_MIN_WORD and " " not in w]
+    else:
+        groups = [tokens] if all(len(t) >= 4 for t in tokens) else []
+    if not groups:
+        return ()
+    labels = _cpv_labels()
+    found: dict[str, str] = {}
+    for words in groups:
+        pats = [re.compile(r"(^|[\s\-(/,])" + re.escape(w)) for w in words]
+        codes = {c: l for c, l in labels.items() if all(p.search(l.casefold()) for p in pats)}
+        if not codes or len(codes) > CPV_MAX_CODES:
+            continue
+        prefixes = {}
+        for c, l in codes.items():
+            prefix = c.rstrip("0")
+            prefixes[prefix if len(prefix) >= 3 else c[:3]] = l
+        for p, l in prefixes.items():
+            compound = " och " in l.casefold() or "," in l
+            if compound and any(q != p and q.startswith(p) for q in prefixes):
+                continue
+            found.setdefault(p, l)
+    out = []
+    for p in sorted(found, key=len):        # the broadest first: "9091" covers "90911"
+        if not any(p.startswith(q) for q, _ in out):
+            out.append((p, found[p]))
+    return tuple(out[:CPV_MAX_PREFIXES])
+
+
+def cpv_sql(n: int) -> str:
+    """OR-able fragment matching any of n CPV prefixes in cpv_codes (a JSON
+    array of strings): bind '%"<prefix>%' for each."""
+    return " OR ".join(["cpv_codes LIKE ?"] * n)
 
 
 def fts_available(conn: sqlite3.Connection) -> bool:
