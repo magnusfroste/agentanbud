@@ -45,6 +45,8 @@ check("tyska sammansättningar via sin början", swedish_for("Klimadatensatz") =
 check("ß som i frågan", swedish_for("Straßenbau") == swedish_for("strassenbau") == ("väg", "anläggning"))
 check("hela fraser", swedish_for("Circular  Business Model") == ("cirkulär affärsmodell", "cirkulär"))
 check("hochwasser (sett i loggen 7 november)", swedish_for("Hochwasserschutz") == ("högvatten", "översvämning"))
+check("pallar: annonsernas ord (sett i loggen 16 november)",
+      {"lastpall", "europall", "pallbox"} <= set(swedish_for("pallar")))
 check("svenska ord lämnas i fred", swedish_for("ventilation") == () and swedish_for("klimat") == ())
 
 DB = tempfile.mktemp(suffix=".db")

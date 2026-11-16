@@ -165,6 +165,10 @@ TERMS: dict[str, tuple[str, ...]] = {
     "nlp": ("språkteknologi", "språkmodell", "textanalys"),
     "mlops": ("maskininlärning",),
     "agentic": ("ai-agent",),
+    # Searched six times on 16 November with nothing found: the notices say
+    # "lastpallar", "EUR-pall" or "pallbox", and code them 44423330 Lastpallar.
+    "pallar": ("lastpall", "europall", "eurpall", "pallbox", "pall"),
+    "pall": ("lastpall", "europall", "eurpall", "pallbox", "pallar"),
 }
 
 _MIN_PREFIX = 6   # a compound is matched through an entry at least this long
