@@ -40,6 +40,9 @@ check("several words: every one in the name", list(cpv_for_query("bärbara dator
       str(cpv_for_query("bärbara datorer")))
 check("meteorologiska → the instruments, not navigation",
       list(cpv_for_query("meteorologiska")) == [("3812", "Meteorologiska instrument")], str(cpv_for_query("meteorologiska")))
+check("pallar: through 'lastpall' the pallets, not lifting gear for them",
+      ("4442333", "Lastpallar") in cpv_for_query("pallar")
+      and not any(p.startswith("42998") for p, _ in cpv_for_query("pallar")), str(cpv_for_query("pallar")))
 check("a word naming too many codes names none", list(cpv_for_query("programvara")) == [])
 check("a short word names none", list(cpv_for_query("väder")) == [])
 

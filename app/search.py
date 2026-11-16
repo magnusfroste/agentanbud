@@ -172,7 +172,12 @@ def cpv_for_query(query: str) -> tuple[tuple[str, str], ...]:
     labels = _cpv_labels()
     found: dict[str, str] = {}
     for words in groups:
-        pats = [re.compile(r"(^|[\s\-(/,])" + re.escape(w)) for w in words]
+        # The search's own word may start any word of the name. A Swedish
+        # equivalent must start the name itself: "lastpall" is 44423330
+        # Lastpallar, not 42998000 Lyftanordning för lastpallar.
+        own = words == groups[0] and (len(tokens) > 1 or words[0] == tokens[0])
+        lead = r"(^|[\s\-(/,])" if own else r"^"
+        pats = [re.compile(lead + re.escape(w)) for w in words]
         codes = {c: l for c, l in labels.items() if all(p.search(l.casefold()) for p in pats)}
         if not codes or len(codes) > CPV_MAX_CODES:
             continue
