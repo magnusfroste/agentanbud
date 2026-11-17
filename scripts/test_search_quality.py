@@ -58,6 +58,8 @@ ROWS = [
     ("ted", "8", "Expert AI", "Försäkringskassan", "AI-tjänster.", "Sverige", soon),
     ("mercell", "9", "Expert AI", "Försäkringskassan", "AI-tjänster.", None, soon),
     ("mercell", "10", "Mailservice", "Postnord", "E-mail och utskick.", None, soon),
+    ("mercell", "16", "Specialiserad palliativ slutenvård", "Region Halland", "Vård i livets slut.", None, soon),
+    ("mercell", "17", "Lastpallar till förråd", "Region Halland", "EUR-pall i trä.", None, soon),
     ("mercell", "13", "Konsulter elbesiktning", "Stockholms stad", "Konsulter för besiktning.",
      "Stockholms län", soon),
     ("ted", "14", "Expertkonsult IFS", "Luftfartsverket", "Konsult.", "Sverige", soon),
@@ -123,6 +125,9 @@ check("'Stockholms län' drops both words", split_place("städ Stockholms län")
 
 text, t = search(query="expert ai")
 check("the same procurement from two sources is listed once", t.count("Expert AI") == 1, str(t))
+
+text, t = search(query="pallar")
+check("pallar: the pallets, not palliative care", t == ["Lastpallar till förråd"], str(t))
 
 text, t = search(query="expertkonsult ifs")
 check("the same buyer written two ways is still one procurement", t == ["Expertkonsult IFS"], str(t))
