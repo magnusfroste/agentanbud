@@ -47,6 +47,7 @@ check("hela fraser", swedish_for("Circular  Business Model") == ("cirkulär aff�
 check("hochwasser (sett i loggen 7 november)", swedish_for("Hochwasserschutz") == ("högvatten", "översvämning"))
 check("pallar: annonsernas ord (sett i loggen 16 november)",
       {"lastpall", "europall", "pallbox"} <= set(swedish_for("pallar")))
+check("…but not 'pall', which as a start is also 'palliativ'", "pall" not in swedish_for("pallar"))
 check("svenska ord lämnas i fred", swedish_for("ventilation") == () and swedish_for("klimat") == ())
 
 DB = tempfile.mktemp(suffix=".db")

@@ -167,7 +167,9 @@ TERMS: dict[str, tuple[str, ...]] = {
     "agentic": ("ai-agent",),
     # Searched six times on 16 November with nothing found: the notices say
     # "lastpallar", "EUR-pall" or "pallbox", and code them 44423330 Lastpallar.
-    "pallar": ("lastpall", "europall", "eurpall", "pallbox", "pall"),
+    # Not "pall" itself: searched as a start it is also "palliativ", and
+    # "pallar" answered with palliative care (17 November).
+    "pallar": ("lastpall", "europall", "eurpall", "pallbox"),
     "pall": ("lastpall", "europall", "eurpall", "pallbox", "pallar"),
 }
 
