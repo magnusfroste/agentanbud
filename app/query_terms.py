@@ -157,6 +157,11 @@ TERMS: dict[str, tuple[str, ...]] = {
     "nödström": ("reservkraft", "avbrottsfri kraft"),
     "webbdesign": ("webbplats", "webbutveckling", "webbyrå"),
     "väderdata": ("väderprognos", "väderobservation", "meteorolog"),
+    # Searched with nothing found, 19 November: the notices say it another way.
+    "nederbörd": ("meteorolog", "väderobservation", "väderprognos"),
+    "nedbörd": ("nederbörd", "meteorolog", "väderobservation", "väderprognos"),
+    "datorseende": ("bildanalys", "maskinseende", "bildigenkänning", "videoanalys",
+                    "kameraövervakning"),
     "vinddata": ("vindmätning", "vindkartering"),
     "klimadata": ("klimatdata", "klimat"),
     "nis2": ("nis", "cybersäkerhet", "informationssäkerhet"),
