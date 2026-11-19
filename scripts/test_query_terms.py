@@ -48,6 +48,9 @@ check("hochwasser (sett i loggen 7 november)", swedish_for("Hochwasserschutz") =
 check("pallar: annonsernas ord (sett i loggen 16 november)",
       {"lastpall", "europall", "pallbox"} <= set(swedish_for("pallar")))
 check("…but not 'pall', which as a start is also 'palliativ'", "pall" not in swedish_for("pallar"))
+check("nederbörd och datorseende (sett i loggen 19 november)",
+      "meteorolog" in swedish_for("nederbörd") and "nederbörd" in swedish_for("nedbörd")
+      and {"bildanalys", "maskinseende"} <= set(swedish_for("datorseende")))
 check("svenska ord lämnas i fred", swedish_for("ventilation") == () and swedish_for("klimat") == ())
 
 DB = tempfile.mktemp(suffix=".db")
