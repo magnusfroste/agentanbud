@@ -19,6 +19,7 @@ Enable/disable individual sources via env vars (see docker-compose.yml):
   SCRAPE_QUESTIONS=true
   SCRAPE_UHM_CONTRACTS=true
   SCRAPE_UHM_NOTICES=true
+  SCRAPE_SYNONYMS=true      (does nothing without LLM_BASE_URL, LLM_API_KEY, LLM_MODEL)
 """
 from __future__ import annotations
 
@@ -27,7 +28,7 @@ import os
 import time
 from typing import Callable
 
-from . import mercell, ted, ted_awards, ted_pin, lov, kommersannons, criteria, questions, uhm_contracts, uhm_notices
+from . import mercell, ted, ted_awards, ted_pin, lov, kommersannons, criteria, questions, uhm_contracts, uhm_notices, synonyms
 from app.db import connect, prune_logs
 
 LOG = logging.getLogger(__name__)
@@ -52,6 +53,8 @@ def _registry() -> list[tuple[str, bool, Callable[[str], int]]]:
         # Once a year a new file; on other days it stops at the headers.
         ("uhm_contracts", _truthy(os.environ.get("SCRAPE_UHM_CONTRACTS", "true")), uhm_contracts.run),
         ("uhm_notices", _truthy(os.environ.get("SCRAPE_UHM_NOTICES", "true")), uhm_notices.run),
+        # Last: it reads the week's searches and checks against today's data.
+        ("synonyms", _truthy(os.environ.get("SCRAPE_SYNONYMS", "true")), synonyms.run),
     ]
 
 

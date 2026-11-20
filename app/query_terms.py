@@ -189,6 +189,11 @@ def swedish_for(text: str) -> tuple[str, ...]:
     t = " ".join((text or "").casefold().split())
     if t in _FOLDED:
         return _FOLDED[t]
+    # Learned at night and checked against the data (app/learned.py).
+    from app import learned
+    found = learned.lookup(t)
+    if found:
+        return found
     if " " in t:
         return ()
     for key in _BY_LENGTH:
