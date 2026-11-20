@@ -7,6 +7,9 @@
 # exits with it, the container stops, and `restart: unless-stopped` starts a
 # new one. SIGTERM from `docker stop` is passed on, so a deploy still shuts
 # the app down cleanly.
+# cron gives its jobs no environment: hand it the variables the sync reads
+# (scripts/cron_env.py) before starting it.
+python /app/scripts/cron_env.py || echo "cron_env failed; the sync runs on defaults"
 cron
 uvicorn app.main:get_app --factory --host 0.0.0.0 --port 8080 &
 APP=$!

@@ -37,4 +37,14 @@ services:
       - SCRAPE_KOMMERSANNONS=${SCRAPE_KOMMERSANNONS:-true}
       - SCRAPE_CRITERIA=${SCRAPE_CRITERIA:-true}
       - SCRAPE_QUESTIONS=${SCRAPE_QUESTIONS:-true}
+      - SCRAPE_UHM_CONTRACTS=${SCRAPE_UHM_CONTRACTS:-true}
+      - SCRAPE_UHM_NOTICES=${SCRAPE_UHM_NOTICES:-true}
+      - SCRAPE_SYNONYMS=${SCRAPE_SYNONYMS:-true}
+      # Synonyms learned at night (scraper/synonyms.py): an OpenAI-compatible
+      # API. Off unless all three are set. The key lives only in Easypanel.
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - LLM_SYNONYMS_MODE=${LLM_SYNONYMS_MODE:-suggest}
+      - LLM_SYNONYMS_PER_NIGHT=${LLM_SYNONYMS_PER_NIGHT:-15}
     restart: unless-stopped
