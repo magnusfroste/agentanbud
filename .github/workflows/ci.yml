@@ -119,7 +119,9 @@ jobs:
           docker exec app grep -q 'scripts/watchdog.py' /etc/cron.d/agentanbud
           # cron gets the container's environment from a root-only file.
           docker exec app grep -q '/etc/agentanbud.env' /etc/cron.d/agentanbud
-          docker exec app sh -c '[ "$(stat -c %a /etc/agentanbud.env)" = 600 ] && grep -q "^export DB_PATH=" /etc/agentanbud.env'
+          # (CI starts the container with no variables, so the file is empty
+          # here; what goes into it is scripts/test_cron_env.py's to check.)
+          docker exec app sh -c '[ -f /etc/agentanbud.env ] && [ "$(stat -c %a /etc/agentanbud.env)" = 600 ]'
           docker exec app sh -c 'tr "\0" " " < /proc/1/cmdline' | grep -q start.sh
           # A healthy server is left alone.
           docker exec app python scripts/watchdog.py
