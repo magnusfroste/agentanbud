@@ -254,6 +254,8 @@ if ALLOW_OPEN_ADMIN and not ADMIN_API_KEY:
 
 def create_app(db_path: Optional[str] = None) -> FastAPI:
     db = db_path or DB_PATH
+    from app import learned
+    learned.DB_PATH = db
     try:
         init_db(db)
     except Exception as exc:
@@ -1784,6 +1786,33 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
                 # (app/coverage.py, from Upphandlingsmyndigheten's statistics).
                 "coverage": coverage.coverage(conn),
             }
+        finally:
+            conn.close()
+
+    @app.get("/api/ops/synonyms", include_in_schema=False)
+    def ops_synonyms(request: Request) -> dict:
+        """Synonyms learned at night (app/learned.py), newest first. Admin."""
+        _require_admin(request)
+        from app import learned
+        conn = connect(db)
+        try:
+            return {"synonyms": learned.listing(conn)}
+        finally:
+            conn.close()
+
+    @app.post("/api/ops/synonyms", include_in_schema=False)
+    def ops_synonym_status(request: Request, term: str = Query(...), alt: str = Query(...),
+                           status: str = Query(...)) -> dict:
+        """Set a learned synonym to active (searched with) or rejected. Admin."""
+        _require_admin(request)
+        if status not in ("active", "rejected", "suggested"):
+            raise HTTPException(status_code=400, detail="status must be active, rejected or suggested")
+        from app import learned
+        conn = connect(db)
+        try:
+            if not learned.set_status(conn, term, alt, status):
+                raise HTTPException(status_code=404, detail="no such synonym")
+            return {"term": term, "alt": alt, "status": status}
         finally:
             conn.close()
 

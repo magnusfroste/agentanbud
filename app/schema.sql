@@ -275,6 +275,21 @@ CREATE TABLE IF NOT EXISTS uhm_notices (
 CREATE INDEX IF NOT EXISTS idx_uhm_notices_buyer ON uhm_notices(buyer_key);
 CREATE INDEX IF NOT EXISTS idx_uhm_notices_year ON uhm_notices(year, ad_database);
 
+-- Synonyms learned at night (app/learned.py, scraper/synonyms.py): a search
+-- that found nothing, a word the notices use instead, and whether it passed
+-- the checks. Only status 'active' is searched with.
+CREATE TABLE IF NOT EXISTS learned_terms (
+    term        TEXT NOT NULL,          -- the search, case-folded
+    alt         TEXT NOT NULL,          -- the suggested word ('' when none came)
+    status      TEXT NOT NULL,          -- suggested | active | rejected
+    open_hits   INTEGER,
+    reason      TEXT,
+    model       TEXT,
+    created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (term, alt)
+);
+
 -- What a source last delivered, for sources that publish a whole file now
 -- and then: an unchanged file is not downloaded again.
 CREATE TABLE IF NOT EXISTS source_state (

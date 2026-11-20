@@ -145,8 +145,14 @@ def _cpv_labels() -> dict:
     return _labels()
 
 
-@lru_cache(maxsize=2048)
 def cpv_for_query(query: str) -> tuple[tuple[str, str], ...]:
+    """cpv_for_query_cached() for the current set of learned synonyms."""
+    from app import learned
+    return _cpv_for_query(query, learned.version())
+
+
+@lru_cache(maxsize=2048)
+def _cpv_for_query(query: str, _learned_version: int) -> tuple[tuple[str, str], ...]:
     """[(code prefix, Swedish name)] for the CPV codes a search names.
 
     A one-word search, or any of its Swedish equivalents, of at least
