@@ -33,11 +33,13 @@ COPY mcp_*.py /app/
 COPY scripts/ /app/scripts/
 COPY --from=meta /meta/build_info.json /app/build_info.json
 
-# Cron entry — runs the orchestrator once daily.
+# Cron entry — runs the orchestrator once daily, with the container's
+# environment from /etc/agentanbud.env (written by scripts/cron_env.py at start;
+# cron itself passes none).
 # Time is interpreted in the container's local timezone.
 ENV CRON_SCHEDULE="0 6 * * *"
 # Second line: scripts/watchdog.py restarts the app when it stops answering.
-RUN printf 'PATH=/usr/local/bin:/usr/bin:/bin\n%s root cd /app && python -m scraper.orchestrator >> /var/log/agentanbud.log 2>&1\n*/2 * * * * root cd /app && python scripts/watchdog.py >> /var/log/agentanbud.log 2>&1\n' \
+RUN printf 'PATH=/usr/local/bin:/usr/bin:/bin\n%s root cd /app && { [ -f /etc/agentanbud.env ] && . /etc/agentanbud.env; python -m scraper.orchestrator; } >> /var/log/agentanbud.log 2>&1\n*/2 * * * * root cd /app && python scripts/watchdog.py >> /var/log/agentanbud.log 2>&1\n' \
         "$CRON_SCHEDULE" > /etc/cron.d/agentanbud && \
     chmod 0644 /etc/cron.d/agentanbud && \
     touch /var/log/agentanbud.log
