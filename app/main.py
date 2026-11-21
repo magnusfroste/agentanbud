@@ -1789,6 +1789,24 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
         finally:
             conn.close()
 
+    @app.get("/api/synonyms")
+    def public_synonyms(limit: int = Query(default=200, ge=1, le=500)) -> dict:
+        """Synonyms learned at night (app/learned.py), newest first: the
+        search, the suggested word, whether it is searched with, its open
+        hits and why it was kept or rejected. Read-only and open — the
+        searches are the same ones /analytics lists as unmet demand.
+        Changing a status needs the admin key (POST /api/ops/synonyms)."""
+        from app import learned
+        conn = connect(db)
+        try:
+            rows = [{k: r[k] for k in ("term", "alt", "status", "open_hits", "reason", "created_at")}
+                    for r in learned.listing(conn, limit) if r["alt"]]
+            return {"synonyms": rows,
+                    "counts": {s: sum(1 for r in rows if r["status"] == s)
+                               for s in ("suggested", "active", "rejected")}}
+        finally:
+            conn.close()
+
     @app.get("/api/ops/synonyms", include_in_schema=False)
     def ops_synonyms(request: Request) -> dict:
         """Synonyms learned at night (app/learned.py), newest first. Admin."""
