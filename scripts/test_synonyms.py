@@ -121,6 +121,15 @@ api = TestClient(APP, base_url="https://testserver")
 check("the list needs the admin key", api.get("/api/ops/synonyms").status_code in (401, 403))
 listing = api.get("/api/ops/synonyms", headers={"X-Admin-Key": KEY}).json()["synonyms"]
 check("…and with it shows every suggestion", len(listing) >= 5, str(len(listing)))
+pub = api.get("/api/synonyms")
+check("the read-only list is open, without the key", pub.status_code == 200, str(pub.status_code))
+pj = pub.json()
+check("…with each suggestion, its status and reason, and the counts",
+      any(r["alt"] == "lastpall" and r["status"] == "suggested" and r["reason"] for r in pj["synonyms"])
+      and pj["counts"]["suggested"] == 1, str(pj)[:300])
+check("…but not the model name", all("model" not in r for r in pj["synonyms"]))
+check("changing a status still needs the key", api.post(
+    "/api/ops/synonyms", params={"term": "godspallar", "alt": "lastpall", "status": "active"}).status_code in (401, 403))
 r = api.post("/api/ops/synonyms", params={"term": "godspallar", "alt": "lastpall", "status": "active"},
              headers={"X-Admin-Key": KEY})
 check("activating one", r.status_code == 200, r.text)
