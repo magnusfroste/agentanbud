@@ -228,6 +228,13 @@ def main() -> int:
             # whatever is serving, and the SHA check names the build. Bailing
             # here would report a timeout and hide a broken deploy behind it.
             print("  (tidsgränsen nåddes — testar det som faktiskt kör)")
+        # A fresh container computes the usage figures behind /analytics once,
+        # 15-40 s on the server (app/usage_cache.py), and the first reader
+        # waits for it: on 23 November /analytics timed out right after a
+        # deploy and answered in under a second a minute later. Wait for that
+        # computation here, so the page check below measures the page.
+        status, _ = get_json(base, "/api/analytics", timeout=120)
+        print(f"  (besöksstatistiken uppvärmd: HTTP {status})")
 
     # ---- 1. Drift -----------------------------------------------------------
     print("1. Drift")
