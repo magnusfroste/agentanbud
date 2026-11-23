@@ -121,7 +121,8 @@ def sha_matches(running: str, want: str) -> bool:
     return a[:n] == b[:n]
 
 
-def wait_for_health(base: str, seconds: int, expect_sha: str | None = None) -> bool:
+def wait_for_health(base: str, seconds: int, expect_sha: str | None = None,
+                    started_after: str | None = None) -> bool:
     """Poll /api/health until the build we are testing is the one serving.
 
     Waiting for a 200 is not enough during a deploy: the *previous* container
@@ -132,6 +133,11 @@ def wait_for_health(base: str, seconds: int, expect_sha: str | None = None) -> b
 
     Without --expect-sha there is nothing to compare against, so we fall back
     to plain reachability and the caller accepts that weaker guarantee.
+
+    The commit alone is not enough when the deploy rebuilds the commit already
+    live (a re-run): the old container matches at once and is then restarted
+    mid-test, which answered 502 on 23 November. --started-after (the time the
+    deploy was triggered, UTC) also waits for a container started since then.
     """
     deadline = time.time() + seconds
     attempt = 0
@@ -145,13 +151,17 @@ def wait_for_health(base: str, seconds: int, expect_sha: str | None = None) -> b
                     print(f"  (uppe efter {attempt} försök)")
                 return True
             running = ((health or {}).get("build") or {}).get("commit") or ""
-            if sha_matches(running, expect_sha):
+            started = str((health or {}).get("started_at") or "")
+            restarted = not started_after or started >= started_after
+            if sha_matches(running, expect_sha) and restarted:
                 if attempt > 1:
                     print(f"  (rätt bygge live efter {attempt} försök)")
                 return True
-            if running[:7] != last_seen:
-                last_seen = running[:7]
-                print(f"  …uppe, men kör {last_seen or '?'} — väntar på {expect_sha[:7]}")
+            seen = running[:7] if restarted else f"{running[:7]} startad {started or '?'}"
+            if seen != last_seen:
+                last_seen = seen
+                print(f"  …uppe, men kör {seen or '?'} — väntar på {expect_sha[:7]}"
+                      + ("" if restarted else f" startad efter {started_after}"))
         if time.time() >= deadline:
             return False
         time.sleep(10)
@@ -192,6 +202,9 @@ def main() -> int:
                          "With --expect-sha it waits for that build to be live, not just for a 200")
     ap.add_argument("--expect-sha", default=None,
                     help="commit you just deployed; fails if another build is serving")
+    ap.add_argument("--started-after", default=None,
+                    help="UTC time the deploy was triggered (YYYY-MM-DDTHH:MM:SSZ); "
+                         "also wait for a container started since then")
     ap.add_argument("--key", default=None,
                     help="admin key; only used to confirm write endpoints reject requests without it")
     args = ap.parse_args()
@@ -210,7 +223,7 @@ def main() -> int:
             print(f"Väntar upp till {args.wait}s på att {args.expect_sha[:7]} går live…")
         else:
             print(f"Väntar upp till {args.wait}s på att appen svarar…")
-        if not wait_for_health(base, args.wait, args.expect_sha):
+        if not wait_for_health(base, args.wait, args.expect_sha, args.started_after):
             # Not fatal on its own: the checks below say *what* is wrong with
             # whatever is serving, and the SHA check names the build. Bailing
             # here would report a timeout and hide a broken deploy behind it.

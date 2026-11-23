@@ -195,6 +195,7 @@ jobs:
             echo "skip=1" >> "$GITHUB_ENV"
             exit 0
           fi
+          echo "triggered_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
           code=$(curl -sS -m 60 -o resp.txt -w '%{http_code}' -X POST "$DEPLOY_URL")
           echo "Easypanel answered HTTP $code"
           if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
@@ -205,4 +206,4 @@ jobs:
 
       - name: Wait for this commit to go live, then smoke-test it
         if: env.skip != '1'
-        run: python scripts/smoke_test.py --base https://agentanbud.se --expect-sha "$GITHUB_SHA" --wait 600
+        run: python scripts/smoke_test.py --base https://agentanbud.se --expect-sha "$GITHUB_SHA" --started-after "$triggered_at" --wait 600
