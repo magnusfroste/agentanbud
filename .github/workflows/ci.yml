@@ -149,7 +149,7 @@ jobs:
   # Deploy to production, only from main and only after both checks above
   # pass, so a red build never reaches the site. Easypanel runs this as a
   # compose app, which has no auto-deploy setting; its deploy trigger is a
-  # URL, kept in the EASYPANEL_DEPLOY_URL secret (never in the repo: anyone
+  # URL, kept in the AGENTANBUD_DEPLOY_URL secret (or the older EASYPANEL_DEPLOY_URL) (never in the repo: anyone
   # holding it can redeploy). The server's own ports are closed, so the URL
   # goes through the Cloudflare tunnel.
   #
@@ -170,12 +170,28 @@ jobs:
         with:
           python-version: "3.12"
 
+      # A deploy restarts the container, and the nightly sync runs inside it
+      # (06:00 UTC, about a quarter of an hour). A merge in that window waits
+      # for the sync to finish instead of cutting it off.
+      - name: Wait out the nightly sync
+        run: |
+          while :; do
+            now=$(date -u +%H%M)
+            if [ "$now" -ge 0555 ] && [ "$now" -lt 0625 ]; then
+              echo "nightly sync window ($now UTC): waiting"; sleep 60
+            else
+              break
+            fi
+          done
+
       - name: Trigger the deploy
         env:
-          DEPLOY_URL: ${{ secrets.EASYPANEL_DEPLOY_URL }}
+          # A repository secret (Settings -> Secrets and variables -> Actions):
+          # Easypanel's deploy webhook for this app. The older name still works.
+          DEPLOY_URL: ${{ secrets.AGENTANBUD_DEPLOY_URL || secrets.EASYPANEL_DEPLOY_URL }}
         run: |
           if [ -z "$DEPLOY_URL" ]; then
-            echo "::warning::EASYPANEL_DEPLOY_URL is not set; skipping the deploy"
+            echo "::warning::AGENTANBUD_DEPLOY_URL is not set; skipping the deploy"
             echo "skip=1" >> "$GITHUB_ENV"
             exit 0
           fi

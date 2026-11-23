@@ -126,8 +126,12 @@ def _walk_pages(
     max_pages: int = DEFAULT_MAX_PAGES,
     page_size: int = DEFAULT_PAGE_SIZE,
     delay_s: float = DEFAULT_REQUEST_DELAY_S,
+    reach: Optional[dict] = None,
 ) -> Iterator[dict]:
-    """Yield Mercell records, paginating until empty page or max_pages."""
+    """Yield Mercell records, paginating until empty page or max_pages.
+
+    `reach`, when given, gets "oldest": the earliest publicationDate seen on
+    any page (all countries) — how far back the walk got."""
     ua = _user_agent()
     seen: set[str] = set()
     with httpx.Client(
@@ -149,6 +153,10 @@ def _walk_pages(
                 LOG.warning("mercell page %d fetch failed: %s", page, exc)
                 return
             results = data.get("results") or []
+            if reach is not None:
+                dates = [str(r.get("publicationDate") or "") for r in results if r.get("publicationDate")]
+                if dates:
+                    reach["oldest"] = min([*dates, *([reach["oldest"]] if reach.get("oldest") else [])])
             if not results:
                 LOG.info("mercell page %d empty, stopping", page)
                 return
@@ -186,13 +194,41 @@ def _dedupe_stale(records: list[dict]) -> list[dict]:
     return kept
 
 
+# The public search stops at 10,000 records (100 pages of 100), across every
+# country, newest first. In November 2026 that reached eleven days back, so a
+# nightly walk saw every Swedish notice. Should Mercell grow until it reaches
+# less than this, notices published between two walks would be missed: the
+# sync log says so.
+MIN_REACH_HOURS = 36
+
+
+def reach_note(oldest: Optional[str], now: Optional[float] = None) -> str:
+    """'back to <date>' for the sync log, with a warning when the walk did
+    not reach MIN_REACH_HOURS back."""
+    from datetime import datetime, timezone
+    if not oldest:
+        return "okänt hur långt bakåt"
+    try:
+        t = datetime.fromisoformat(oldest.replace("Z", "+00:00"))
+    except ValueError:
+        return f"bakåt till {oldest[:10]}"
+    now_dt = datetime.fromtimestamp(now, timezone.utc) if now else datetime.now(timezone.utc)
+    hours = (now_dt - t).total_seconds() / 3600
+    note = f"bakåt till {oldest[:10]} ({hours / 24:.1f} dygn)"
+    if hours < MIN_REACH_HOURS:
+        note += (f" — VARNING: under {MIN_REACH_HOURS} h, annonser mellan två körningar kan "
+                 f"missas; kör oftare")
+    return note
+
+
 def run(db_path: str) -> int:
     """Walk Mercell, upsert everything, log the run. Returns rows written."""
     init_db(db_path)
     conn = connect(db_path)
     written = 0
+    reach: dict = {}
     try:
-        for rec in _dedupe_stale(list(_walk_pages())):
+        for rec in _dedupe_stale(list(_walk_pages(reach=reach))):
             try:
                 upsert_tender(conn, _map_record(rec))
                 written += 1
@@ -201,7 +237,7 @@ def run(db_path: str) -> int:
                 LOG.warning("mercell record %r failed: %s", rec.get("id"), exc)
         conn.commit()
         log_sync(conn, source="mercell", status="ok", count=written,
-                 message=f"walked up to {DEFAULT_MAX_PAGES} pages")
+                 message=f"walked up to {DEFAULT_MAX_PAGES} pages, {reach_note(reach.get('oldest'))}")
         LOG.info("mercell: wrote/updated %d tenders", written)
         return written
     except Exception as exc:
