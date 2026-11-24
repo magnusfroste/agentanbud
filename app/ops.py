@@ -241,6 +241,10 @@ def install(db_path: str, connect) -> None:
                 conn = connect(db_path)
                 try:
                     STATS.flush(conn)
+                    # Browser user agents that never ran the page script
+                    # are crawlers (app/browsers.py), before the rollup reads them.
+                    from app import browsers
+                    browsers.reclassify(conn)
                     # Days for the growth page: at start, then hourly. Off the
                     # request path: it groups all of usage_log.
                     if time.monotonic() - last_rollup > 3600:

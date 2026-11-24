@@ -39,6 +39,10 @@
     Kommer en besökare via en länk på en annan sajt sparar vi bara den
     sajtens domän, t.ex. "linkedin.com" — aldrig resten av adressen, som
     kan peka ut en profil, ett inlägg eller en sökning.
+    Varje sida skickar en tom signal när den har laddats, så att vi vet att
+    besöks-id:t hör till en webbläsare som kör JavaScript. Sidvisningar från
+    program som bara uppger en webbläsares namn räknas sedan som crawlers.
+    Signalen innehåller ingenting och sparas bara som dygnets besöks-id.
     Den enda cookien på sajten är inloggningen till vår egen driftpanel.
   </p>
 </section>
@@ -82,6 +86,9 @@
   <div class="insight-kpi">
     <div class="v">{{ "{:,}".format(kpis.bot_views).replace(",", " ") }}</div>
     <div class="l">🕷️ Crawlers (indexering)</div>
+    {%- if kpis.no_js_views %}
+    <div class="l muted">varav {{ "{:,}".format(kpis.no_js_views).replace(",", " ") }} från program med en webbläsares namn som inte kör JavaScript</div>
+    {%- endif %}
   </div>
 </section>
 

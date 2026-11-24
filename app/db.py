@@ -263,6 +263,7 @@ def prune_logs(conn: sqlite3.Connection, days: int = 30, counter_days: int = 400
             "DELETE FROM usage_log WHERE created_at < DATE('now', ?)", (cutoff,))
         deleted += _delete(
             "DELETE FROM post_events WHERE created_at < DATE('now', ?)", (cutoff,))
+        _delete("DELETE FROM browser_js WHERE day < DATE('now', ?)", (cutoff,))
         _delete("DELETE FROM daily_counters WHERE day < DATE('now', ?)",
                 (f"-{int(counter_days)} days",))
         conn.commit()

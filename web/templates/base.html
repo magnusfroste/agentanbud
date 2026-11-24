@@ -149,5 +149,13 @@
       </span>
     </div>
   </footer>
+  <script>
+  /* Tells the statistics this is a browser that runs scripts, not a program
+     with a browser's name (app/browsers.py). Sends nothing but the request. */
+  (function () {
+    try { if (navigator.sendBeacon && navigator.sendBeacon('/api/seen')) return; } catch (e) {}
+    try { fetch('/api/seen', { method: 'POST', keepalive: true }).catch(function () {}); } catch (e) {}
+  })();
+  </script>
 </body>
 </html>
