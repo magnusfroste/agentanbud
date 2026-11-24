@@ -184,6 +184,17 @@ CREATE TABLE IF NOT EXISTS request_hourly (
 -- One random salt per UTC day for the visitor id (app/visitors.py). The row
 -- for an earlier day is deleted as soon as today's exists, so an id from a
 -- past day cannot be recomputed by anyone.
+-- Visitor ids (the same daily hash usage_log holds) whose browser ran the
+-- page script that day: a pageview from an id never seen here is a program
+-- with a browser's user agent, not a person (app/browsers.py). Pruned with
+-- usage_log.
+CREATE TABLE IF NOT EXISTS browser_js (
+    day      TEXT NOT NULL,
+    v        TEXT NOT NULL,
+    first_at TEXT NOT NULL,
+    PRIMARY KEY (day, v)
+);
+
 CREATE TABLE IF NOT EXISTS visitor_salt (
     day   TEXT PRIMARY KEY,
     salt  TEXT NOT NULL

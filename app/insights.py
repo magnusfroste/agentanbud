@@ -332,6 +332,12 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         f"SELECT COALESCE(SUM(n), 0) FROM daily_counters {counter_where}", counter_args
     ).fetchone()[0] or 0) + scalar("action = 'view' AND json_extract(meta, '$.bot') = 1")
     view_total = human_views + bot_views
+    # Of the bot views: browser user agents that never ran the page script
+    # (app/browsers.py), shown so the reclassification is not hidden.
+    no_js_views = conn.execute(
+        "SELECT COALESCE(SUM(n), 0) FROM daily_counters WHERE kind = 'nojs_view'"
+        + (" AND day >= DATE('now', ?)" if days else ""), counter_args
+    ).fetchone()[0] or 0
 
     searches = scalar(REAL_SEARCH)
     # Split by channel. `searches` alone was labelled "Sökningar på webben"
@@ -564,7 +570,7 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         "period_days": days, "since": since,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "events_total": events_total,
-        "visits": {"total": view_total, "human": human_views, "bot": bot_views,
+        "visits": {"total": view_total, "human": human_views, "bot": bot_views, "no_js": no_js_views,
                    "human_pct": int(human_views / view_total * 100) if view_total else 0},
         "searches": searches,
         "web_searches": web_searches,
@@ -603,7 +609,9 @@ def format_usage_markdown(s: dict) -> str:
     v = s["visits"]
     out = [f"# Agentanbud — användning ({period})", "",
            f"**Besök:** {v['total']} ({v['human']} mänskliga / {v['bot']} botar & crawlers, "
-           f"{v['human_pct']}% mänskliga)",
+           f"{v['human_pct']}% mänskliga"
+           + (f"; {v['no_js']} av robotbesöken var program med en webbläsares namn som inte kör JavaScript"
+              if v.get("no_js") else "") + ")",
            f"**Sökningar:** {s['searches']} — {s.get('web_searches', 0)} i sökrutan på webbsidan, "
            f"{s.get('api_searches', 0)} via REST-API:t",
            f"**MCP-anslutningar:** {s.get('mcp_connects', 0)}"

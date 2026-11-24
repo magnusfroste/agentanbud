@@ -360,6 +360,28 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
             LOG.exception("pageview logging failed")
         return response
 
+    def _mark_browser(address: str, user_agent: str) -> None:
+        from app import browsers
+        conn = connect(db)
+        try:
+            browsers.mark(conn, visitors.visitor_id(conn, address, user_agent))
+        finally:
+            conn.close()
+
+    @app.post("/api/seen", include_in_schema=False)
+    async def api_seen(request: Request):
+        """The page script of every page: this visitor's browser runs scripts.
+        Programs that only send a browser's user agent never call it, and
+        their pageviews become crawler views (app/browsers.py)."""
+        ua = request.headers.get("user-agent", "")
+        address = request.headers.get("cf-connecting-ip")
+        if address and not _looks_like_bot(ua):
+            try:
+                await run_in_threadpool(_mark_browser, address, ua)
+            except Exception:
+                LOG.exception("browser mark failed")
+        return Response(status_code=204)
+
     # ---- Request counters for /ops ----
     # In memory, flushed once a minute by ops.install's thread: no database
     # write on the request path.
@@ -1504,7 +1526,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
 
             v = s["visits"]
             kpis = {"views": v["total"], "human_views": v["human"],
-                    "bot_views": v["bot"], "human_pct": v["human_pct"],
+                    "bot_views": v["bot"], "no_js_views": v.get("no_js", 0), "human_pct": v["human_pct"],
                     "searches": s["searches"], "web_searches": s["web_searches"],
                     "api_searches": s["api_searches"], "agent_calls": s["agent_calls"],
                     "automated_calls": s.get("automated_calls", 0),
