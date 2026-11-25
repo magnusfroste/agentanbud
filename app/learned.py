@@ -109,16 +109,23 @@ def _open_sql() -> str:
 def check(conn, term: str, alt: str, division: Optional[str]) -> tuple[bool, int, str]:
     """(usable, open hits, why) for one suggested alternative."""
     from datetime import datetime
-    from app.search import build_match, match_subquery
+    from app.search import CONTENT_COLUMNS, _quote, fts_available, match_subquery
     a = _fold(alt)
     if a == _fold(term):
         return False, 0, "samma som sökningen"
     if len(a.replace(" ", "")) < MIN_LEN or not _WORD.match(a) or len(a.split()) > 3:
         return False, 0, "för kort eller inte ett ord"
-    match = build_match(conn, a)
-    if not match:
-        return False, 0, "finns inte i datan"
+    if not fts_available(conn):
+        return False, 0, "sökindexet saknas"
+    # Counted the way search uses a synonym (app/search._term): the word as it
+    # is, a prefix, in titles and descriptions. Not build_match, which
+    # shortens a word that finds nothing: on 25 November 'förvaringslådor'
+    # passed with one hit that was 'förvaringslösningar', and then found
+    # nothing when searched with.
+    match = f"{CONTENT_COLUMNS} : ({_quote(a)})"
     total = conn.execute(f"SELECT COUNT(*) FROM ({match_subquery()})", [match]).fetchone()[0]
+    if not total:
+        return False, 0, "finns inte i datan"
     if total > MAX_HITS:
         return False, 0, f"för brett ({total} träffar)"
     now = datetime.now().isoformat(timespec="seconds")

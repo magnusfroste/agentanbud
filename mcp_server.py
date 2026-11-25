@@ -840,7 +840,9 @@ async def _search_tenders(conn, args: dict) -> list[types.Content]:
         synced = mcp_shared.data_freshness(conn)["updated_at"] or ""
     except Exception:
         synced = ""
-    key = synced + "|" + SearchCache.key(args)
+    # A synonym approved or rejected changes the answer too (app/learned.py).
+    from app import learned
+    key = f"{synced}|{learned.version()}|" + SearchCache.key(args)
     now = time.monotonic()
     hit = SEARCH_CACHE.get(key, now)
     if hit is None:
