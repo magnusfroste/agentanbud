@@ -53,7 +53,7 @@ from app.version import build_info, version_string
 # for local development.
 ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "")
 ALLOW_OPEN_ADMIN = os.environ.get("ALLOW_OPEN_ADMIN", "").lower() in ("1", "true", "yes")
-WRITE_TOOLS = {"create_post", "update_post"}
+WRITE_TOOLS = {"create_post", "update_post", "review_synonym"}
 
 
 def _is_authed(request: Request) -> bool:
@@ -234,6 +234,10 @@ async def _run_tool(conn, name: str, arguments: dict) -> list:
         return await mcp_server._get_post(conn, arguments or {})
     if name == "get_post_stats":
         return await mcp_server._get_post_stats(conn, arguments or {})
+    if name == "list_synonyms":
+        return await mcp_server._list_synonyms(conn, arguments or {})
+    if name == "review_synonym":
+        return await mcp_server._review_synonym(conn, arguments or {})
     if name == "create_post":
         return await mcp_server._create_post(conn, arguments or {})
     if name == "update_post":
@@ -457,6 +461,17 @@ def _tool_list(include_write: bool = False) -> list[dict]:
                 "properties": {"slug": {"type": "string", "description": "Optional: one post's slug. Omit for all."}}
             }
         },
+        {
+            "name": "list_synonyms",
+            "description": "Synonyms learned at night: searches that found nothing, and the word the notices use instead (e.g. 'hyrsjuksköterskor' → 'sjuksköterskebemanning'). A language model suggests them, checks against the data keep only words that find open tenders in the right CPV division, and active ones are searched with. status='suggested' (default) lists those waiting for review, 'active' those searched with now, 'rejected' those turned down with the reason. Review now and then with review_synonym (admin key): approve an alternative only when it names the same thing as the search; reject broader categories (e.g. 'urologi' for 'resektoskop') and other meanings.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string", "enum": ["suggested", "active", "rejected", "all"], "default": "suggested"},
+                    "limit": {"type": "integer", "default": 50, "minimum": 1, "maximum": 200}
+                }
+            }
+        },
     ]
     if include_write:
         tools += [
@@ -490,6 +505,19 @@ def _tool_list(include_write: bool = False) -> list[dict]:
                         "status": {"type": "string", "enum": ["published", "draft"]}
                     },
                     "required": ["slug"]
+                }
+            },
+            {
+                "name": "review_synonym",
+                "description": "Approve or reject a learned synonym (requires admin key). decision='active' makes search_tenders also search alt when someone searches term; 'rejected' stops that. Use list_synonyms first. Approve only an alternative that names the same thing as the search, not a broader category or another meaning. Safe to undo: call again with the other decision.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "term": {"type": "string", "description": "The search, as list_synonyms shows it."},
+                        "alt": {"type": "string", "description": "The suggested word, as list_synonyms shows it."},
+                        "decision": {"type": "string", "enum": ["active", "rejected"]}
+                    },
+                    "required": ["term", "alt", "decision"]
                 }
             },
         ]

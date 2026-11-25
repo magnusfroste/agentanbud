@@ -224,12 +224,14 @@ Kilo Code m.fl. med bara en URL — inga nycklar, verktygen listas automatiskt.
 claude mcp add --transport http agentanbud https://www.agentanbud.se/mcp
 ```
 
-**18 öppna läsverktyg:** `search_tenders`, `get_tender`, `similar_tenders`,
+**20 öppna läsverktyg:** `search_tenders`, `get_tender`, `similar_tenders`,
 `deadline_calendar`, `match_profile`, `get_winner_history`, `get_supplier`, `expected_tenders`, `get_authority`,
 `get_stats`, `list_providers`, `list_regions`, `list_cpv_top`,
-`search_knowledge`, `get_knowledge`, `list_posts`, `get_post`, `get_post_stats`.
-Plus 2 nyckel-skyddade skrivverktyg (`create_post`, `update_post`) för den
-agent-författade bloggen på `/blogg` — se [`MCP.md`](MCP.md).
+`search_knowledge`, `get_knowledge`, `list_posts`, `get_post`, `get_post_stats`,
+`get_usage_stats`, `list_synonyms`.
+Plus 3 nyckel-skyddade skrivverktyg: `create_post` och `update_post` för den
+agent-författade bloggen på `/blogg`, och `review_synonym` för att granska
+synonymerna som lärs in nattetid — se [`MCP.md`](MCP.md).
 
 `get_winner_history` är marknadsintelligensen: fråga *"vem brukar vinna
 byggupphandlingar hos Trafikverket?"* och få leverantörer rankade efter

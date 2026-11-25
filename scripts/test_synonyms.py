@@ -92,7 +92,7 @@ check("…and the sync log says why", "inte satta" in last_sync()["message"], st
 
 print("\nSuggest mode")
 os.environ.update({"LLM_BASE_URL": "https://llm.example.invalid/v1/", "LLM_API_KEY": LLM_KEY,
-                   "LLM_MODEL": "test-model"})
+                   "LLM_MODEL": "test-model", "LLM_SYNONYMS_MODE": "suggest"})
 n = synonyms.run(DB, client=client)
 check("one suggestion passes", n == 1, str(n))
 check("the URL gets /chat/completions after /v1", sent[0]["url"] == "https://llm.example.invalid/v1/chat/completions",
@@ -163,12 +163,47 @@ page = ops_c.get("/ops/synonymer").text
 check("…and the page then lists it as searched with", "Inga förslag väntar" in page and "Ta bort" in page)
 ops_c.post("/api/ops/synonyms", params={"term": "godspallar", "alt": "lastpall", "status": "rejected"}, headers=same)
 
+print("\nOver MCP")
+H = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
+
+
+def mcp(name, args, headers=None):
+    r = api.post("/mcp", headers={**H, **(headers or {})}, json={
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args}})
+    body = r.json()
+    return "\n".join(x["text"] for x in body["result"]["content"]) if "result" in body else str(body)
+
+
+def listed(headers=None):
+    r = api.post("/mcp", headers={**H, **(headers or {})}, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    return {t["name"] for t in r.json()["result"]["tools"]}
+
+
+check("list_synonyms is open to every agent", "list_synonyms" in listed())
+check("review_synonym is listed only with the key", "review_synonym" not in listed()
+      and "review_synonym" in listed({"x-admin-key": KEY}))
+api.post("/api/ops/synonyms", params={"term": "godspallar", "alt": "lastpall", "status": "suggested"},
+         headers={"X-Admin-Key": KEY})
+text = mcp("list_synonyms", {})
+check("list_synonyms shows what waits, with hits and the check's verdict, and how to review",
+      "`godspallar` → `lastpall`" in text and "öppna träffar" in text and "review_synonym" in text, text[:400])
+refused = mcp("review_synonym", {"term": "godspallar", "alt": "lastpall", "decision": "active"})
+check("review_synonym without the key changes nothing", swedish_for("godspallar") == () and "✅" not in refused,
+      refused[:200])
+done = mcp("review_synonym", {"term": "godspallar", "alt": "lastpall", "decision": "active"}, {"x-admin-key": KEY})
+check("review_synonym with the key activates it", "✅" in done and swedish_for("godspallar") == ("lastpall",), done)
+check("…and list_synonyms then shows it as active", "`godspallar` → `lastpall`" in mcp("list_synonyms", {"status": "active"}))
+mcp("review_synonym", {"term": "godspallar", "alt": "lastpall", "decision": "rejected"}, {"x-admin-key": KEY})
+check("…and rejecting it takes it away again", swedish_for("godspallar") == ())
+check("an unknown pair is said to be unknown", "Hittade inget" in mcp(
+    "review_synonym", {"term": "x", "alt": "y", "decision": "active"}, {"x-admin-key": KEY}))
+
 print("\nAuto mode, and nothing asked twice")
 sent.clear()
-os.environ["LLM_SYNONYMS_MODE"] = "auto"
+os.environ.pop("LLM_SYNONYMS_MODE")   # auto is the default
 synonyms._unmet = lambda conn, limit: ["lastpalls"]
 answers["lastpalls"] = {"cpv_division": "44", "alternatives": ["lastpall"]}
-check("a checked suggestion is active at once", synonyms.run(DB, client=client) == 1
+check("by default a checked suggestion is active at once", synonyms.run(DB, client=client) == 1
       and swedish_for("lastpalls") == ("lastpall",), str(swedish_for("lastpalls")))
 print("\nThe real list of searches to ask about")
 import importlib  # noqa: E402

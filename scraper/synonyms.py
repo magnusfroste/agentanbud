@@ -8,8 +8,12 @@ Configured entirely by the environment, and off without it:
                      full .../chat/completions URL)
   LLM_API_KEY        sent as "Authorization: Bearer …"; never logged
   LLM_MODEL          the model name the API expects
-  LLM_SYNONYMS_MODE  "suggest" (default): store suggestions for review.
-                     "auto": checked suggestions are searched with at once.
+  LLM_SYNONYMS_MODE  "auto" (default): a suggestion that passes the checks in
+                     app/learned.py is searched with at once; an agent reviews
+                     the list now and then (MCP list_synonyms/review_synonym,
+                     or /ops/synonymer) and rejects what is too broad.
+                     "suggest": store suggestions, searched with only once
+                     someone approves them.
   LLM_SYNONYMS_PER_NIGHT  how many searches to ask about (default 15)
 
 What is sent: the search word (anonymous — no visitor, no address, no time)
@@ -52,8 +56,8 @@ def _config() -> Optional[dict]:
     url = base.rstrip("/")
     if not url.endswith("/chat/completions"):
         url += "/chat/completions"
-    mode = os.environ.get("LLM_SYNONYMS_MODE", "suggest").strip().lower()
-    return {"url": url, "key": key, "model": model, "mode": "auto" if mode == "auto" else "suggest",
+    mode = os.environ.get("LLM_SYNONYMS_MODE", "auto").strip().lower()
+    return {"url": url, "key": key, "model": model, "mode": "suggest" if mode == "suggest" else "auto",
             "per_night": int(os.environ.get("LLM_SYNONYMS_PER_NIGHT", "15") or 15)}
 
 

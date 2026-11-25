@@ -17,9 +17,11 @@ safe to search with:
     search belongs to. That is the check "pall" would have failed: its
     matches were palliative care (85) where the search was pallets (44).
 
-What passes is stored in learned_terms as "suggested", or "active" when
-LLM_SYNONYMS_MODE=auto. Only active rows are searched with. /api/ops/synonyms
-lists them, and an admin can activate or reject each one.
+What passes is stored in learned_terms as "active" (LLM_SYNONYMS_MODE=auto,
+the default) or "suggested" (=suggest). Only active rows are searched with.
+An agent reviews them now and then over MCP (list_synonyms, review_synonym
+with the admin key), or a person on /ops/synonymer, and rejects what the
+checks let through but is too broad.
 
 app/query_terms.swedish_for reads the active ones through lookup(), from a
 cache reloaded every RELOAD_S — never a database read per search.
