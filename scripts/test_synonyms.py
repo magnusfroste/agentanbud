@@ -144,6 +144,25 @@ r = api.post("/api/ops/synonyms", params={"term": "godspallar", "alt": "lastpall
              headers={"X-Admin-Key": KEY})
 check("rejecting takes it away again", r.status_code == 200 and swedish_for("godspallar") == ())
 
+print("\nThe buttons on /ops")
+ops_c = TestClient(APP, base_url="https://testserver")
+same = {"origin": "https://testserver"}
+ops_c.post("/ops/login", data={"key": KEY}, headers=same, follow_redirects=False)
+page = ops_c.get("/ops/synonymer")
+check("/ops/synonymer lists the suggestion with its buttons",
+      page.status_code == 200 and 'data-alt="lastpall"' in page.text and 'data-status="active"' in page.text
+      and "/api/ops/synonyms?" in page.text, f"HTTP {page.status_code}")
+check("…and the side panel counts what waits", 'href="/ops/synonymer"' in page.text and KEY not in page.text)
+check("a button press from another site is refused", ops_c.post(
+    "/api/ops/synonyms", params={"term": "godspallar", "alt": "lastpall", "status": "active"},
+    headers={"origin": "https://evil.example"}).status_code == 403)
+r = ops_c.post("/api/ops/synonyms", params={"term": "godspallar", "alt": "lastpall", "status": "active"}, headers=same)
+check("a button press from /ops activates it with the session", r.status_code == 200 and
+      swedish_for("godspallar") == ("lastpall",), r.text)
+page = ops_c.get("/ops/synonymer").text
+check("…and the page then lists it as searched with", "Inga förslag väntar" in page and "Ta bort" in page)
+ops_c.post("/api/ops/synonyms", params={"term": "godspallar", "alt": "lastpall", "status": "rejected"}, headers=same)
+
 print("\nAuto mode, and nothing asked twice")
 sent.clear()
 os.environ["LLM_SYNONYMS_MODE"] = "auto"

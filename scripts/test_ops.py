@@ -80,10 +80,10 @@ print("Logged in")
 r = c.get("/ops")
 check("/ops shows the overview", r.status_code == 200 and "Behöver uppmärksamhet" in r.text and "Ops Central" in r.text)
 check("the key appears nowhere on the page", KEY not in r.text)
-SECTIONS = ["maskinen", "trafik", "fel", "synk", "agenter", "inloggningar", "versioner", "konfiguration"]
+SECTIONS = ["maskinen", "trafik", "fel", "synk", "agenter", "synonymer", "inloggningar", "versioner", "konfiguration"]
 check("the side panel links every page", all(f'href="/ops/{x}"' in r.text for x in SECTIONS))
 MARK = {"maskinen": "Rader per tabell", "trafik": "Anrop per timme", "fel": "sedan start", "synk": "Kör synk nu",
-        "agenter": "Senaste verktygsanropen", "inloggningar": "Alla försök", "versioner": "Driftsättningar",
+        "agenter": "Senaste verktygsanropen", "synonymer": "Väntar på beslut", "inloggningar": "Alla försök", "versioner": "Driftsättningar",
         "konfiguration": "Admin-nyckel"}
 for x in SECTIONS:
     rx = c.get(f"/ops/{x}")

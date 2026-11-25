@@ -1348,6 +1348,21 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                     "callers": ops.top_callers(conn, 24),
                     "search_cache": _search_cache_stats(),
                     "agent_calls": usage.get("agent_calls"), "agent_sessions": usage.get("agent_sessions")}
+        if section == "synonymer":
+            # Suggestions to decide on, grouped by the search they answer;
+            # then what is searched with now, and the latest rejections.
+            from app import learned
+            rows = learned.listing(conn, limit=2000)
+            pending: dict = {}
+            for r in rows:
+                if r["status"] == "suggested":
+                    pending.setdefault(r["term"], []).append(r)
+            return {"pending": [{"term": t, "alts": sorted(a, key=lambda r: -(r["open_hits"] or 0))}
+                                for t, a in sorted(pending.items())],
+                    "active": [r for r in rows if r["status"] == "active"],
+                    "rejected": [r for r in rows if r["status"] == "rejected" and r["alt"]][:60],
+                    "counts": {k: sum(r["status"] == k for r in rows) for k in ("suggested", "active", "rejected")},
+                    "mode": os.environ.get("LLM_SYNONYMS_MODE", "suggest").strip().lower() or "suggest"}
         if section == "inloggningar":
             return {"logins": ops.logins(conn), "summary": ops.login_summary(conn, 24),
                     "summary_30d": ops.login_summary(conn, 24 * 30)}
@@ -1412,7 +1427,12 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
     def _nav(conn) -> dict:
         """Badges for the side panel: cheap counts only."""
         failed = ops.login_summary(conn, 24)["failed"]
-        return {"fel": len(ops.ERRORS.items) + len(ops.STATS.recent_5xx), "inloggningar": failed}
+        try:
+            pending = conn.execute("SELECT COUNT(*) FROM learned_terms WHERE status = 'suggested'").fetchone()[0]
+        except Exception:
+            pending = 0
+        return {"fel": len(ops.ERRORS.items) + len(ops.STATS.recent_5xx), "inloggningar": failed,
+                "synonymer": pending}
 
     def _ops_render(request: Request, section: str) -> Response:
         conn = connect(db)

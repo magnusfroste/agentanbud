@@ -515,6 +515,7 @@ SECTIONS = [
     ("synk", "Synk"),
     ("tillvaxt", "Tillväxt"),
     ("agenter", "Agenter"),
+    ("synonymer", "Synonymer"),
     ("inloggningar", "Inloggningar"),
     ("versioner", "Versioner"),
     ("konfiguration", "Konfiguration"),
