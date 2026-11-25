@@ -127,13 +127,29 @@ check("…med rubrik, datum, bild och utgivare",
 check("…och en brödsmula via bloggen", any(b["@type"] == "BreadcrumbList" for b in blocks(bp)))
 
 print("\nSitemap och llms.txt")
-sm = c.get("/sitemap.xml").text
+sm = c.get("/sitemap-1.xml").text
 check("upphandlingen har lastmod = publiceringsdagen",
       f"/tenders/{tid}</loc><lastmod>2026-10-14</lastmod>" in sm)
 upsert_tender(conn, tender(source_id="2", published_at="okänt"))
 conn.commit()
 check("ett konstigt datum ger ingen lastmod, inte en trasig",
-      "<lastmod>okänt" not in c.get("/sitemap.xml").text)
+      "<lastmod>okänt" not in c.get("/sitemap-1.xml").text)
+idx = c.get("/sitemap.xml").text
+check("/sitemap.xml är ett index som pekar på delfilerna",
+      "<sitemapindex" in idx and "https://www.agentanbud.se/sitemap-1.xml</loc>" in idx, idx[:200])
+total = c.get("/sitemap-1.xml").text.count("<url>")
+saved = m.SITEMAP_CHUNK
+m.SITEMAP_CHUNK = 2
+try:
+    files = c.get("/sitemap.xml").text.count("<sitemap>")
+    parts = [c.get(f"/sitemap-{n}.xml").text for n in range(1, files + 1)]
+    sizes = [t.count("<url>") for t in parts]
+    check("ingen delfil över gränsen, och alla adresser kommer med",
+          files > 1 and max(sizes) <= 2 and sum(sizes) == total
+          and f"/tenders/{tid}<" in "".join(parts), (total, sizes))
+    check("en delfil bortom sista svarar 404", c.get(f"/sitemap-{files + 1}.xml").status_code == 404)
+finally:
+    m.SITEMAP_CHUNK = saved
 llms = c.get("/llms.txt").text
 check("llms.txt nämner alla källor",
       all(s in llms.split("## För AI-agenter")[0] for s in ("TED", "Mercell", "Kommersannons", "Upphandlingsmyndigheten")))

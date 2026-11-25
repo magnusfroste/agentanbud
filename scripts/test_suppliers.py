@@ -163,7 +163,7 @@ idx = c.get("/leverantor").text
 check("indexet: flest kontrakt först", re.findall(r'<a href="/leverantor/([a-z0-9-]+)">', idx)
       == [f"sweco-sverige-ab-{SWECO}", f"ncc-sverige-ab-{NCC}"])
 check("köparsidan länkar vinnarna", f'href="/leverantor/sweco-sverige-ab-{SWECO}"' in c.get("/kopare/goteborgs-stad").text)
-sm = c.get("/sitemap.xml").text
+sm = c.get("/sitemap-1.xml").text
 check("sitemap", f"/leverantor/sweco-sverige-ab-{SWECO}<" in sm and "/leverantor<" in sm and PERSON not in sm)
 check("sidfoten", 'href="/leverantor"' in c.get("/").text)
 

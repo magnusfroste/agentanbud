@@ -131,7 +131,7 @@ check("TED-upphandling länkar till branschen men inte till ett län",
       'href="/upphandlingar/bransch/vvs"' in c.get(f"/tenders/{ted_id}").text
       and "/upphandlingar/lan/" not in c.get(f"/tenders/{ted_id}").text)
 check("sidfoten länkar till indexet", 'href="/upphandlingar"' in c.get("/").text)
-sm = c.get("/sitemap.xml").text
+sm = c.get("/sitemap-1.xml").text
 check("sitemap har alla sidor", all(f"https://www.agentanbud.se{hub.path}<" in sm for hub in hubs.SECTORS + hubs.COUNTIES))
 
 if failures:
