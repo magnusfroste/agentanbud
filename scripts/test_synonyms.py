@@ -198,6 +198,24 @@ check("…and rejecting it takes it away again", swedish_for("godspallar") == ()
 check("an unknown pair is said to be unknown", "Hittade inget" in mcp(
     "review_synonym", {"term": "x", "alt": "y", "decision": "active"}, {"x-admin-key": KEY}))
 
+print("\nCounted the way search uses it")
+c = connect(DB)
+ok, hits, why = learned.check(c, "godspall", "lastpallsystem", "44")
+check("a word found only by shortening it is not in the data", not ok and why == "finns inte i datan", f"{ok} {hits} {why}")
+ok, hits, why = learned.check(c, "godspall", "lastpall", "44")
+check("…while a word that starts a word in a title is", ok and hits == 1, f"{ok} {hits} {why}")
+before = asyncio.run(mcp_server._search_tenders(c, {"query": "godspallar"}))[0].text
+c.close()
+api.post("/api/ops/synonyms", params={"term": "godspallar", "alt": "lastpall", "status": "active"},
+         headers={"X-Admin-Key": KEY})
+c = connect(DB)
+after = asyncio.run(mcp_server._search_tenders(c, {"query": "godspallar"}))[0].text
+c.close()
+check("an approved synonym reaches a search already answered from the cache",
+      "Lastpallar till förråd" not in before and "Lastpallar till förråd" in after, after[:200])
+api.post("/api/ops/synonyms", params={"term": "godspallar", "alt": "lastpall", "status": "rejected"},
+         headers={"X-Admin-Key": KEY})
+
 print("\nAuto mode, and nothing asked twice")
 sent.clear()
 os.environ.pop("LLM_SYNONYMS_MODE")   # auto is the default
