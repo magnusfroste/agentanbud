@@ -114,7 +114,7 @@ check("men inte där sidan saknas", "/kopare/" not in c.get(f"/tenders/{ale}").t
 gone = conn.execute("SELECT id FROM tenders WHERE title = 'Åre 0'").fetchone()[0]
 check("stängd hos köpare utan öppna: 'inga öppna', inte 'inga andra'",
       "inga öppna upphandlingar" in c.get(f"/tenders/{gone}").text)
-sm = c.get("/sitemap.xml").text
+sm = c.get("/sitemap-1.xml").text
 check("sitemap har köparsidorna", "/kopare/orebro-kommun<" in sm and "/kopare/are-kommun<" in sm and "/kopare<" in sm)
 check("sidfoten länkar till köparna", 'href="/kopare"' in c.get("/").text)
 

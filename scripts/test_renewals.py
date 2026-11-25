@@ -148,7 +148,7 @@ check("branschsidan har avsnittet", "Väntas upphandlas inom IT-tjänster och pr
 check("köparsidan har avsnittet", "Väntas upphandlas av Göteborgs Stad" in c.get("/kopare/goteborgs-stad").text)
 check("/upphandlingar/{id} leder fortfarande till upphandlingen",
       c.get("/upphandlingar/12", follow_redirects=False).headers.get("location") == "/tenders/12")
-check("sitemap och indexet", "/upphandlingar/vantas<" in c.get("/sitemap.xml").text
+check("sitemap och indexet", "/upphandlingar/vantas<" in c.get("/sitemap-1.xml").text
       and 'href="/upphandlingar/vantas"' in c.get("/upphandlingar").text)
 
 print("\nMCP: expected_tenders")

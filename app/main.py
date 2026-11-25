@@ -88,6 +88,10 @@ STATIC_DIR = Path(__file__).parent.parent / "web" / "static"
 
 DEFAULT_PAGE_SIZE = 25
 MAX_PAGE_SIZE = 200
+# Google reads at most 50,000 URLs from one sitemap file and drops the rest
+# with an error. In November 2026 the single /sitemap.xml held 54,837, so
+# /sitemap.xml is an index and the URLs are served in files of this size.
+SITEMAP_CHUNK = 40_000
 
 # Admin auth — when set, mutating endpoints require the X-Admin-Key header
 # and /api/admin/query becomes available. When unset (local dev), mutating
@@ -545,8 +549,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
 
     _ISO_DAY = _re.compile(r"\d{4}-\d{2}-\d{2}")
 
-    @app.get("/sitemap.xml", include_in_schema=False)
-    def sitemap_xml():
+    def _sitemap_urls() -> list[str]:
         conn = connect(db)
         try:
             static_paths = ["/", "/browse", "/dashboard", "/providers",
@@ -566,23 +569,45 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
         finally:
             conn.close()
 
-        parts = ['<?xml version="1.0" encoding="UTF-8"?>',
-                 '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
-        for p in static_paths:
-            parts.append(f"<url><loc>{SITE_URL}{p}</loc><changefreq>daily</changefreq></url>")
+        urls = [f"<url><loc>{SITE_URL}{p}</loc><changefreq>daily</changefreq></url>"
+                for p in static_paths]
         for r in posts:
             lastmod = (r["updated_at"] or "")[:10]
             lm = f"<lastmod>{lastmod}</lastmod>" if lastmod else ""
-            parts.append(f"<url><loc>{SITE_URL}/blogg/{r['slug']}</loc>{lm}</url>")
+            urls.append(f"<url><loc>{SITE_URL}/blogg/{r['slug']}</loc>{lm}</url>")
         for r in tenders:
             # A notice rarely changes after it is published, so the publish
             # date is the honest lastmod; fetched_at moves on every daily sync.
             day = (r["published_at"] or "")[:10]
             lm = f"<lastmod>{day}</lastmod>" if _ISO_DAY.fullmatch(day) else ""
-            parts.append(f"<url><loc>{SITE_URL}/tenders/{r['id']}</loc>{lm}</url>")
-        parts.append("</urlset>")
-        return Response("\n".join(parts), media_type="application/xml",
+            urls.append(f"<url><loc>{SITE_URL}/tenders/{r['id']}</loc>{lm}</url>")
+        return urls
+
+    def _xml(body: str) -> Response:
+        return Response(body, media_type="application/xml",
                         headers={"Cache-Control": "public, max-age=3600"})
+
+    @app.get("/sitemap.xml", include_in_schema=False)
+    def sitemap_xml():
+        # An index: robots.txt and Search Console keep pointing here, and the
+        # files below it stay under Google's 50,000-URL limit as tenders grow.
+        files = max(1, math.ceil(len(_sitemap_urls()) / SITEMAP_CHUNK))
+        parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+                 '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+        parts += [f"<sitemap><loc>{SITE_URL}/sitemap-{n}.xml</loc></sitemap>"
+                  for n in range(1, files + 1)]
+        parts.append("</sitemapindex>")
+        return _xml("\n".join(parts))
+
+    @app.get("/sitemap-{n}.xml", include_in_schema=False)
+    def sitemap_part(n: int):
+        urls = _sitemap_urls()
+        chunk = urls[(n - 1) * SITEMAP_CHUNK:n * SITEMAP_CHUNK] if n >= 1 else []
+        if not chunk and not (n == 1 and not urls):
+            raise HTTPException(status_code=404, detail="No such sitemap file")
+        parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+                 '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">', *chunk, "</urlset>"]
+        return _xml("\n".join(parts))
 
     # ---- Pages ----
     @app.get("/", include_in_schema=False)
