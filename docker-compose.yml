@@ -45,6 +45,6 @@ services:
       - LLM_BASE_URL=${LLM_BASE_URL:-}
       - LLM_API_KEY=${LLM_API_KEY:-}
       - LLM_MODEL=${LLM_MODEL:-}
-      - LLM_SYNONYMS_MODE=${LLM_SYNONYMS_MODE:-suggest}
+      - LLM_SYNONYMS_MODE=${LLM_SYNONYMS_MODE:-auto}
       - LLM_SYNONYMS_PER_NIGHT=${LLM_SYNONYMS_PER_NIGHT:-15}
     restart: unless-stopped

@@ -492,10 +492,10 @@ Inte för att konkurrera med plattformarna, utan för att hjälpa marknaden fung
 ## För AI-agenter (MCP)
 
 - MCP-endpoint (Streamable HTTP): {SITE_URL}/mcp
-- 18 öppna läsverktyg: search_tenders, get_tender, similar_tenders,
+- 20 öppna läsverktyg: search_tenders, get_tender, similar_tenders,
   deadline_calendar, match_profile, get_winner_history, get_supplier, expected_tenders, get_authority,
   get_stats, list_providers, list_regions, list_cpv_top, search_knowledge,
-  get_knowledge, list_posts, get_post, get_post_stats.
+  get_knowledge, list_posts, get_post, get_post_stats, get_usage_stats, list_synonyms.
 - Inga API-nycklar krävs för läsning. Anslut med bara URL:en.
 - Datan hämtas en gång per dygn, med start klockan 06 UTC. Samma fråga
   före nästa hämtning ger samma svar: för bevakning räcker en fråga per
@@ -1387,7 +1387,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                     "active": [r for r in rows if r["status"] == "active"],
                     "rejected": [r for r in rows if r["status"] == "rejected" and r["alt"]][:60],
                     "counts": {k: sum(r["status"] == k for r in rows) for k in ("suggested", "active", "rejected")},
-                    "mode": os.environ.get("LLM_SYNONYMS_MODE", "suggest").strip().lower() or "suggest"}
+                    "mode": "suggest" if os.environ.get("LLM_SYNONYMS_MODE", "auto").strip().lower() == "suggest" else "auto"}
         if section == "inloggningar":
             return {"logins": ops.logins(conn), "summary": ops.login_summary(conn, 24),
                     "summary_30d": ops.login_summary(conn, 24 * 30)}

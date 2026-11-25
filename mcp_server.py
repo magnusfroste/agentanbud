@@ -638,6 +638,17 @@ def _tool_objects() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="list_synonyms",
+            description="Synonyms learned at night: searches that found nothing, and the word the notices use instead (e.g. 'hyrsjuksköterskor' → 'sjuksköterskebemanning'). A language model suggests them, checks against the data keep only words that find open tenders in the right CPV division, and active ones are searched with. status='suggested' (default) lists those waiting for review, 'active' those searched with now, 'rejected' those turned down with the reason. Review now and then with review_synonym (admin key): approve an alternative only when it names the same thing as the search; reject broader categories (e.g. 'urologi' for 'resektoskop') and other meanings.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string", "enum": ["suggested", "active", "rejected", "all"], "default": "suggested"},
+                    "limit": {"type": "integer", "default": 50, "minimum": 1, "maximum": 200}
+                }
+            },
+        ),
+        types.Tool(
             name="create_post",
             description="Publish a new blog post (requires admin key). Write body_md in Markdown. Use for a daily procurement-news post; check get_post_stats first to see what engages readers.",
             inputSchema={
@@ -667,6 +678,19 @@ def _tool_objects() -> list[types.Tool]:
                     "status": {"type": "string", "enum": ["published", "draft"]}
                 },
                 "required": ["slug"]
+            },
+        ),
+        types.Tool(
+            name="review_synonym",
+            description="Approve or reject a learned synonym (requires admin key). decision='active' makes search_tenders also search alt when someone searches term; 'rejected' stops that. Use list_synonyms first. Approve only an alternative that names the same thing as the search, not a broader category or another meaning. Safe to undo: call again with the other decision.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "term": {"type": "string", "description": "The search, as list_synonyms shows it."},
+                    "alt": {"type": "string", "description": "The suggested word, as list_synonyms shows it."},
+                    "decision": {"type": "string", "enum": ["active", "rejected"]}
+                },
+                "required": ["term", "alt", "decision"]
             },
         ),
     ]
@@ -717,6 +741,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.Content]:
             return await _get_post(conn, arguments)
         elif name == "get_post_stats":
             return await _get_post_stats(conn, arguments)
+        elif name == "list_synonyms":
+            return await _list_synonyms(conn, arguments)
+        elif name == "review_synonym":
+            return await _review_synonym(conn, arguments)
         elif name == "create_post":
             return await _create_post(conn, arguments)
         elif name == "update_post":
@@ -1623,6 +1651,41 @@ async def _get_post(conn, args: dict) -> list[types.Content]:
         f"{d.get('body_md') or ''}\n\n---\n📊 {views} visningar · {reads} läste hela."
     )
     return [types.TextContent(type="text", text=body)]
+
+
+async def _list_synonyms(conn, args: dict) -> list[types.Content]:
+    """The learned synonyms (app/learned.py), for an agent to review."""
+    from app import learned
+    status = (args.get("status") or "suggested").strip().lower()
+    limit = max(1, min(int(args.get("limit") or 50), 200))
+    rows = [r for r in learned.listing(conn, 5000) if r["alt"]]
+    counts = {k: sum(r["status"] == k for r in rows) for k in ("suggested", "active", "rejected")}
+    pick = rows if status == "all" else [r for r in rows if r["status"] == status]
+    head = (f"**Synonymer:** {counts['suggested']} väntar på granskning, {counts['active']} söks med, "
+            f"{counts['rejected']} avvisade.")
+    if not pick:
+        return [types.TextContent(type="text", text=head + f"\n\nInga med status '{status}'.")]
+    lines = [head, "", f"**{status}** ({min(len(pick), limit)} av {len(pick)}), sökning → föreslaget ord:", ""]
+    for r in pick[:limit]:
+        tag = "" if status != "all" else f"[{r['status']}] "
+        lines.append(f"- {tag}`{r['term']}` → `{r['alt']}` · {r['open_hits'] or 0} öppna träffar · {r['reason'] or ''}")
+    if status in ("suggested", "all") and counts["suggested"]:
+        lines += ["", "Granska med review_synonym(term, alt, decision='active' | 'rejected'). Godkänn bara ett ord "
+                  "som betyder samma sak som sökningen; avvisa bredare kategorier och andra betydelser. "
+                  "Ett beslut går att ändra genom att anropa igen."]
+    return [types.TextContent(type="text", text="\n".join(lines))]
+
+
+async def _review_synonym(conn, args: dict) -> list[types.Content]:
+    from app import learned
+    term, alt = (args.get("term") or "").strip(), (args.get("alt") or "").strip()
+    decision = (args.get("decision") or "").strip().lower()
+    if not term or not alt or decision not in ("active", "rejected"):
+        return [types.TextContent(type="text", text="Ange term, alt och decision ('active' eller 'rejected').")]
+    if not learned.set_status(conn, term, alt, decision):
+        return [types.TextContent(type="text", text=f"Hittade inget förslag `{term}` → `{alt}`. Se list_synonyms.")]
+    what = "söks nu med" if decision == "active" else "söks inte med"
+    return [types.TextContent(type="text", text=f"✅ `{term}` → `{alt}`: {decision}. `{alt}` {what} när någon söker `{term}` (inom tio minuter).")]
 
 
 async def _get_post_stats(conn, args: dict) -> list[types.Content]:

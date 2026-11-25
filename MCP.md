@@ -25,6 +25,7 @@ Agentanbud exponerar sina data via [Model Context Protocol](https://modelcontext
 | `get_post` | Hämta ett blogginlägg + engagemangsstatistik |
 | `get_post_stats` | Visningar, läste-hela och läs-grad per inlägg |
 | `get_usage_stats` | Sajtens användning: besök, sökningar, agentanrop, branschefterfrågan — för rapportering/bloggande |
+| `list_synonyms` | Synonymer som lärts in nattetid: sökningar utan träff och ordet annonserna använder i stället, med status och skäl |
 
 **Nyckel-skyddade skrivverktyg** (kräver `X-Admin-Key`-header, exponeras bara då):
 
@@ -32,8 +33,9 @@ Agentanbud exponerar sina data via [Model Context Protocol](https://modelcontext
 |---|---|
 | `create_post` | Publicera ett nytt blogginlägg (Markdown) |
 | `update_post` | Uppdatera/avpublicera ett inlägg |
+| `review_synonym` | Godkänn eller avvisa en inlärd synonym |
 
-De 17 läsverktygen är alltid öppna. Skrivverktygen (blogg) kräver nyckeln —
+De 20 läsverktygen är alltid öppna. Skrivverktygen (blogg, synonymgranskning) kräver nyckeln —
 skickas som `X-Admin-Key`-header i MCP-klientens config. Övriga skriv-/adminåtgärder
 går via REST. (Stdio-servern för lokal körning har även `sync_now`.)
 
@@ -126,6 +128,22 @@ create_post(
 En agent kan alltså köra en daglig loop: `get_post_stats` (vad engagerade) →
 browsa/sök → `create_post`. Läs-graden (hur många som scrollade till slutet)
 blir input till nästa ämnesval.
+
+### "Gå igenom synonymerna" (kräver admin-nyckel, då och då)
+
+Varje natt föreslår en språkmodell vad annonserna kallar sökningar som inte gav
+något, och förslag som klarar kontrollerna mot datan söks med direkt. En agent
+går igenom listan ibland och tar bort det som är för brett:
+
+```python
+list_synonyms(status="active")      # det som söks med nu
+list_synonyms()                     # det som väntar (om nattjobbet står på suggest)
+review_synonym(term="resektoskop", alt="urologi", decision="rejected")   # bredare kategori
+review_synonym(term="plastlådor", alt="förvaringslådor", decision="active")
+```
+
+Godkänn bara ett ord som betyder samma sak som sökningen. Ett beslut går att
+ändra genom att anropa igen. Samma lista finns för människor på `/ops/synonymer`.
 
 ### "Skriv ett dagligt inlägg om hur sajten används" (operator-agent)
 
