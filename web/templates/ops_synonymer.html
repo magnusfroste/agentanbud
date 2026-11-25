@@ -1,0 +1,84 @@
+{% extends "ops_base.html" %}
+{% block ops %}
+<div class="card"><h2>Synonymer från natten</h2>
+  <div class="kv">
+    <div>Väntar på beslut</div><div>{{ d.counts.suggested }}</div>
+    <div>Söks med nu</div><div>{{ d.counts.active }}</div>
+    <div>Avvisade</div><div>{{ d.counts.rejected }}</div>
+    <div>Läge</div><div>{{ 'auto: godkända förslag söks med direkt' if d.mode == 'auto' else 'förslag: inget söks med förrän du godkänt det' }}</div>
+  </div>
+  <p class="note">Varje natt föreslår en språkmodell vad annonserna kallar sökningar som inte gav något, och bara förslag som klarat kontrollerna mot datan hamnar här (app/learned.py). Godkänn det som betyder samma sak som sökningen; avvisa det som är bredare eller något annat. Ett godkänt ord söks med inom tio minuter, och kan tas bort igen nedan.</p>
+  <div id="syn-result" class="small" aria-live="polite"></div>
+</div>
+
+<div class="card"><h2>Väntar på beslut</h2>
+  {% if d.pending %}
+  <table><thead><tr><th>Sökning</th><th>Förslag</th><th class="num">Öppna träffar</th><th>Kontroll</th><th></th></tr></thead><tbody>
+  {% for g in d.pending %}{% for r in g.alts %}
+    <tr data-term="{{ r.term }}" data-alt="{{ r.alt }}">
+      <td>{% if loop.first %}<b>{{ r.term }}</b>{% endif %}</td>
+      <td><a href="/browse?q={{ r.alt | urlencode }}" target="_blank" rel="noopener">{{ r.alt }}</a></td>
+      <td class="num">{{ r.open_hits }}</td>
+      <td class="small">{{ r.reason or '' }}</td>
+      <td class="nowrap"><button class="btn primary" data-status="active">Godkänn</button>
+        <button class="btn" data-status="rejected">Avvisa</button></td>
+    </tr>
+  {% endfor %}{% endfor %}
+  </tbody></table>
+  {% else %}<div class="empty">Inga förslag väntar.</div>{% endif %}
+</div>
+
+<div class="card"><h2>Söks med nu</h2>
+  {% if d.active %}
+  <table><thead><tr><th>Sökning</th><th>Söker också</th><th class="num">Öppna träffar</th><th></th></tr></thead><tbody>
+  {% for r in d.active %}
+    <tr data-term="{{ r.term }}" data-alt="{{ r.alt }}">
+      <td>{{ r.term }}</td>
+      <td><a href="/browse?q={{ r.alt | urlencode }}" target="_blank" rel="noopener">{{ r.alt }}</a></td>
+      <td class="num">{{ r.open_hits }}</td>
+      <td class="nowrap"><button class="btn" data-status="rejected">Ta bort</button></td>
+    </tr>
+  {% endfor %}
+  </tbody></table>
+  {% else %}<div class="empty">Inga godkända synonymer än.</div>{% endif %}
+</div>
+
+<div class="card"><h2>Senast avvisade</h2>
+  {% if d.rejected %}
+  <table><thead><tr><th>Sökning</th><th>Förslag</th><th>Varför</th><th></th></tr></thead><tbody>
+  {% for r in d.rejected %}
+    <tr data-term="{{ r.term }}" data-alt="{{ r.alt }}">
+      <td>{{ r.term }}</td><td>{{ r.alt }}</td><td class="small">{{ r.reason or '' }}</td>
+      <td class="nowrap"><button class="btn" data-status="active">Godkänn ändå</button></td>
+    </tr>
+  {% endfor %}
+  </tbody></table>
+  {% else %}<div class="empty">Inget avvisat.</div>{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const labels = { active: 'godkänd', rejected: 'avvisad' };
+  document.querySelectorAll('tr[data-term] button[data-status]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('tr');
+      const out = document.getElementById('syn-result');
+      const q = new URLSearchParams({ term: row.dataset.term, alt: row.dataset.alt, status: btn.dataset.status });
+      row.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+      try {
+        // Same-origin fetch: the session cookie goes along, the key never reaches the page.
+        const r = await fetch('/api/ops/synonyms?' + q, { method: 'POST', credentials: 'same-origin' });
+        if (r.ok) {
+          row.style.opacity = '.45';
+          row.lastElementChild.textContent = labels[btn.dataset.status];
+          out.textContent = `${row.dataset.term} → ${row.dataset.alt}: ${labels[btn.dataset.status]}.`;
+          return;
+        }
+        if (r.status === 401) { out.textContent = 'Inloggningen har gått ut. Laddar om…'; setTimeout(() => location.reload(), 1500); }
+        else { let d = ''; try { d = (await r.json()).detail || ''; } catch (e) {} out.textContent = `Fel ${r.status}. ${d}`; }
+      } catch (e) { out.textContent = String(e); }
+      row.querySelectorAll('button').forEach((b) => { b.disabled = false; });
+    });
+  });
+</script>
+{% endblock %}
