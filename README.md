@@ -158,6 +158,14 @@ Alla **läs**-endpoints är öppna — ingen auth, inga tokens.
 | `POST /mcp` | MCP-server (Streamable HTTP) för AI-agenter — se nedan |
 | `GET /docs` | Swagger UI (auto-genererad av FastAPI) |
 
+Datan hämtas en gång per dygn (06 UTC). Samma anropare som gör exakt samma
+sökning mot `/api/tenders` fler än 5 gånger innan nästa hämtning får
+**`429 Too Many Requests`** med `Retry-After` fram till efter nästa hämtning och
+en JSON-kropp (`unchanged: true`, `feed`, `next_update`). Bevaka en sökning
+med RSS i stället: `/feed.xml?q=&cpv=&authority=`. Svarshuvudena
+`X-Data-Updated` och `X-Next-Update` säger när datan ändrades och ändras nästa
+gång.
+
 **Skriv-/adminåtgärder** (`POST /api/sync`, `/api/backfill`, `/api/reset-ted`,
 `/api/repair-links`, `/api/admin/query`, `POST/PUT /api/blog`) kräver headern
 `X-Admin-Key` när `ADMIN_API_KEY` är satt, eller en inloggad session på `/ops`.

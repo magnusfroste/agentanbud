@@ -2124,17 +2124,42 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
                 where.append("buyer_type = ?")
                 args.append(buyer_type)
             where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+            searched = bool(q or source or authority or cpv or buyer_type)
+            visitor = visitors.visitor_id(conn, visitors.address_of(request.headers),
+                                          request.headers.get("user-agent")) if searched else None
+            fresh = mcp_shared.data_freshness(conn)
+            # Our own deploy smoke test repeats the same filters on every deploy.
+            own_monitor = (request.headers.get("user-agent") or "").startswith("agentanbud-smoke")
+            if searched and not own_monitor:
+                # The same search, again, from a caller that already has the
+                # answer and before the data can have changed (app/conduct.py).
+                from app import conduct
+                ask = json.dumps([source, authority, q, cpv, buyer_type, page, page_size])
+                entry = conduct.REST_LEDGER.record(visitor, None, q, fresh.get("updated_at"), ask=ask)
+                body = conduct.rest_unchanged(
+                    entry, ask, mcp_shared.feed_url((q or "").strip(), "".join(ch for ch in (cpv or "") if ch.isdigit()),
+                                                    (authority or "").strip()),
+                    fresh.get("updated_at"), fresh.get("next_update"))
+                if body:
+                    _log_usage_safe(conn, "api", "search", query=q,
+                                    meta={"bot": 0, "v": visitor, "short": 1,
+                                          "program": program_name(request.headers.get("user-agent"))})
+                    headers = {"Retry-After": str(conduct.retry_after_s(fresh.get("next_update")))}
+                    if fresh["updated_at"]:
+                        headers["X-Data-Updated"] = fresh["updated_at"]
+                    if fresh["next_update"]:
+                        headers["X-Next-Update"] = fresh["next_update"]
+                    return JSONResponse(body, status_code=429, headers=headers)
             total = conn.execute(
                 f"SELECT COUNT(*) FROM tenders {join_sql} {where_sql}", args
             ).fetchone()[0]
-            if page == 1 and (q or source or authority or cpv or buyer_type):
+            if page == 1 and searched:
                 # API searches are deliberate calls (agents/scripts) — count as
                 # real usage, so flag bot:0 to survive the analytics filter.
                 _log_usage_safe(conn, "api", "search", query=q,
                                 meta={"source": source, "authority": authority,
                                       "cpv": cpv, "buyer_type": buyer_type, "bot": 0,
-                                      "v": visitors.visitor_id(conn, visitors.address_of(request.headers),
-                                                               request.headers.get("user-agent")),
+                                      "v": visitor,
                                       "segment": _segment_for(q, cpv),
                                       # A script's own name (never a browser's),
                                       # so ops can say who a REST caller is.
@@ -2164,7 +2189,6 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
             # When the data changes next, in the body (what an AI agent reads)
             # and in headers (what a script can check cheaply). See
             # mcp_shared.data_freshness for why.
-            fresh = mcp_shared.data_freshness(conn)
             if fresh["updated_at"]:
                 response.headers["X-Data-Updated"] = fresh["updated_at"]
             if fresh["next_update"]:
