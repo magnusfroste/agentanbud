@@ -509,7 +509,7 @@ def _tool_list(include_write: bool = False) -> list[dict]:
             },
             {
                 "name": "review_synonym",
-                "description": "Approve or reject a learned synonym (requires admin key). decision='active' makes search_tenders also search alt when someone searches term; 'rejected' stops that. Use list_synonyms first. Approve only an alternative that names the same thing as the search, not a broader category or another meaning. Safe to undo: call again with the other decision.",
+                "description": "Approve or reject a learned synonym (requires admin key). decision='active' makes search_tenders also search alt when someone searches term; 'rejected' stops that. Use list_synonyms first. Approve only an alternative that names the same thing as the search, not a broader category or another meaning. Safe to undo: call again with the other decision. Activating one the checks found in the wrong CPV division, too broad or not a word is refused.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {

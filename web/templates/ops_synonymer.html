@@ -50,7 +50,7 @@
   {% for r in d.rejected %}
     <tr data-term="{{ r.term }}" data-alt="{{ r.alt }}">
       <td>{{ r.term }}</td><td>{{ r.alt }}</td><td class="small">{{ r.reason or '' }}</td>
-      <td class="nowrap"><button class="btn" data-status="active">Godkänn ändå</button></td>
+      <td class="nowrap">{% if (r.reason or '').startswith(('fel bransch', 'för brett', 'för kort', 'samma som')) %}<span class="small" title="Kontrollen mot datan: hittar fel bransch, för mycket eller är inget ord">spärrad</span>{% else %}<button class="btn" data-status="active">Godkänn ändå</button>{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody></table>
@@ -76,7 +76,11 @@
           return;
         }
         if (r.status === 401) { out.textContent = 'Inloggningen har gått ut. Laddar om…'; setTimeout(() => location.reload(), 1500); }
-        else { let d = ''; try { d = (await r.json()).detail || ''; } catch (e) {} out.textContent = `Fel ${r.status}. ${d}`; }
+        else {
+          let d = ''; try { d = (await r.json()).detail || ''; } catch (e) {}
+          out.textContent = r.status === 409 ? `${row.dataset.term} → ${row.dataset.alt}: ${d}. Ordet skulle göra sökningen sämre.`
+                                             : `Fel ${r.status}. ${d}`;
+        }
       } catch (e) { out.textContent = String(e); }
       row.querySelectorAll('button').forEach((b) => { b.disabled = false; });
     });

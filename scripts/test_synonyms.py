@@ -247,6 +247,21 @@ check("the night a notice uses it, the dormant word wakes and is searched with",
       woke == 1 and st["laddstation"] == "active" and swedish_for("laddskåp") == ("laddstation",), f"{woke} {st}")
 check("…and the reviewer's rejection is still left alone", st["seminarier"] == "rejected")
 
+print("\nWhat the checks found harmful cannot be approved")
+r = api.post("/api/ops/synonyms", params={"term": "godspallar", "alt": "palliativ", "status": "active"},
+             headers={"X-Admin-Key": KEY})
+check("activating one in the wrong CPV division is refused with 409 and the reason",
+      r.status_code == 409 and "fel bransch" in r.text and swedish_for("godspallar") == (), r.text)
+text = mcp("review_synonym", {"term": "godspallar", "alt": "palliativ", "decision": "active"}, {"x-admin-key": KEY})
+check("…and over MCP", "Spärrad" in text and swedish_for("godspallar") == (), text[:200])
+check("…and /ops offers no button for it", "spärrad" in ops_c.get("/ops/synonymer").text)
+r = api.post("/api/ops/synonyms", params={"term": "nödkraft", "alt": "dieselaggregat", "status": "active"},
+             headers={"X-Admin-Key": KEY})
+check("a word that only finds nothing open yet may still be approved", r.status_code == 200, r.text)
+check("rejecting is never refused", api.post(
+    "/api/ops/synonyms", params={"term": "nödkraft", "alt": "dieselaggregat", "status": "rejected"},
+    headers={"X-Admin-Key": KEY}).status_code == 200)
+
 print("\nAuto mode, and nothing asked twice")
 sent.clear()
 os.environ.pop("LLM_SYNONYMS_MODE")   # auto is the default
