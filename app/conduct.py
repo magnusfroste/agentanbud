@@ -168,6 +168,9 @@ class Ledger:
 
 
 LEDGER = Ledger()
+# REST /api/tenders callers, kept apart so a script's calls never count
+# towards how an MCP caller is classified or paused.
+REST_LEDGER = Ledger()
 
 
 # --- What to say -------------------------------------------------------------
@@ -229,6 +232,39 @@ def short_answer(e: Optional[Entry], ask: Optional[str], feed_url: str,
             f"Flödet har samma träffar, nyaste först, och uppdateras efter varje hämtning. "
             f"Behöver du listan nu: hämta flödet. En annan sökning, eller samma sökning efter "
             f"nästa hämtning, besvaras i sin helhet som vanligt.")
+
+
+def rest_unchanged(e: Optional[Entry], ask: Optional[str], feed_url: str,
+                   updated: Optional[str], next_update: Optional[str]) -> Optional[dict]:
+    """The REST counterpart of short_answer: past SHORT_ANSWER_AFTER identical
+    /api/tenders calls since the data changed, the body of a 429 with
+    Retry-After until the next sync. A 429 and not an empty result list: a
+    script that reads 'items: []' may conclude that every tender is gone."""
+    if e is None or not ask:
+        return None
+    n = e.asks.get(ask, 0)
+    if n <= SHORT_ANSWER_AFTER:
+        return None
+    return {
+        "unchanged": True,
+        "detail": (f"Oförändrat: exakt den här sökningen har gjorts {n} gånger sedan datan senast ändrades "
+                   f"({_when(updated)}). Nästa hämtning startar {_when(next_update)}. Bevaka sökningen med "
+                   f"RSS i stället: {feed_url}. / Unchanged: this exact search was made {n} times since the "
+                   f"data last changed. Retry after the next sync, or watch the RSS feed."),
+        "feed": feed_url,
+        "data_updated": updated,
+        "next_update": next_update,
+    }
+
+
+def retry_after_s(next_update: Optional[str], now: Optional[datetime] = None) -> int:
+    """Seconds until the next sync has run (it takes about a quarter of an hour)."""
+    now = now or datetime.now(timezone.utc)
+    try:
+        nxt = datetime.strptime(next_update or "", "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return 3600
+    return max(60, int((nxt - now).total_seconds()) + 20 * 60)
 
 
 class Paused(Exception):
