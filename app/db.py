@@ -71,6 +71,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         ("tenders", "buyer_city", "TEXT"),
         ("tenders", "buyer_type", "TEXT"),
         ("posts", "image_url", "TEXT"),
+        ("learned_terms", "reviewed", "INTEGER DEFAULT 0"),
     ):
         try:
             cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
@@ -79,6 +80,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         if cols and column not in cols:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
             LOG.info("migrated: added %s.%s column", table, column)
+            if (table, column) == ("learned_terms", "reviewed"):
+                # A status set by hand moved updated_at past created_at; the
+                # night job writes both at once. Those decisions stay put.
+                conn.execute("UPDATE learned_terms SET reviewed = 1 WHERE updated_at != created_at")
 
     _backfill_fts(conn)
 

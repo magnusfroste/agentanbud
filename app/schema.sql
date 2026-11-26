@@ -292,12 +292,13 @@ CREATE INDEX IF NOT EXISTS idx_uhm_notices_year ON uhm_notices(year, ad_database
 CREATE TABLE IF NOT EXISTS learned_terms (
     term        TEXT NOT NULL,          -- the search, case-folded
     alt         TEXT NOT NULL,          -- the suggested word ('' when none came)
-    status      TEXT NOT NULL,          -- suggested | active | rejected
+    status      TEXT NOT NULL,          -- suggested | active | dormant | rejected
     open_hits   INTEGER,
     reason      TEXT,
     model       TEXT,
     created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+    reviewed    INTEGER DEFAULT 0,      -- 1 once a person or agent set the status
     PRIMARY KEY (term, alt)
 );
 

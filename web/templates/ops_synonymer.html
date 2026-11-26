@@ -4,6 +4,7 @@
   <div class="kv">
     <div>Väntar på beslut</div><div>{{ d.counts.suggested }}</div>
     <div>Söks med nu</div><div>{{ d.counts.active }}</div>
+    <div>Vilande</div><div>{{ d.counts.dormant }} — rätt ord som ingen öppen upphandling använder än; prövas igen varje natt</div>
     <div>Avvisade</div><div>{{ d.counts.rejected }}</div>
     <div>Läge</div><div>{{ 'auto: godkända förslag söks med direkt' if d.mode == 'auto' else 'förslag: inget söks med förrän du godkänt det' }}</div>
   </div>

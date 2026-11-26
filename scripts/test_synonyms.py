@@ -109,7 +109,8 @@ check("pall is rejected: too short", rows[("godspallar", "pall")]["status"] == "
 check("palliativ is rejected: wrong CPV division", rows[("godspallar", "palliativ")]["status"] == "rejected"
       and "fel bransch" in rows[("godspallar", "palliativ")]["reason"], rows[("godspallar", "palliativ")]["reason"])
 check("the search itself is rejected", rows[("godspallar", "godspallar")]["status"] == "rejected")
-check("a word not in the data is rejected", rows[("nödkraft", "dieselaggregat")]["status"] == "rejected")
+check("a word not in the data waits as dormant, to be checked again", rows[("nödkraft", "dieselaggregat")]["status"] == "dormant",
+      rows[("nödkraft", "dieselaggregat")]["status"])
 s = last_sync()
 check("a failing model call is counted, the key is not in the log",
       "1 fel" in s["message"] and LLM_KEY not in s["message"], s["message"])
@@ -215,6 +216,36 @@ check("an approved synonym reaches a search already answered from the cache",
       "Lastpallar till förråd" not in before and "Lastpallar till förråd" in after, after[:200])
 api.post("/api/ops/synonyms", params={"term": "godspallar", "alt": "lastpall", "status": "rejected"},
          headers={"X-Admin-Key": KEY})
+
+print("\nDormant words wake when a notice uses them")
+c = connect(DB)
+c.execute("INSERT INTO learned_terms (term, alt, status, open_hits, reason, model) VALUES "
+          "('laddskåp', 'laddstation', 'rejected', 0, 'inga öppna upphandlingar; CPV 31', 'm')")
+c.execute("INSERT INTO learned_terms (term, alt, status, open_hits, reason, model, reviewed) VALUES "
+          "('kickoff', 'seminarier', 'rejected', 0, 'inga öppna upphandlingar; CPV 79', 'm', 1)")
+c.commit()
+check("nothing wakes while no open notice uses the word", learned.wake(c, "active") == 0)
+st = dict(c.execute("SELECT alt, status FROM learned_terms WHERE term IN ('laddskåp', 'kickoff')").fetchall())
+check("an old 'nothing open' rejection becomes dormant", st["laddstation"] == "dormant", str(st))
+check("…but one rejected by a reviewer stays rejected", st["seminarier"] == "rejected", str(st))
+c.close()
+for sid, title, cpv in [("90", "Laddstation för elbilar vid kommunhuset", ["31158100"]),
+                        ("91", "Seminarier om ledarskap", ["79952000"])]:
+    c = connect(DB)
+    upsert_tender(c, {"source_system": "mercell", "source_id": sid, "tender_url": "https://example.invalid",
+                      "title": title, "authority": "Region Halland", "cpv_codes": cpv, "deadline": soon,
+                      "published_at": "2026-10-01", "description": "", "value": None, "procedure": None,
+                      "contract_type": None, "document_type": None, "region": None, "raw_json": "{}"})
+    c.commit()
+    c.close()
+c = connect(DB)
+woke = learned.wake(c, "active")
+st = dict(c.execute("SELECT alt, status FROM learned_terms WHERE term IN ('laddskåp', 'kickoff')").fetchall())
+c.close()
+learned.reload(DB)
+check("the night a notice uses it, the dormant word wakes and is searched with",
+      woke == 1 and st["laddstation"] == "active" and swedish_for("laddskåp") == ("laddstation",), f"{woke} {st}")
+check("…and the reviewer's rejection is still left alone", st["seminarier"] == "rejected")
 
 print("\nAuto mode, and nothing asked twice")
 sent.clear()
