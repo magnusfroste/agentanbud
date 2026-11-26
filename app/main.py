@@ -1386,7 +1386,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
                                 for t, a in sorted(pending.items())],
                     "active": [r for r in rows if r["status"] == "active"],
                     "rejected": [r for r in rows if r["status"] == "rejected" and r["alt"]][:60],
-                    "counts": {k: sum(r["status"] == k for r in rows) for k in ("suggested", "active", "rejected")},
+                    "counts": {k: sum(r["status"] == k for r in rows) for k in ("suggested", "active", "dormant", "rejected")},
                     "mode": "suggest" if os.environ.get("LLM_SYNONYMS_MODE", "auto").strip().lower() == "suggest" else "auto"}
         if section == "inloggningar":
             return {"logins": ops.logins(conn), "summary": ops.login_summary(conn, 24),
@@ -1870,7 +1870,7 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
                     for r in learned.listing(conn, limit) if r["alt"]]
             return {"synonyms": rows,
                     "counts": {s: sum(1 for r in rows if r["status"] == s)
-                               for s in ("suggested", "active", "rejected")}}
+                               for s in ("suggested", "active", "dormant", "rejected")}}
         finally:
             conn.close()
 

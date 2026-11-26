@@ -17,7 +17,8 @@ safe to search with:
     search belongs to. That is the check "pall" would have failed: its
     matches were palliative care (85) where the search was pallets (44).
 
-What passes is stored in learned_terms as "active" (LLM_SYNONYMS_MODE=auto,
+A word that is right but finds nothing open yet is stored "dormant" and
+checked again each night (wake). What passes is stored in learned_terms as "active" (LLM_SYNONYMS_MODE=auto,
 the default) or "suggested" (=suggest). Only active rows are searched with.
 An agent reviews them now and then over MCP (list_synonyms, review_synonym
 with the admin key), or a person on /ops/synonymer, and rejects what the
@@ -155,6 +156,47 @@ def check(conn, term: str, alt: str, division: Optional[str]) -> tuple[bool, int
     return True, open_n, "ok"
 
 
+# A word that is right but finds nothing open tonight is not wrong: it waits
+# ("dormant") and is checked again each night, and searched with the night an
+# open notice uses it. On 26 November 'laddskåp' → 'laddstation' was rejected
+# for good only because no charging station was out for tender that day.
+DORMANT_REASONS = ("inga öppna upphandlingar", "finns inte i datan")
+DORMANT_DAYS = 180
+
+
+def outcome(ok: bool, why: str, status_if_ok: str) -> str:
+    """The status a checked suggestion gets."""
+    if ok:
+        return status_if_ok
+    return "dormant" if why.startswith(DORMANT_REASONS) else "rejected"
+
+
+def wake(conn, status_if_ok: str) -> int:
+    """Check the dormant suggestions again; those that now pass get
+    status_if_ok. Returns how many woke. Rejections nobody reviewed that are
+    only 'nothing open' become dormant first (rows from before this existed);
+    a status set by a person or an agent is never touched."""
+    conn.execute(
+        "UPDATE learned_terms SET status = 'dormant' WHERE status = 'rejected' AND COALESCE(reviewed, 0) = 0 "
+        "AND alt != '' AND (" + " OR ".join("reason LIKE ?" for _ in DORMANT_REASONS) + ")",
+        [f"{r}%" for r in DORMANT_REASONS])
+    rows = conn.execute(
+        "SELECT term, alt, reason FROM learned_terms WHERE status = 'dormant' AND COALESCE(reviewed, 0) = 0 "
+        "AND created_at >= datetime('now', ?)", (f"-{DORMANT_DAYS} days",)).fetchall()
+    woke = 0
+    for r in rows:
+        m = re.search(r"CPV (\d\d)", r["reason"] or "")
+        division = m.group(1) if m else ""
+        ok, hits, why = check(conn, r["term"], r["alt"], division)
+        status = outcome(ok, why, status_if_ok)
+        conn.execute("UPDATE learned_terms SET status = ?, open_hits = ?, reason = ?, updated_at = CURRENT_TIMESTAMP "
+                     "WHERE term = ? AND alt = ?",
+                     (status, hits, f"{why}; CPV {division or '?'}", r["term"], r["alt"]))
+        woke += status == status_if_ok
+    conn.commit()
+    return woke
+
+
 def store(conn, term: str, alt: str, status: str, open_hits: int, reason: str, model: str) -> None:
     conn.execute(
         "INSERT INTO learned_terms (term, alt, status, open_hits, reason, model) "
@@ -164,7 +206,7 @@ def store(conn, term: str, alt: str, status: str, open_hits: int, reason: str, m
 
 
 def set_status(conn, term: str, alt: str, status: str) -> bool:
-    n = conn.execute("UPDATE learned_terms SET status = ?, updated_at = CURRENT_TIMESTAMP "
+    n = conn.execute("UPDATE learned_terms SET status = ?, reviewed = 1, updated_at = CURRENT_TIMESTAMP "
                      "WHERE term = ? AND alt = ?", (status, _fold(term), _fold(alt))).rowcount
     conn.commit()
     reload()

@@ -117,8 +117,9 @@ def run(db_path: str, client: Optional[httpx.Client] = None) -> int:
         own = client is None
         client = client or httpx.Client(timeout=httpx.Timeout(60.0))
         status = "active" if cfg["mode"] == "auto" else "suggested"
+        woke = learned.wake(conn, status)
         terms = _unmet(conn, cfg["per_night"])
-        kept = rejected = failed = 0
+        kept = rejected = failed = dormant = 0
         try:
             for term in terms:
                 try:
@@ -134,18 +135,19 @@ def run(db_path: str, client: Optional[httpx.Client] = None) -> int:
                     rejected += 1
                 for alt in alts:
                     ok, hits, why = learned.check(conn, term, alt, division)
-                    learned.store(conn, term, alt, status if ok else "rejected", hits,
-                                  f"{why}; CPV {division or '?'}", cfg["model"])
+                    got = learned.outcome(ok, why, status)
+                    learned.store(conn, term, alt, got, hits, f"{why}; CPV {division or '?'}", cfg["model"])
                     kept += ok
-                    rejected += not ok
+                    dormant += got == "dormant"
+                    rejected += got == "rejected"
                 conn.commit()
         finally:
             if own:
                 client.close()
         learned.reload(db_path)
-        log_sync(conn, SOURCE, "ok" if not failed or kept else "error", kept,
+        log_sync(conn, SOURCE, "ok" if not failed or kept else "error", kept + woke,
                  f"{len(terms)} sökord, {kept} synonymer {'aktiva' if status == 'active' else 'föreslagna'}, "
-                 f"{rejected} avvisade, {failed} fel mot modellen")
+                 f"{dormant} vilande, {rejected} avvisade, {woke} vaknade, {failed} fel mot modellen")
         return kept
     finally:
         conn.close()

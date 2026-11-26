@@ -463,11 +463,11 @@ def _tool_list(include_write: bool = False) -> list[dict]:
         },
         {
             "name": "list_synonyms",
-            "description": "Synonyms learned at night: searches that found nothing, and the word the notices use instead (e.g. 'hyrsjuksköterskor' → 'sjuksköterskebemanning'). A language model suggests them, checks against the data keep only words that find open tenders in the right CPV division, and active ones are searched with. status='suggested' (default) lists those waiting for review, 'active' those searched with now, 'rejected' those turned down with the reason. Review now and then with review_synonym (admin key): approve an alternative only when it names the same thing as the search; reject broader categories (e.g. 'urologi' for 'resektoskop') and other meanings.",
+            "description": "Synonyms learned at night: searches that found nothing, and the word the notices use instead (e.g. 'hyrsjuksköterskor' → 'sjuksköterskebemanning'). A language model suggests them, checks against the data keep only words that find open tenders in the right CPV division, and active ones are searched with. status='suggested' (default) lists those waiting for review, 'active' those searched with now, 'dormant' right words no open notice uses yet (checked again each night), 'rejected' those turned down with the reason. Review now and then with review_synonym (admin key): approve an alternative only when it names the same thing as the search; reject broader categories (e.g. 'urologi' for 'resektoskop') and other meanings.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "status": {"type": "string", "enum": ["suggested", "active", "rejected", "all"], "default": "suggested"},
+                    "status": {"type": "string", "enum": ["suggested", "active", "dormant", "rejected", "all"], "default": "suggested"},
                     "limit": {"type": "integer", "default": 50, "minimum": 1, "maximum": 200}
                 }
             }
