@@ -682,7 +682,7 @@ def _tool_objects() -> list[types.Tool]:
         ),
         types.Tool(
             name="review_synonym",
-            description="Approve or reject a learned synonym (requires admin key). decision='active' makes search_tenders also search alt when someone searches term; 'rejected' stops that. Use list_synonyms first. Approve only an alternative that names the same thing as the search, not a broader category or another meaning. Safe to undo: call again with the other decision.",
+            description="Approve or reject a learned synonym (requires admin key). decision='active' makes search_tenders also search alt when someone searches term; 'rejected' stops that. Use list_synonyms first. Approve only an alternative that names the same thing as the search, not a broader category or another meaning. Safe to undo: call again with the other decision. Activating one the checks found in the wrong CPV division, too broad or not a word is refused.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -1684,7 +1684,13 @@ async def _review_synonym(conn, args: dict) -> list[types.Content]:
     decision = (args.get("decision") or "").strip().lower()
     if not term or not alt or decision not in ("active", "rejected"):
         return [types.TextContent(type="text", text="Ange term, alt och decision ('active' eller 'rejected').")]
-    if not learned.set_status(conn, term, alt, decision):
+    try:
+        found = learned.set_status(conn, term, alt, decision)
+    except learned.Refused as exc:
+        return [types.TextContent(type="text", text=(
+            f"Spärrad: `{term}` → `{alt}` kan inte godkännas ({exc}). Ordet hittar annonser i fel bransch, "
+            f"för många annonser eller är inget ord, och skulle göra sökningen sämre. Avvisa det i stället."))]
+    if not found:
         return [types.TextContent(type="text", text=f"Hittade inget förslag `{term}` → `{alt}`. Se list_synonyms.")]
     what = "söks nu med" if decision == "active" else "söks inte med"
     return [types.TextContent(type="text", text=f"✅ `{term}` → `{alt}`: {decision}. `{alt}` {what} när någon söker `{term}` (inom tio minuter).")]

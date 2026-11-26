@@ -1895,7 +1895,11 @@ Detaljsidan återanvänds när listraden är oförändrad. ~3–4 min/körning."
         from app import learned
         conn = connect(db)
         try:
-            if not learned.set_status(conn, term, alt, status):
+            try:
+                found = learned.set_status(conn, term, alt, status)
+            except learned.Refused as exc:
+                raise HTTPException(status_code=409, detail=f"spärrad: {exc}")
+            if not found:
                 raise HTTPException(status_code=404, detail="no such synonym")
             return {"term": term, "alt": alt, "status": status}
         finally:

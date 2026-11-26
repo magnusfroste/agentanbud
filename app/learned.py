@@ -205,12 +205,38 @@ def store(conn, term: str, alt: str, status: str, open_hits: int, reason: str, m
         (_fold(term), _fold(alt), status, open_hits, reason, model))
 
 
+class Refused(ValueError):
+    """An activation the checks do not allow; the message says why."""
+
+
 def set_status(conn, term: str, alt: str, status: str) -> bool:
-    n = conn.execute("UPDATE learned_terms SET status = ?, reviewed = 1, updated_at = CURRENT_TIMESTAMP "
-                     "WHERE term = ? AND alt = ?", (status, _fold(term), _fold(alt))).rowcount
+    """Set a status by hand (a person on /ops, an agent over MCP or REST).
+    False when there is no such suggestion.
+
+    Activating one is checked again, against today's data: one that finds
+    its hits in the wrong CPV division, or so many that it would swamp the
+    search, or is not a word, raises Refused instead. On 25 November an
+    agent activated 'teambuilding' → 'utbildning' (77 open tenders, 43 of
+    200 in the division) and 'suveränitet' → 'myndighetsutövning' (0 of 14)
+    over the checks' verdict. A word that only finds nothing open yet may
+    be activated; it does no harm and finds its notices when they come."""
+    t, a = _fold(term), _fold(alt)
+    row = conn.execute("SELECT reason FROM learned_terms WHERE term = ? AND alt = ?", (t, a)).fetchone()
+    if row is None:
+        return False
+    if status == "active":
+        m = re.search(r"CPV (\d\d)", row[0] or "")
+        division = m.group(1) if m else ""
+        ok, hits, why = check(conn, t, a, division)
+        if not ok and not why.startswith(DORMANT_REASONS):
+            raise Refused(f"{why}; CPV {division or '?'}")
+        conn.execute("UPDATE learned_terms SET open_hits = ?, reason = ? WHERE term = ? AND alt = ?",
+                     (hits, f"{why}; CPV {division or '?'}", t, a))
+    conn.execute("UPDATE learned_terms SET status = ?, reviewed = 1, updated_at = CURRENT_TIMESTAMP "
+                 "WHERE term = ? AND alt = ?", (status, t, a))
     conn.commit()
     reload()
-    return n > 0
+    return True
 
 
 def listing(conn, limit: int = 200) -> list[dict]:
