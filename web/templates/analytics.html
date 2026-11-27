@@ -66,6 +66,12 @@
     <div class="v">{{ "{:,}".format(kpis.human_views).replace(",", " ") }}</div>
     <div class="l">👤 Människor (webb)</div>
   </div>
+  {% if kpis.feeds and kpis.feeds.fetches %}
+  <div class="insight-kpi">
+    <div class="v">{{ "{:,}".format(kpis.feeds.fetches).replace(",", " ") }}</div>
+    <div class="l">📡 Flödeshämtningar (RSS, kalender) · {{ kpis.feeds.readers }} läsare</div>
+  </div>
+  {% endif %}
   {% if kpis.visitors and kpis.visitors.avg_7d is not none %}
   <div class="insight-kpi green">
     <div class="v">{{ kpis.visitors.avg_7d }}</div>

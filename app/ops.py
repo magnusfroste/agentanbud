@@ -690,9 +690,9 @@ def top_callers(conn, hours: int = 24, limit: int = 10) -> dict:
 # ---------------------------------------------------------------------------
 _DAY_SQL = """
 SELECT DATE(created_at) AS day,
-  COUNT(DISTINCT CASE WHEN action = 'view' AND json_extract(meta, '$.bot') = 0
+  COUNT(DISTINCT CASE WHEN action = 'view' AND json_extract(meta, '$.bot') = 0 AND {not_feed}
                       THEN json_extract(meta, '$.v') END) AS visitors,
-  SUM(action = 'view' AND COALESCE(json_extract(meta, '$.bot'), 0) = 0) AS human_views,
+  SUM(action = 'view' AND COALESCE(json_extract(meta, '$.bot'), 0) = 0 AND {not_feed}) AS human_views,
   SUM(action = 'search' AND channel = 'browser') AS web_searches,
   SUM(action = 'search' AND channel = 'api') AS api_searches,
   SUM(action LIKE 'tool:%') AS agent_calls,
@@ -700,6 +700,9 @@ SELECT DATE(created_at) AS day,
                                  THEN json_extract(meta, '$.client') END) AS clients
 FROM usage_log WHERE created_at >= ? AND created_at < ? GROUP BY day
 """
+# Feed readers are not visitors (app/insights.NOT_FEED).
+from app.insights import NOT_FEED as _NOT_FEED  # noqa: E402
+_DAY_SQL = _DAY_SQL.replace("{not_feed}", _NOT_FEED)
 
 
 def _day_rows(conn, start: str, end: str) -> list[dict]:
