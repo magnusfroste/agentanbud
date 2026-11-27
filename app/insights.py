@@ -216,6 +216,15 @@ def referrer_domain(referer: Optional[str], own_host: Optional[str] = None) -> O
 
 
 
+# A feed fetch is a feed reader polling, not a person reading a page: on 26
+# November one reader fetched /feed.xml and /kalender.ics about 170 times an
+# hour from a new address each time and doubled the day's "visitors". Feeds
+# are counted on their own (usage_summary "feeds") and kept out of the human
+# figures. Their path is logged in the query column.
+NOT_FEED = "(COALESCE(query, '') NOT LIKE '%feed.xml%' AND COALESCE(query, '') NOT LIKE '%kalender.ics%')"
+HUMAN_VIEW = f"action = 'view' AND json_extract(meta, '$.bot') = 0 AND {NOT_FEED}"
+FEED_VIEW = f"action = 'view' AND json_extract(meta, '$.bot') = 0 AND NOT {NOT_FEED}"
+
 # "Real" searches only: rows flagged bot=0 (current logging) plus historical
 # rows carrying an actual keyword. Excludes the old crawler filter-walks
 # (query-less, unflagged) that once made this KPI ~99% bot noise.
@@ -321,7 +330,11 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     def rows_(c, sql, params):
         return c.execute(sql, params).fetchall()
 
-    human_views = scalar("action = 'view' AND json_extract(meta, '$.bot') = 0")
+    human_views = scalar(HUMAN_VIEW)
+    feed_views = scalar(FEED_VIEW)
+    feed_readers = conn.execute(
+        f"SELECT COUNT(DISTINCT COALESCE(json_extract(meta, '$.v'), id)) FROM usage_log {_and(FEED_VIEW)}",
+        args).fetchone()[0] or 0
     # Bot views live in the aggregated daily counter; legacy per-hit rows are
     # still counted until they age out of usage_log.
     counter_where, counter_args = "WHERE kind = 'bot_view'", []
@@ -331,7 +344,7 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     bot_views = (conn.execute(
         f"SELECT COALESCE(SUM(n), 0) FROM daily_counters {counter_where}", counter_args
     ).fetchone()[0] or 0) + scalar("action = 'view' AND json_extract(meta, '$.bot') = 1")
-    view_total = human_views + bot_views
+    view_total = human_views + bot_views + feed_views
     # Of the bot views: browser user agents that never ran the page script
     # (app/browsers.py), shown so the reclassification is not hidden.
     no_js_views = conn.execute(
@@ -508,7 +521,7 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     referrers = [{"domain": r["d"], "visitors": r["u"], "views": r["n"]} for r in conn.execute(
         "SELECT json_extract(meta, '$.ref') AS d, COUNT(*) AS n, "
         "COUNT(DISTINCT COALESCE(json_extract(meta, '$.v'), id)) AS u FROM usage_log "
-        + _and("action = 'view' AND json_extract(meta, '$.ref') IS NOT NULL")
+        + _and(f"action = 'view' AND json_extract(meta, '$.ref') IS NOT NULL AND {NOT_FEED}")
         + " GROUP BY d ORDER BY u DESC, n DESC LIMIT ?", args + [top]).fetchall()]
 
     # --- Which pages are read: human views per page type, how many came from
@@ -539,9 +552,10 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
     # --- 30-day series: human pageviews only, so growth means real interest
     day_rows = conn.execute(
         "SELECT DATE(created_at) AS day, "
-        "SUM(action = 'view' AND json_extract(meta, '$.bot') = 0) AS views, "
-        "COUNT(DISTINCT CASE WHEN action = 'view' AND json_extract(meta, '$.bot') = 0 "
+        f"SUM({HUMAN_VIEW}) AS views, "
+        f"COUNT(DISTINCT CASE WHEN {HUMAN_VIEW} "
         "THEN json_extract(meta, '$.v') END) AS visitors, "
+        f"SUM({FEED_VIEW}) AS feeds, "
         f"SUM({REAL_SEARCH}) AS searches, "
         f"SUM(action LIKE 'tool:%'{not_self}) AS agents "
         "FROM usage_log WHERE created_at >= DATE('now', '-29 days') GROUP BY day",
@@ -557,7 +571,8 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         s = (r["searches"] if r else 0) or 0
         a = (r["agents"] if r else 0) or 0
         u = (r["visitors"] if r else 0) or 0
-        daily.append({"date": d.isoformat(), "views": v, "visitors": u, "searches": s,
+        f = (r["feeds"] if r else 0) or 0
+        daily.append({"date": d.isoformat(), "views": v, "visitors": u, "feeds": f, "searches": s,
                       "agent_calls": a, "total": v + s + a})
     # Unique visitors exist only from the day visitor ids began; days before
     # read 0 and must not drag the average down.
@@ -570,6 +585,7 @@ def usage_summary(conn, days: Optional[int] = None, top: int = 15) -> dict:
         "period_days": days, "since": since,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "events_total": events_total,
+        "feeds": {"fetches": feed_views, "readers": feed_readers},
         "visits": {"total": view_total, "human": human_views, "bot": bot_views, "no_js": no_js_views,
                    "human_pct": int(human_views / view_total * 100) if view_total else 0},
         "searches": searches,
@@ -610,6 +626,8 @@ def format_usage_markdown(s: dict) -> str:
     out = [f"# Agentanbud — användning ({period})", "",
            f"**Besök:** {v['total']} ({v['human']} mänskliga / {v['bot']} botar & crawlers, "
            f"{v['human_pct']}% mänskliga"
+           + (f"; dessutom {s['feeds']['fetches']} flödeshämtningar (RSS/kalender) från {s['feeds']['readers']} läsare"
+              if s.get("feeds", {}).get("fetches") else "")
            + (f"; {v['no_js']} av robotbesöken var program med en webbläsares namn som inte kör JavaScript"
               if v.get("no_js") else "") + ")",
            f"**Sökningar:** {s['searches']} — {s.get('web_searches', 0)} i sökrutan på webbsidan, "

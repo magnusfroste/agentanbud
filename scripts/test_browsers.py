@@ -119,11 +119,27 @@ check("they are counted as crawler views, by page type, and as scriptless",
       counters.get("bot_view") == 5 and counters.get("bot_view:agenter") == 5 and counters.get("nojs_view") == 5,
       str(counters))
 check("the summary shows them, and the total is unchanged",
-      s["visits"]["no_js"] == 5 and s["visits"]["bot"] >= 5 and s["visits"]["total"] == s["visits"]["human"] + s["visits"]["bot"],
+      s["visits"]["no_js"] == 5 and s["visits"]["bot"] >= 5 and s["visits"]["total"] == s["visits"]["human"] + s["visits"]["bot"] + s["feeds"]["fetches"],
       str(s["visits"]))
 check("…and says so in words", "inte kör JavaScript" in format_usage_markdown(s))
 page = c.get("/analytics", headers={"user-agent": "curl/8"}).text
 check("/analytics shows the figure", "inte kör JavaScript" in page)
+
+print("\nFeeds are counted on their own")
+conn = connect(DB)
+s = usage_summary(conn, days=1)
+day = s["daily_last_30"][-1]
+human_paths = [r[0] for r in conn.execute(
+    "SELECT query FROM usage_log WHERE action = 'view' AND json_extract(meta, '$.bot') = 0")]
+conn.close()
+feeds = sum(1 for q in human_paths if "feed.xml" in q or "kalender.ics" in q)
+check("the feed fetch is a feed figure, with its readers", s["feeds"]["fetches"] == feeds >= 1
+      and s["feeds"]["readers"] >= 1, str(s["feeds"]))
+check("…and not a human view or a visitor", s["visits"]["human"] == len(human_paths) - feeds
+      and day["feeds"] == feeds, f"{s['visits']} {day}")
+check("…while the total still counts every view",
+      s["visits"]["total"] == s["visits"]["human"] + s["visits"]["bot"] + feeds, str(s["visits"]))
+check("/analytics shows it", "Flödeshämtningar" in c.get("/analytics", headers={"user-agent": "curl/8"}).text)
 
 print("\nRetention")
 conn = connect(DB)

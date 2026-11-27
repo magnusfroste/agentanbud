@@ -1571,7 +1571,7 @@ källas villkor gäller originalet; vi är en spegel som pekar vidare.
 
             v = s["visits"]
             kpis = {"views": v["total"], "human_views": v["human"],
-                    "bot_views": v["bot"], "no_js_views": v.get("no_js", 0), "human_pct": v["human_pct"],
+                    "bot_views": v["bot"], "no_js_views": v.get("no_js", 0), "feeds": s.get("feeds") or {}, "human_pct": v["human_pct"],
                     "searches": s["searches"], "web_searches": s["web_searches"],
                     "api_searches": s["api_searches"], "agent_calls": s["agent_calls"],
                     "automated_calls": s.get("automated_calls", 0),
